@@ -4,13 +4,13 @@
 
 Validar parâmetros, controlar exposição e manter reservas atômicas. Comunicação com outros serviços somente por Kafka; persistência exclusiva em `postgres-middle-office`, banco/usuário `prospero_mo`. Este roteiro detalha a participação do componente nas tarefas do [roadmap global](../docs/roadmap.md); não cria PRs duplicados para o mesmo RF.
 
-A fundação P02 foi validada localmente; aguarda PR/merge: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
 
 ## Entregas
 
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
-| MO00 | P02 | Build, container, banco próprio e endpoints técnicos | Validada localmente; aguarda PR/merge |
+| MO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | MO01 | RF03 | Validar lote, tick, túnel e preços de referência. | Planejada |
 | MO02 | RF04 | Reservar recursos e proteger limites contra concorrência. | Planejada |
 | MO03 | RF05 | Consumir execuções e ajustar o consumo das reservas. | Planejada |
