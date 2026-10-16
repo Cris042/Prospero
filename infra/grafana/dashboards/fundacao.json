@@ -1,0 +1,51 @@
+{
+  "uid": "prospero-fundacao",
+  "title": "Próspero — Fundação técnica",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Microsserviços alcançados pelo Prometheus",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"prospero\"}",
+          "legendFormat": "{{servico}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Escopo desta etapa",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Fundação técnica. Negociação, risco e liquidação ainda não implementados. Os quatro painéis de negócio serão entregues na V01."
+      }
+    }
+  ]
+}

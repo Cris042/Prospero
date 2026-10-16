@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: Próspero
+    folder: Próspero
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

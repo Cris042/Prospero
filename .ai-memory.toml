@@ -1,0 +1,4 @@
+# Captura autorizada apenas em repositórios com marcador (allowlist no cliente).
+workspace = "prospero"
+project = "Prospero"
+project_strategy = "repo-root"

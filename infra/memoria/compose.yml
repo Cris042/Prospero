@@ -1,0 +1,21 @@
+name: prospero-memoria
+services:
+  ai-memory:
+    image: akitaonrails/ai-memory:3.1.0@sha256:01af788550335e41f23818fed38e101cffff2166aef7021b719e6e165708307f
+    user: "${PROSPERO_UID:-1000}:${PROSPERO_GID:-1000}"
+    command: [serve, --transport, http, --bind, "0.0.0.0:49374", --enable-web, --workspace, prospero, --project, Prospero]
+    environment:
+      AI_MEMORY_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:49374:49374"
+    volumes:
+      - "${PROSPERO_MEMORY_DIR:-${HOME}/.local/share/prospero-ai-memory}:/data"
+    restart: unless-stopped
+    mem_limit: 192m
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

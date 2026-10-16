@@ -1,0 +1,71 @@
+<header class="topbar">
+  <a class="marca" href="/" aria-label="Próspero — início"
+    ><span class="simbolo" aria-hidden="true">P</span> Próspero</a
+  >
+  <span class="ambiente">Ambiente local de estudo</span>
+</header>
+<main>
+  <section class="abertura" aria-labelledby="titulo">
+    <p class="sobretitulo">MERCADO FINANCEIRO SIMULADO</p>
+    <h1 id="titulo">Próspero<span>Do envio à liquidação.</span></h1>
+    <p class="introducao">
+      Um mercado com cinco ações fictícias para estudar como ordens, risco e liquidez se transformam
+      em negócios.
+    </p>
+    <p class="aviso">
+      <strong>Fundação técnica disponível.</strong> Negociação ainda não implementada. Nenhum dado
+      ou valor financeiro real.
+    </p>
+  </section>
+  <section class="componentes" aria-labelledby="servicos-titulo">
+    <div class="cabecalho-secao">
+      <div>
+        <p class="sobretitulo">QUATRO CONTEXTOS INDEPENDENTES</p>
+        <h2 id="servicos-titulo">Estado dos serviços</h2>
+      </div>
+      <button type="button" (click)="atualizar()" [disabled]="carregando()">
+        {{ carregando() ? 'Consultando…' : 'Atualizar' }}
+      </button>
+    </div>
+    <div class="grade" aria-live="polite" [attr.aria-busy]="carregando()">
+      @for (servico of servicos(); track servico.id) {
+        <article class="cartao">
+          <span class="estado" [class.disponivel]="servico.disponivel"
+            ><span aria-hidden="true">●</span>
+            {{ servico.disponivel ? 'Disponível' : 'Indisponível' }}</span
+          >
+          <h3>{{ servico.nome }}</h3>
+          <p>{{ servico.papel }}</p>
+          <div class="detalhes">
+            <span>{{ servico.etapa }}</span
+            ><span>{{ servico.versao }}</span>
+          </div>
+          <a
+            [href]="'http://localhost:' + servico.porta + '/q/swagger-ui/'"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Explorar a API <span aria-hidden="true">↗</span
+            ><span class="sr-only"> (abre em nova aba)</span></a
+          >
+        </article>
+      } @empty {
+        <p>Consultando a identidade e a prontidão dos quatro serviços…</p>
+      }
+    </div>
+    <p class="nota">
+      A disponibilidade confirma a conexão com PostgreSQL e Kafka. Cada serviço possui seu próprio
+      banco; o fluxo financeiro será construído nas próximas tarefas.
+    </p>
+  </section>
+  <section class="fluxo" aria-labelledby="fluxo-titulo">
+    <p class="sobretitulo">O QUE VAMOS CONSTRUIR</p>
+    <h2 id="fluxo-titulo">Uma ordem, quatro responsabilidades.</h2>
+    <ol>
+      <li><strong>01 · Entrada</strong><span>Receber e acompanhar ordens.</span></li>
+      <li><strong>02 · Risco</strong><span>Validar e reservar recursos.</span></li>
+      <li><strong>03 · Execução</strong><span>Encontrar compra e venda.</span></li>
+      <li><strong>04 · Liquidação</strong><span>Registrar, conciliar e liquidar.</span></li>
+    </ol>
+  </section>
+</main>
+<footer>Próspero · Simulação local · Sem integração com bolsas reais</footer>

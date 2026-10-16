@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+- job_name: prospero
+  metrics_path: /q/metrics
+  static_configs:
+  - targets:
+    - front-office:8080
+    labels:
+      servico: front-office
+  - targets:
+    - middle-office:8080
+    labels:
+      servico: middle-office
+  - targets:
+    - matching-engine:8080
+    labels:
+      servico: matching-engine
+  - targets:
+    - back-office:8080
+    labels:
+      servico: back-office
