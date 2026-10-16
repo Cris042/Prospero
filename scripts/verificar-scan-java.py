@@ -19,6 +19,9 @@ packages = {
     for result in report.get("Results", []) if result.get("Type") == "jar"
     for package in result.get("Packages", [])
 }
+# Trivy normaliza Hibernate ORM para a coordenada histórica no inventário Java.
+aliases = {"org.hibernate:hibernate-core": "org.hibernate.orm:hibernate-core"}
+packages = {aliases.get(name, name) for name in packages}
 required = {
     "io.quarkus:quarkus-core",
     "org.hibernate.orm:hibernate-core",

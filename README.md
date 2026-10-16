@@ -44,11 +44,18 @@ cd front-office
 ./mvnw verify
 ```
 
-Na raiz, `./mvnw verify` agrega os quatro builds. Os testes de contrato usam HTTP com banco/Kafka desativados apenas no perfil de testes; a verificação Compose testa as dependências reais. Se o host tiver outra versão de Java, execute pelo container:
+Na raiz, `./mvnw verify` agrega os quatro builds. Com RAM limitada e outros projetos ativos, prefira executar cada serviço separadamente: o reator pode acumular memória entre módulos. Os testes de contrato usam HTTP com banco/Kafka desativados apenas no perfil de testes; a verificação Compose testa as dependências reais. Se o host tiver outra versão de Java, execute pelo container:
 
 ```bash
-docker run --rm --memory=1g --cpus=2   --user "$(id -u):$(id -g)" -e MAVEN_USER_HOME=/tmp/maven -e MAVEN_OPTS="-Xmx384m -XX:ActiveProcessorCount=2 -Duser.home=/tmp/prospero" -v "$PWD:/workspace" -w /workspace   eclipse-temurin:26.0.2.1_1-jdk-noble sh ./mvnw -B -ntp verify
+docker run --rm --memory=1g --cpus=2 \
+  --user "$(id -u):$(id -g)" \
+  -e MAVEN_USER_HOME=/tmp/maven \
+  -e MAVEN_OPTS="-Xmx384m -XX:ActiveProcessorCount=2 -Duser.home=/tmp/prospero" \
+  -v "$PWD:/workspace" -w /workspace/front-office \
+  eclipse-temurin:26.0.2.1_1-jdk-noble sh ./mvnw -B -ntp verify
 ```
+
+Repita o comando com o diretório de cada microsserviço. O exemplo mantém o cache Maven temporário dentro do container; um cache privado montado pode evitar novos downloads.
 
 Angular requer Node 24.16.0 ou outra versão compatível com Angular 22.2.3:
 

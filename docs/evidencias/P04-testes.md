@@ -56,3 +56,13 @@ Assim, relatório vazio não aprova cobertura, e inventário identificado permit
 No ajuste final, a análise sintática Bash/Python aprovou. Três fixtures adicionais, todas com as quatro coordenadas Java exigidas, verificaram severidades: HIGH e CRITICAL recusaram com saída 1; LOW aprovou com saída 0 e cobertura identificada. Para os casos bloqueantes, stdout continha exatamente ID, pacote, versão instalada e versão corrigida, além dos rótulos fixos. Sentinelas em descrição, referências e campos extras do relatório/achado não apareceram em stdout ou stderr. LOW não emitiu diagnóstico bloqueante.
 
 A leitura do script confirmou que o retorno do scanner é capturado em `scan_rc`, permitindo executar o guard e imprimir diagnóstico antes do trap de limpeza. Quando o JSON aprova o guard, um retorno não zero do scanner continua sendo propagado. Com JSON inválido, o guard falha fechado. Não houve execução do scanner nesse reteste.
+
+## Alias de identidade Hibernate e correção LZ4
+
+Uma fixture adicional confirmou que o guard aceita o inventário real normalizado do Trivy, com `org.hibernate:hibernate-core` junto a Quarkus, PostgreSQL e Kafka: saída 0 e quatro componentes identificados. Os demais casos já aprovados não foram repetidos.
+
+Após o achado LZ4, o reteste Java dos quatro serviços, a leitura das bibliotecas empacotadas e seus metadados foram registrados em [P02-testes](P02-testes.md). Todos os quatro pacotes contêm LZ4 1.11.4 e nenhum 1.11.1; a auditoria de segurança deve confirmar o novo inventário e resultado do scan real. Este agente não executou scanner.
+
+## Verificação final após reconstrução
+
+O smoke real aprovou novamente os 31 checks após reconstrução/recriação do ambiente. A inspeção dentro dos quatro containers Java confirmou LZ4 1.11.4 em `/app/lib/main`, sem 1.11.1. A evidência de runtime consta em [P02-testes](P02-testes.md); o resultado de vulnerabilidades pertence ao relatório do agente de segurança.

@@ -33,7 +33,7 @@ scanner=(docker run --rm --user "$(id -u):$(id -g)" --memory=1g
 # Rootfs reconhece JARs; fs reconhece lockfiles. Não tratar saída vazia como aprovação Java.
 for service in front-office middle-office matching-engine back-office; do
   scan_rc=0
-  "${scanner[@]}" rootfs --cache-dir /cache --offline-scan --scanners vuln \
+  "${scanner[@]}" rootfs --timeout 20m --cache-dir /cache --offline-scan --scanners vuln \
     --severity HIGH,CRITICAL --exit-code 1 --list-all-pkgs --format json "/scan/$service" > "$scan_dir/$service.json" || scan_rc=$?
   python3 scripts/verificar-scan-java.py "$scan_dir/$service.json"
   [ "$scan_rc" -eq 0 ] || exit "$scan_rc"

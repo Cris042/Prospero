@@ -10,6 +10,9 @@ Data: 2026-10-16. Registro pelo implementador dos pareceres recebidos do agente 
 - Documentação ainda descrevendo ai-memory como futura: alinhada à instalação P04, com confiança manual nos hooks pendente.
 - Diagnóstico Java apagado junto ao staging: o guard imprime somente identificador, pacote e versões de achados HIGH/CRITICAL antes de falhar e limpar o diretório.
 
+- Override LZ4 1.11.4 nos quatro POMs: revisado sem novo achado estático; preserva a compilação independente e registra condição de remoção no inventário.
+- Alias Hibernate produzido pelo Trivy: normalização restrita à coordenada histórica, mantendo a exigência dos quatro componentes centrais.
+
 ## Parecer final
 
 Após leitura dos deltas, o revisor não apontou novos bloqueadores estáticos. Confirmou cleanup restrito ao staging, mounts somente leitura, falha em relatório inválido ou cobertura ausente e preservação de erro do scanner. O gate usa `rootfs` para JARs e `fs` para npm.
