@@ -6,7 +6,7 @@ Uma tarefa principal por requisito funcional RF01–RF10. P01–P03 preparam a e
 
 Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concluída**. Concluída exige validação, revisão e merge; um resumo local não substitui um PR. Datas e estimativas do roteiro original de 12 semanas não são compromisso deste roadmap.
 
-**Estado atual:** P01 e P02 concluídas: [PR #1](https://github.com/mclovin137/Prospero/pull/1) integrado em 2026-10-16 por autorização explícita do usuário, após validação e revisão locais. O código da P04 está no [PR #2](https://github.com/mclovin137/Prospero/pull/2), agora direcionado à main; a ativação e validação da CI no GitHub continuam pendentes de runner dedicado. P03 e RF01–RF10 permanecem planejadas. Publicação pública do repositório autorizada pelo usuário; nenhum release foi solicitado.
+**Estado atual:** P01 e P02 concluídas: [PR #1](https://github.com/mclovin137/Prospero/pull/1) integrado em 2026-10-16 por autorização explícita do usuário, após validação e revisão locais. A implementação da P04 foi integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); sua ativação e validação da CI no GitHub continuam pendentes de runner dedicado. P03 e RF01–RF10 permanecem planejadas. Repositório publicado como público por autorização do usuário; nenhum release foi solicitado.
 
 ## Fundação
 
@@ -38,7 +38,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 - Dependências: P01 e P02; [refinamento](refinamentos/P04-skills-ci.md).
 - Entrega: 14 skills adaptadas, proveniência, memória local persistente e workflows de revisão, testes e segurança com comentários em pt-BR.
 - Aceite: revisão independente medium por especialidade, sem segredos publicados; CI executável em runner isolado e gratuito. A ativação exige provisionar esse runner; a máquina compartilhada com Horus não será registrada.
-- Estado: [PR #2](https://github.com/mclovin137/Prospero/pull/2) aberto; checks locais não equivalem a execução no GitHub. Ver [guia CI](ci.md).
+- Estado: implementação integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); ativação pendente. Checks locais não equivalem a execução no GitHub. Ver [guia CI](ci.md).
 
 ## Tarefas por requisito funcional
 

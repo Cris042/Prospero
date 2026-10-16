@@ -60,3 +60,17 @@ Os recortes por serviço do JSON real contêm 250 nomes de pacotes distintos. O 
 5. Não houve pentest, build adicional, scan de imagens base/infraestrutura, consulta de alertas remotos nem aprovação de PR. A auditoria inicial de fontes técnicas não identificou achado alto confirmado; ausência de achado não prova ausência de falhas.
 
 Fontes locais: [workflows](../../.github/workflows/seguranca.yml), [gate de segurança](../../scripts/ci-seguranca.sh), [Compose de CI](../../docker-compose.ci.yml), [guia de CI](../ci.md), [origens das skills](../skills/origens.json) e [guia de memória](../memoria.md).
+
+## Evidência após os merges
+
+Em 2026-10-16, após os merges dos PRs 1 e 2 e antes da mudança de visibilidade, foi executado exclusivamente o scan de segredos do histórico atualizado de `main`, no commit `0888537bfba761a785d7fde78140cbdcfab4dd86`. A consulta local confirmou repositório não shallow e 21 commits alcançáveis pelo HEAD.
+
+O Gitleaks executou em container com mount somente leitura, UID/GID do operador, configuração `.gitleaks.toml` com regras padrão e sem allowlist, usando a imagem fixada `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f`. Argumentos efetivos do scanner:
+
+```text
+git /repo --log-opts='--full-history -m HEAD' --config /repo/.gitleaks.toml --redact --no-banner
+```
+
+Resultado observado na saída da ferramenta: **exit 0, 21 commits examinados, aproximadamente 1,93 MB e `no leaks found`**. A opção `-m` incluiu diferenças dos commits de merge; uma passagem inicial sem essa opção havia contabilizado apenas 15 commits. A redação permaneceu ativa e nenhum segredo foi exibido.
+
+Esta evidência complementa o scan anterior de seis commits e cobre somente o histórico alcançável de `main` no SHA informado. Não cobre commits posteriores, outras referências não alcançáveis, arquivos ignorados não versionados, configurações pessoais ou serviços externos; não garante ausência absoluta de segredos nem substitui os demais gates. Não houve novo scan de vulnerabilidades, build, teste funcional ou execução de CI nessa rodada. A mudança posterior para visibilidade pública foi informada pelo implementador; não foi executada por este agente.
