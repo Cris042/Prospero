@@ -1,0 +1,57 @@
+# Compose >=2.24.4. Usar com -p prospero-ci-<run>-<attempt>.
+services:
+  front-office:
+    image: prospero/front-office:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
+    ports: !override
+      - target: 8080
+        published: "0"
+        host_ip: 127.0.0.1
+  middle-office:
+    image: prospero/middle-office:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
+    ports: !override
+      - target: 8080
+        published: "0"
+        host_ip: 127.0.0.1
+  matching-engine:
+    image: prospero/matching-engine:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
+    ports: !override
+      - target: 8080
+        published: "0"
+        host_ip: 127.0.0.1
+  back-office:
+    image: prospero/back-office:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
+    ports: !override
+      - target: 8080
+        published: "0"
+        host_ip: 127.0.0.1
+  frontend:
+    image: prospero/frontend:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
+    ports: !override
+      - target: 8080
+        published: "0"
+        host_ip: 127.0.0.1
+  grafana:
+    ports: !override
+      - target: 3000
+        published: "0"
+        host_ip: 127.0.0.1
+  prometheus:
+    ports: !override
+      - target: 9090
+        published: "0"
+        host_ip: 127.0.0.1
+  jaeger:
+    ports: !override
+      - target: 16686
+        published: "0"
+        host_ip: 127.0.0.1
+  loki:
+    ports: !override
+      - target: 3100
+        published: "0"
+        host_ip: 127.0.0.1
+  otel-collector:
+    ports: !override
+      - target: 13133
+        published: "0"
+        host_ip: 127.0.0.1

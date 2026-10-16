@@ -4,13 +4,13 @@
 
 Registrar negócios, calcular posições e resultados e simular liquidação. Comunicação com outros serviços somente por Kafka; persistência exclusiva em `postgres-back-office`, banco/usuário `prospero_bo`. Este roteiro detalha a participação do componente nas tarefas do [roadmap global](../docs/roadmap.md); não cria PRs duplicados para o mesmo RF.
 
-A fundação P02 foi validada localmente; aguarda PR/merge: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
 
 ## Entregas
 
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
-| BO00 | P02 | Build, container, banco próprio e endpoints técnicos | Validada localmente; aguarda PR/merge |
+| BO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | BO01 | RF07 | Calcular long/short, preço médio, reduções e viradas. | Planejada |
 | BO02 | RF07 | Atualizar resultado não realizado com eventos de cotação. | Planejada |
 | BO03 | RF08 | Persistir negócio, razão e posição atomicamente e com idempotência. | Planejada |

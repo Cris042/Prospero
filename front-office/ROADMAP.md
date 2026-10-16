@@ -4,13 +4,13 @@
 
 Receber comandos HTTP, persistir o estado das ordens e orquestrar a SAGA. Comunicação com outros serviços somente por Kafka; persistência exclusiva em `postgres-front-office`, banco/usuário `prospero_fo`. Este roteiro detalha a participação do componente nas tarefas do [roadmap global](../docs/roadmap.md); não cria PRs duplicados para o mesmo RF.
 
-A fundação P02 foi validada localmente; aguarda PR/merge: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
 
 ## Entregas
 
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
-| FO00 | P02 | Build, container, banco próprio e endpoints técnicos | Validada localmente; aguarda PR/merge |
+| FO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | FO01 | RF01 | Consultar ativos/cotações e expor o livro projetado. | Planejada |
 | FO02 | RF02 | Enviar ordens, DTOs, idempotência de submissão e consulta de estado. | Planejada |
 | FO03 | RF03, RF04 | Encaminhar validação/risco e persistir transições e compensações da SAGA. | Planejada |

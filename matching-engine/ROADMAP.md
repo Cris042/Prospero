@@ -4,13 +4,13 @@
 
 Manter o livro em memória e produzir negócios determinísticos. Comunicação com outros serviços somente por Kafka; persistência exclusiva em `postgres-matching-engine`, banco/usuário `prospero_me`. Este roteiro detalha a participação do componente nas tarefas do [roadmap global](../docs/roadmap.md); não cria PRs duplicados para o mesmo RF.
 
-A fundação P02 foi validada localmente; aguarda PR/merge: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
 
 ## Entregas
 
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
-| ME00 | P02 | Build, container, banco próprio e endpoints técnicos | Validada localmente; aguarda PR/merge |
+| ME00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | ME01 | RF05 | Implementar domínio puro: livro, preço-tempo, FIFO e execuções parciais. | Planejada |
 | ME02 | RF05 | Implementar Market/Limit/Stop/Stop Limit, IOC/FOK e OCO. | Planejada |
 | ME03 | RF05 | Integrar Kafka por ativo, snapshots, offsets e replay após falhas. | Planejada |
