@@ -6,7 +6,7 @@ Uma tarefa principal por requisito funcional RF01–RF10. P01–P03 preparam a e
 
 Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concluída**. Concluída exige validação, revisão e merge; um resumo local não substitui um PR. Datas e estimativas do roteiro original de 12 semanas não são compromisso deste roadmap.
 
-**Estado atual:** P01 e P02 implementadas e validadas localmente, no [PR #1](https://github.com/mclovin137/Prospero/pull/1), aguardando revisão/merge. P04 em andamento: skills e CI implementadas, revisão independente em curso. P03 e RF01–RF10 permanecem planejadas. Repositório privado criado em `mclovin137/Prospero`; nenhuma tarefa é considerada concluída antes do merge.
+**Estado atual:** P01 e P02 implementadas e validadas localmente, no [PR #1](https://github.com/mclovin137/Prospero/pull/1), aguardando revisão/merge. P04 implementada no [PR #2](https://github.com/mclovin137/Prospero/pull/2), empilhado sobre o PR #1, aguardando revisão e conclusão do scan de dependências. P03 e RF01–RF10 permanecem planejadas. Repositório privado criado em `mclovin137/Prospero`; nenhuma tarefa é considerada concluída antes do merge.
 
 ## Fundação
 
@@ -38,7 +38,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 - Dependências: P01 e P02; [refinamento](refinamentos/P04-skills-ci.md).
 - Entrega: 14 skills adaptadas, proveniência, memória local persistente e workflows de revisão, testes e segurança com comentários em pt-BR.
 - Aceite: revisão independente medium por especialidade, sem segredos publicados; CI executável em runner isolado e gratuito. A ativação exige provisionar esse runner; a máquina compartilhada com Horus não será registrada.
-- Estado: implementação em andamento; checks locais não equivalem a execução no GitHub. Ver [guia CI](ci.md).
+- Estado: [PR #2](https://github.com/mclovin137/Prospero/pull/2) aberto; checks locais não equivalem a execução no GitHub. Ver [guia CI](ci.md).
 
 ## Tarefas por requisito funcional
 
