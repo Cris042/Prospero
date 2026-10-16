@@ -27,8 +27,17 @@ for service in front-office middle-office matching-engine back-office; do
   mkdir -p "$scan_dir/$service"
   cp -R "$service/target/quarkus-app/lib" "$scan_dir/$service/"
 done
-docker run --rm --user "$(id -u):$(id -g)" --memory=1g \
-  -v "$scan_dir:/scan:ro" -v "$cache/trivy:/cache" \
-  aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 \
-  fs --cache-dir /cache --offline-scan --scanners vuln --severity HIGH,CRITICAL --exit-code 1 /scan
+trivy_image='aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222'
+scanner=(docker run --rm --user "$(id -u):$(id -g)" --memory=1g
+  -v "$scan_dir:/scan:ro" -v "$cache/trivy:/cache" "$trivy_image")
+# Rootfs reconhece JARs; fs reconhece lockfiles. Não tratar saída vazia como aprovação Java.
+for service in front-office middle-office matching-engine back-office; do
+  scan_rc=0
+  "${scanner[@]}" rootfs --cache-dir /cache --offline-scan --scanners vuln \
+    --severity HIGH,CRITICAL --exit-code 1 --list-all-pkgs --format json "/scan/$service" > "$scan_dir/$service.json" || scan_rc=$?
+  python3 scripts/verificar-scan-java.py "$scan_dir/$service.json"
+  [ "$scan_rc" -eq 0 ] || exit "$scan_rc"
+done
+"${scanner[@]}" fs --cache-dir /cache --offline-scan --scanners vuln \
+  --severity HIGH,CRITICAL --exit-code 1 /scan/frontend
 printf '%s\n' 'Segurança: inventário, fronteiras, dependências e segredos verificados.'

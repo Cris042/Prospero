@@ -32,7 +32,7 @@ A finalização usa os mesmos arquivos e o projeto da subida; remove somente seu
 | Testes | `verify` independente por MS, Angular/Vitest, builds, Compose real, smoke API/telemetria e Playwright desktop/mobile. |
 | Segurança | Proveniência/fronteiras, npm audit produção, Gitleaks com redação e Trivy para dependências reais resolvidas, incluindo JARs empacotados, em staging temporário com o lockfile frontend. |
 
-Gitleaks exige histórico completo. Trivy analisa os artefatos resolvidos em modo `--offline-scan`, sem resolver POMs remotos novamente; a base de advisories ainda precisa ser baixada/atualizada. Gitleaks/Trivy têm versões/digests fixados. Falha de scanner, rede ou banco de advisories falha o check; não equivale a ausência de vulnerabilidades. Scans não oferecem prova absoluta de segurança. A imagem de uma dependência de infraestrutura não está automaticamente coberta pelo scan de JARs da aplicação.
+Gitleaks exige histórico completo. Trivy usa `rootfs` para os JARs de cada MS, exige presença dos componentes Java centrais no relatório e usa `fs` separado para o lockfile npm. Analisa os artefatos resolvidos em modo `--offline-scan`, sem resolver POMs remotos novamente; a base de advisories ainda precisa ser baixada/atualizada. Gitleaks/Trivy têm versões/digests fixados. Falha de scanner, rede ou banco de advisories falha o check; não equivale a ausência de vulnerabilidades. Scans não oferecem prova absoluta de segurança. A imagem de uma dependência de infraestrutura não está automaticamente coberta pelo scan de JARs da aplicação.
 
 ## Validação e referências
 

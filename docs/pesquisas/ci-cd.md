@@ -20,3 +20,7 @@ Self-hosted não cobra minutos de execução; artefatos/cache hospedados têm co
 Repositório privado em GitHub Free não oferece proteção de branch como em Pro/Team/Enterprise. Não prometer enforcement antes de verificar o plano; sem ele, revisar os checks manualmente antes do merge, sem contratar upgrade. [Proteção de branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
 
 A pesquisa não executou workflows nem comprovou runner/VM ou orçamento operacional. As evidências locais e remotas serão registradas separadamente. Não foram ativadas chamadas a modelos ou APIs pagas.
+
+## Correção observada no scanner
+
+Trivy `fs` não analisa arquivos JAR. Usar `rootfs` para os artefatos Java e `fs` para o lockfile npm; exigir cobertura Java no JSON evita sucesso vazio. A identificação pode baixar a base Java adicional, mesmo sem resolver POMs no Maven Central. Fonte: [matriz oficial de cobertura](https://trivy.dev/docs/latest/coverage/language/).

@@ -30,7 +30,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 - Dependência: P02.
 - Entrega: módulo CLI `.xlsx` no projeto frontend, container e exemplo. A instalação da memória foi antecipada para P04; captura automática depende da confiança manual nos hooks.
 - Decidir antes do parser: esquema de colunas, referências, asserções, execução de cenários e limites operacionais. Usar APIs de preparação locais documentadas com invariantes, nunca acesso direto aos dados.
-- Aceite: workbook independente com carga por API, IDs encadeados, status/headers/corpo, polling limitado e relatório de erro; repetição e execução isolada; arquivos inválidos falham antes dos efeitos. Validar gravação e recuperação de um handoff real do Prospero após reinício da memória.
+- Aceite: workbook independente com carga por API, IDs encadeados, status/headers/corpo, polling limitado e relatório de erro; repetição e execução isolada; arquivos inválidos falham antes dos efeitos. A persistência e recuperação da memória já foram verificadas na P04.
 - PR: incluir resumo textual do workbook. Isso entrega o mecanismo de teste; cenários financeiros entram nos RFs.
 
 ### P04 — Skills, memória e CI

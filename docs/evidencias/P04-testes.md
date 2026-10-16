@@ -35,3 +35,24 @@ Após o ajuste de `scripts/ci-seguranca.sh` para evitar resolução repetida de 
 O trap remove somente o caminho temporário único em `scan_dir`, entre aspas e após `--`; ele não remove os artefatos de origem nem o cache. O cache Trivy é montado separadamente em `/cache`, permanece após o container e não é alvo do cleanup. Sua retenção entre jobs depende da política de `RUNNER_TEMP` do runner; não foi comprovada como cache durável entre execuções. `--offline-scan` evita consultas adicionais para identificar dependências, mas não comprova disponibilidade offline dos bancos de advisories.
 
 Esta verificação foi estática, limitada à sintaxe e às fronteiras de cópia/montagem/cleanup. Não executou scanner nem atribui resultado ao scan de vulnerabilidades; a execução é responsabilidade do agente de segurança.
+
+## Guard de cobertura Java do scanner
+
+O comando de scan foi corrigido posteriormente para `rootfs` por microsserviço e `fs` separado para npm. A verificação anterior de staging não comprovava reconhecimento dos JARs por `fs`; essa limitação foi identificada na auditoria de segurança. `bash -n scripts/ci-seguranca.sh` e análise AST de `scripts/verificar-scan-java.py` aprovaram após a correção.
+
+O guard foi executado com oito fixtures de contrato em diretório temporário, removido ao término:
+
+- Relatório `{}` e lista `Results` vazia: ambos recusados com saída 1 e indicação dos quatro componentes ausentes.
+- Inventário Java sem Kafka: recusado com saída 1 e indicação de `org.apache.kafka:kafka-clients` ausente.
+- Os mesmos nomes sob ecossistema npm e nomes presentes somente em vulnerabilidades, sem inventário `Packages`: ambos recusados com saída 1.
+- Inventário Java identificado com Quarkus, Hibernate, PostgreSQL e Kafka: aprovado com saída 0, inclusive com vulnerabilidades vazias.
+- Os quatro componentes distribuídos entre resultados de JARs diferentes: aprovado com saída 0.
+- JSON malformado: recusado com saída diferente de zero.
+
+Assim, relatório vazio não aprova cobertura, e inventário identificado permite o sucesso do guard. Esses testes não substituem a confirmação dos quatro componentes no JSON real produzido pelo Trivy: ela pertence à execução do agente de segurança. O implementador tornou `--list-all-pkgs` explícito no comando após a revisão; a ausência de `Packages` falha fechada no guard. Nenhum scanner foi executado por este agente no reteste.
+
+## Diagnóstico de vulnerabilidades antes do cleanup
+
+No ajuste final, a análise sintática Bash/Python aprovou. Três fixtures adicionais, todas com as quatro coordenadas Java exigidas, verificaram severidades: HIGH e CRITICAL recusaram com saída 1; LOW aprovou com saída 0 e cobertura identificada. Para os casos bloqueantes, stdout continha exatamente ID, pacote, versão instalada e versão corrigida, além dos rótulos fixos. Sentinelas em descrição, referências e campos extras do relatório/achado não apareceram em stdout ou stderr. LOW não emitiu diagnóstico bloqueante.
+
+A leitura do script confirmou que o retorno do scanner é capturado em `scan_rc`, permitindo executar o guard e imprimir diagnóstico antes do trap de limpeza. Quando o JSON aprova o guard, um retorno não zero do scanner continua sendo propagado. Com JSON inválido, o guard falha fechado. Não houve execução do scanner nesse reteste.

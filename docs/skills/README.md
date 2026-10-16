@@ -48,4 +48,4 @@ Migrações usam Flyway sem Undo pago: mudanças versionadas, recuperação por 
 
 ## Descoberta e instalação
 
-O catálogo e os caminhos explícitos permitem leitura por agentes mesmo antes de a ferramenta atualizar sua descoberta automática; novas skills podem exigir a próxima sessão/turno para aparecer na interface. O ai-memory é uma ferramenta distinta: sua instalação e integração continuam previstas na P03, não são realizadas pela cópia destas 14 skills.
+O catálogo e os caminhos explícitos permitem leitura por agentes mesmo antes de a ferramenta atualizar sua descoberta automática; novas skills podem exigir a próxima sessão/turno para aparecer na interface. O ai-memory é uma ferramenta distinta, instalada e validada na P04. A captura automática exige confiança manual nos hooks e reinício do Codex; veja [guia da memória](../memoria.md).
