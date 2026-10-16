@@ -6,7 +6,7 @@ Uma tarefa principal por requisito funcional RF01–RF10. P01–P03 preparam a e
 
 Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concluída**. Concluída exige validação, revisão e merge; um resumo local não substitui um PR. Datas e estimativas do roteiro original de 12 semanas não são compromisso deste roadmap.
 
-**Estado atual:** P01 e P02 implementadas e validadas localmente, aguardando publicação/revisão/merge. P04 em andamento: skills e CI implementadas, revisão independente em curso. P03 e RF01–RF10 permanecem planejadas. Repositório privado criado em `mclovin137/Prospero`; nenhuma tarefa é considerada concluída antes do merge.
+**Estado atual:** P01 e P02 implementadas e validadas localmente, no [PR #1](https://github.com/mclovin137/Prospero/pull/1), aguardando revisão/merge. P04 em andamento: skills e CI implementadas, revisão independente em curso. P03 e RF01–RF10 permanecem planejadas. Repositório privado criado em `mclovin137/Prospero`; nenhuma tarefa é considerada concluída antes do merge.
 
 ## Fundação
 
