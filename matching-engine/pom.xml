@@ -8,11 +8,14 @@
         <maven.compiler.release>26</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <quarkus.platform.version>3.40.1</quarkus.platform.version>
+        <lz4.version>1.11.4</lz4.version>
         <compiler-plugin.version>3.14.1</compiler-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
     </properties>
     <dependencyManagement><dependencies>
         <dependency><groupId>io.quarkus.platform</groupId><artifactId>quarkus-bom</artifactId><version>${quarkus.platform.version}</version><type>pom</type><scope>import</scope></dependency>
+        <!-- CVE-2026-106451: remover override quando o BOM incluir versão corrigida. -->
+        <dependency><groupId>at.yawk.lz4</groupId><artifactId>lz4-java</artifactId><version>${lz4.version}</version></dependency>
     </dependencies></dependencyManagement>
     <dependencies>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-rest-jackson</artifactId></dependency>
