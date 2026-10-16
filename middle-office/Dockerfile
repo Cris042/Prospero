@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM eclipse-temurin:26.0.2.1_1-jdk-noble AS build
+ENV MAVEN_OPTS="-Xmx384m -XX:ActiveProcessorCount=2"
 WORKDIR /workspace
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
