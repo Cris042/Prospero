@@ -1,0 +1,531 @@
+# Ambiente local do Próspero; dados persistem em volumes exclusivos.
+name: prospero
+services:
+  postgres-front-office:
+    image: postgres:16.14-alpine
+    environment:
+      POSTGRES_DB: prospero_fo
+      POSTGRES_USER: prospero_fo
+      POSTGRES_PASSWORD: ${FO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+    volumes:
+    - fo-dados:/var/lib/postgresql/data
+    networks:
+    - dados-fo
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 128m
+    shm_size: 64m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  front-office:
+    image: prospero/front-office:0.1.0
+    build:
+      context: ./front-office
+    ports:
+    - 127.0.0.1:8081:8080
+    environment:
+      DB_URL: jdbc:postgresql://postgres-front-office:5432/prospero_fo
+      DB_USER: prospero_fo
+      DB_PASSWORD: ${FO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      postgres-front-office:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+    - dados-fo
+    - eventos
+    - telemetria
+    - web
+    - cotacoes
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - --fail
+      - --silent
+      - --max-time
+      - '4'
+      - http://localhost:8080/q/health/ready
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    mem_limit: 384m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  postgres-middle-office:
+    image: postgres:16.14-alpine
+    environment:
+      POSTGRES_DB: prospero_mo
+      POSTGRES_USER: prospero_mo
+      POSTGRES_PASSWORD: ${MO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+    volumes:
+    - mo-dados:/var/lib/postgresql/data
+    networks:
+    - dados-mo
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 128m
+    shm_size: 64m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  middle-office:
+    image: prospero/middle-office:0.1.0
+    build:
+      context: ./middle-office
+    ports:
+    - 127.0.0.1:8082:8080
+    environment:
+      DB_URL: jdbc:postgresql://postgres-middle-office:5432/prospero_mo
+      DB_USER: prospero_mo
+      DB_PASSWORD: ${MO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      postgres-middle-office:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+    - dados-mo
+    - eventos
+    - telemetria
+    - web
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - --fail
+      - --silent
+      - --max-time
+      - '4'
+      - http://localhost:8080/q/health/ready
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    mem_limit: 384m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  postgres-matching-engine:
+    image: postgres:16.14-alpine
+    environment:
+      POSTGRES_DB: prospero_me
+      POSTGRES_USER: prospero_me
+      POSTGRES_PASSWORD: ${ME_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+    volumes:
+    - me-dados:/var/lib/postgresql/data
+    networks:
+    - dados-me
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 128m
+    shm_size: 64m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  matching-engine:
+    image: prospero/matching-engine:0.1.0
+    build:
+      context: ./matching-engine
+    ports:
+    - 127.0.0.1:8083:8080
+    environment:
+      DB_URL: jdbc:postgresql://postgres-matching-engine:5432/prospero_me
+      DB_USER: prospero_me
+      DB_PASSWORD: ${ME_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      postgres-matching-engine:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+    - dados-me
+    - eventos
+    - telemetria
+    - web
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - --fail
+      - --silent
+      - --max-time
+      - '4'
+      - http://localhost:8080/q/health/ready
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    mem_limit: 384m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  postgres-back-office:
+    image: postgres:16.14-alpine
+    environment:
+      POSTGRES_DB: prospero_bo
+      POSTGRES_USER: prospero_bo
+      POSTGRES_PASSWORD: ${BO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+    volumes:
+    - bo-dados:/var/lib/postgresql/data
+    networks:
+    - dados-bo
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 128m
+    shm_size: 64m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  back-office:
+    image: prospero/back-office:0.1.0
+    build:
+      context: ./back-office
+    ports:
+    - 127.0.0.1:8084:8080
+    environment:
+      DB_URL: jdbc:postgresql://postgres-back-office:5432/prospero_bo
+      DB_USER: prospero_bo
+      DB_PASSWORD: ${BO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      postgres-back-office:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+    - dados-bo
+    - eventos
+    - telemetria
+    - web
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - --fail
+      - --silent
+      - --max-time
+      - '4'
+      - http://localhost:8080/q/health/ready
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    mem_limit: 384m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  kafka:
+    image: apache/kafka:4.1.0
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: '1'
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: '1'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms128m -Xmx256m
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    volumes:
+    - kafka-dados:/var/lib/kafka/data
+    networks:
+    - eventos
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null
+        2>&1
+      interval: 20s
+      timeout: 15s
+      retries: 15
+      start_period: 60s
+    mem_limit: 640m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  redis:
+    image: redis:8.2.2-alpine
+    command:
+    - redis-server
+    - --appendonly
+    - 'yes'
+    - --maxmemory
+    - 48mb
+    - --maxmemory-policy
+    - allkeys-lru
+    volumes:
+    - redis-dados:/data
+    networks:
+    - cotacoes
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 96m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  frontend:
+    image: prospero/frontend:0.1.0
+    build:
+      context: ./frontend
+    ports:
+    - 127.0.0.1:4200:8080
+    networks:
+    - web
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - -O
+      - /dev/null
+      - http://127.0.0.1:8080/healthz
+      interval: 15s
+      timeout: 3s
+      retries: 10
+    mem_limit: 64m
+    read_only: true
+    tmpfs:
+    - /tmp:size=16m
+    - /var/cache/nginx:size=16m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    command:
+    - --config=/etc/otelcol/config.yaml
+    volumes:
+    - ./infra/otel/collector.yaml:/etc/otelcol/config.yaml:ro
+    networks:
+    - telemetria
+    ports:
+    - 127.0.0.1:14333:13133
+    mem_limit: 128m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  loki:
+    image: grafana/loki:3.7.8
+    command:
+    - -config.file=/etc/loki/config.yaml
+    volumes:
+    - ./infra/loki/config.yaml:/etc/loki/config.yaml:ro
+    - loki-dados:/loki
+    networks:
+    - telemetria
+    ports:
+    - 127.0.0.1:13100:3100
+    mem_limit: 192m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    networks:
+    - telemetria
+    ports:
+    - 127.0.0.1:16687:16686
+    mem_limit: 192m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=3d
+    volumes:
+    - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus-dados:/prometheus
+    networks:
+    - telemetria
+    ports:
+    - 127.0.0.1:19090:9090
+    mem_limit: 192m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+  grafana:
+    image: grafana/grafana:13.2.4
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    volumes:
+    - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    - grafana-dados:/var/lib/grafana
+    networks:
+    - telemetria
+    ports:
+    - 127.0.0.1:13000:3000
+    mem_limit: 256m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+networks:
+  dados-fo:
+    internal: true
+  dados-mo:
+    internal: true
+  dados-me:
+    internal: true
+  dados-bo:
+    internal: true
+  eventos: {}
+  telemetria: {}
+  web: {}
+  cotacoes:
+    internal: true
+volumes:
+  fo-dados: {}
+  mo-dados: {}
+  me-dados: {}
+  bo-dados: {}
+  kafka-dados: {}
+  redis-dados: {}
+  loki-dados: {}
+  prometheus-dados: {}
+  grafana-dados: {}

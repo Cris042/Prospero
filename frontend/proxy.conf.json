@@ -1,0 +1,30 @@
+{
+  "/servicos/front-office": {
+    "target": "http://localhost:8081",
+    "secure": false,
+    "pathRewrite": {
+      "^/servicos/front-office": ""
+    }
+  },
+  "/servicos/middle-office": {
+    "target": "http://localhost:8082",
+    "secure": false,
+    "pathRewrite": {
+      "^/servicos/middle-office": ""
+    }
+  },
+  "/servicos/matching-engine": {
+    "target": "http://localhost:8083",
+    "secure": false,
+    "pathRewrite": {
+      "^/servicos/matching-engine": ""
+    }
+  },
+  "/servicos/back-office": {
+    "target": "http://localhost:8084",
+    "secure": false,
+    "pathRewrite": {
+      "^/servicos/back-office": ""
+    }
+  }
+}
