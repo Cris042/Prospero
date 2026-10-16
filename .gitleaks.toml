@@ -1,0 +1,3 @@
+title = "Próspero — detecção de segredos"
+[extend]
+useDefault = true
