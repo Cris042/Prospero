@@ -1,0 +1,17 @@
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+**/target/
+**/node_modules/
+**/dist/
+**/.angular/
+**/coverage/
+**/*.log
+__pycache__/
+.playwright/
+.slim/
+**/test-results/
+**/playwright-report/
+.ci-evidencias/
