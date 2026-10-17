@@ -4,6 +4,9 @@ for value in "${GITHUB_RUN_ID:-}" "${GITHUB_RUN_ATTEMPT:-}"; do
   case "$value" in ''|*[!0-9]*) echo 'Identidade numérica de execução ausente.' >&2; exit 2;; esac
 done
 python3 scripts/ci-preflight.py
+# Registra disco e uso Docker para diagnosticar falta de espaço no runner efêmero.
+df -h / "${RUNNER_TEMP:-/tmp}" || true
+docker system df || true
 export PROSPERO_CI_TAG="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 project="prospero-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml)
