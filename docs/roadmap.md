@@ -117,6 +117,8 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ### RF04 — Risco, reservas e SAGA
 
+- Avaliação documental solicitada em 2026-10-17: políticas alteráveis sem deploy; [ADR-008](adrs/ADR-008-politicas-risco.md) compara parâmetros versionados/CEL Java/DSL restrita, e HLD-003/README explicam aplicação proposta. Sem compilador, dependência, migração, reserva ou API de risco implementada; RF04 segue dependente da RF03.
+- Refinamento: brief de expressões puras, aritmética exata, precedência/curto-circuito, versão imutável, limites, ativação e reserva atômicas; memória confrontada com código P05/PRD/ADRs/HLD003. Cinco agentes medium independentes (`p03_arquitetura`, `p03_qa`, `p03_seguranca`, `rf01_operacao`, `rf01_viabilidade`) recomendaram seguir com ressalvas: parâmetros primeiro quando bastam, DSL como proposta, nenhum desempenho presumido e nenhuma substituição da proteção transacional. DSL é alternativa nova à orientação de evitar engine genérica, sem revogá-la por hipótese.
 - Dependências: RF03.
 - Entrega: MO com poder de compra, limites de posição/ordem e exposição vendida; reserva atômica; integração da SAGA/outbox com FO e deduplicação.
 - Definir: reserva por tipo de ordem, proteção de limites concorrentes, consumo/liberação e timeout sem execução confirmada. Antes do matching real, usar testes internos de contratos, sem simular conclusão na API de negócio.

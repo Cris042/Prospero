@@ -285,6 +285,22 @@ npm start
 
 `npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas da P03 usa três abas e executa por API: veja [contrato, exemplo e comandos](frontend/README.md#runner-xlsx--contrato-p03). `docker compose build runner-planilhas` e `docker compose run --rm --no-deps -T runner-planilhas` executam o exemplo técnico com a stack já disponível. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/rules.md#memória-e-retomada).
 
+## Regras de risco sem novo deploy — avaliação
+
+A proposta para o middle office é permitir alterar limites de forma controlada, com versão e auditoria. **Para limites numéricos com fórmulas estáveis, recomendamos primeiro parâmetros tipados/versionados e estratégias Java.** Uma DSL é candidata quando o analista precisa mudar combinações de condições; CEL Java restrito e compilador autoral foram comparados no [ADR-008](docs/adrs/ADR-008-politicas-risco.md). A decisão de adotar DSL permanece pendente; MO hoje só tem fundação e decimal técnico P05.
+
+Se adotada, aplicação proposta: escrever regra → tokens → árvore com precedência → tipos/unidades → otimização de constantes → instruções verificadas de VM de pilha. Compilar ao publicar versão e avaliar programa imutável por ordem, com `e`/`ou` em curto-circuito, sem reflexão/I/O/loops. `2%` representa razão decimal exata `0.02`, sem double; `patrimonio e var_95` deve ser recusado se as variáveis forem monetárias. Esses nomes são exemplos, sem fonte de VaR implementada. Não há medição que sustente “microssegundos”.
+
+Cada decisão usa uma versão inteira; ativação é atômica e rollback vale para decisões futuras. Reserva, limites concorrentes, deduplicação e outbox continuam protegidos pela transação do MO: a DSL decide, não movimenta recursos. Fonte/hash/versão do compilador permitem auditoria; erros nunca autorizam a ordem por padrão. [Motivos, pipeline e testes futuros](docs/adrs/ADR-008-politicas-risco.md), [aplicação no desenho do MO](docs/hlds/HLD-003-middle-office.md#políticas-alteráveis-sem-deploy--proposta-em-avaliação).
+
+### Cache LRU e Caffeine — resultado da análise
+
+“LRU Cache (146)” é um [exercício do LeetCode](https://leetcode.com/problems/lru-cache/), não um erro identificado no Próspero. A análise independente não encontrou cache artesanal nos módulos Java. O Redis atual usa `maxmemory 48mb` e `allkeys-lru` no container de 96 MiB; destina-se à projeção futura de cotações. Evicção poderá causar ausência de cotação: RF06 precisa tratar falta/idade e reconstrução, sem assumir que AOF impede remoção. [Configuração real](docker-compose.yml), [desenho FO](docs/hlds/HLD-002-front-office.md), [evicção Redis](https://redis.io/docs/latest/develop/reference/eviction/).
+
+`HashMap` + lista duplamente ligada implementa LRU com busca média e movimentação/remoção O(1), mas exige sincronização conjunta sob concorrência. Se precisarmos de cache local Java, Caffeine é candidato com W-TinyLFU e limites de tamanho/peso/expiração; não foi adotado. Não há evidência que justifique mais um cache hoje. Peso não é teto exato de heap; cache local não muda a política Redis. [Política Caffeine](https://github.com/ben-manes/caffeine/wiki/Efficiency), [limites](https://github.com/ben-manes/caffeine/wiki/Eviction).
+
+Reservas, deduplicação, SAGA, ordens ativas e resultados necessários do runner não podem desaparecer por popularidade. Medir memória, hits/misses e `evicted_keys` antes de escolher outra política. Nenhuma falha de cache/OOM foi reproduzida nesta avaliação.
+
 ## Módulos de teste
 
 | Módulo | Finalidade e estado |
