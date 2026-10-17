@@ -18,6 +18,6 @@ Siga a formatação existente: Java com quatro espaços; TypeScript/HTML/CSS com
 
 ## Fluxo de contribuição
 
-Invoque `refinar-task` antes de cada nova tarefa do roadmap, com memória e pareceres independentes. Revisão, testes e segurança rodam em três agentes separados do implementador, com esforço **medium**. Use o catálogo em `.agents/skills/README.md`; para operação, use `subir-sistema`.
+Invoque `refinar-task` antes de cada nova tarefa do roadmap, com memória e pareceres independentes. Revisão, testes e segurança rodam em três agentes separados do implementador, com esforço **medium**. Use o catálogo em `.agents/skills/README.md`; para operação, use `subir-sistema`. Diagramas C4 usam o perfil em `docs/agentes/`, com esforço medium, fontes explícitas e propostas em leitura.
 
 O histórico ainda está em formação; use commits curtos que descrevam a mudança. Cada tarefa exige branch e PR com alterações, motivos, trade-offs, evidências e imagens quando houver mudança visual. Não faça merge ou release automaticamente. Atualize documentação e memória conforme o impacto; nunca versione `.env` ou credenciais.

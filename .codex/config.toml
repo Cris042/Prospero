@@ -1,0 +1,3 @@
+[agents.c4_diagram_generator]
+description = "Propõe diagramas C4 rastreáveis às fontes do Próspero, em leitura, sem inventar arquitetura."
+config_file = "agents/c4-diagram-generator.toml"

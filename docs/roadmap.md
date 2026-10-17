@@ -60,7 +60,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### P07 — Agente de diagramas C4
 
 - Dependência: P01; [refinamento](refinamentos/P05-P07-reuso-c4.md).
-- Estado: planejada; PR próprio.
+- Estado: em andamento, branch `task/p07-agente-c4`; PR próprio.
 - Entrega: perfil portátil e adaptador de agente quando comprovadamente suportado; fontes do Próspero, esforço medium, modelo herdado, proposta sem escrita/execução.
 - Aceite: exercício real com fonte suficiente e lacunas/conflitos; não inventar arquitetura implementada nem exigir FDD ou serviços pagos.
 
