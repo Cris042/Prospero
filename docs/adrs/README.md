@@ -12,7 +12,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 
 ## Relação com a proposta original
 
-Os requisitos RF01–RF10 e RNF01–RNF08 permanecem na [arquitetura original](../../prospero-arquitetura.md). Estes ADRs substituem os seguintes pontos daquela proposta:
+Os requisitos RF01–RF10 e RNF01–RNF08 estão no [PRD-001](../prds/PRD-001-simulador-prospero.md) e o desenho vigente no [HLD-001](../hlds/HLD-001-arquitetura-prospero.md). A proposta anterior foi removida por solicitação do usuário, preservada no [histórico Git](https://github.com/mclovin137/Prospero/blob/c84aea222a17c28422e0050df9f477b487980470/prospero-arquitetura.md). Estes ADRs substituíram os seguintes pontos daquela proposta:
 
 - Java 25 e Spring Boot/JDBC → Java 26, Quarkus e JPA.
 - Estrutura `rest → actor → service/dao` → REST → Actor com domínio, Helpers puros e repositórios JPA separados.

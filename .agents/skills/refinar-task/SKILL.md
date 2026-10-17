@@ -10,8 +10,9 @@ Esta adaptação substitui os gatilhos por épico e as dispensas do [upstream](U
 ## Fontes obrigatórias
 
 1. Ler [rules](../../../docs/rules.md), [roadmap](../../../docs/roadmap.md), tarefa do componente quando houver, [inventário](../../../docs/libs.md) e ADRs aplicáveis.
-2. Consultar ai-memory no escopo Prospero e recuperar decisões, handoff e tentativas relevantes. Confrontar o resultado com arquivos atuais. A memória não altera requisitos nem prevalece sobre ADRs e regras.
-3. Registrar indisponibilidade real da memória e tentar recuperar a conexão; usar fontes documentais para trabalho independente. Não criar `continuidade.md`, não inventar consulta e não declarar a tarefa refinada com memória sem tê-la consultado.
+2. Aplicar o [guia documental](../../../docs/documentacao.md): revisar sistema, PRD/requisitos, HLD/desenho e ADRs, comparar com implementação e registrar aderência, divergências e necessidade proporcional de documentos antes do código.
+3. Consultar ai-memory no escopo Prospero e recuperar decisões, handoff e tentativas relevantes. Confrontar o resultado com arquivos atuais. A memória não altera requisitos nem prevalece sobre ADRs e regras.
+4. Registrar indisponibilidade real da memória e tentar recuperar a conexão; usar fontes documentais para trabalho independente. Não criar `continuidade.md`, não inventar consulta e não declarar a tarefa refinada com memória sem tê-la consultado.
 
 ## Brief comum e pontos de vista
 

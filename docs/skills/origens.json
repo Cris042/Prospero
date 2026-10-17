@@ -155,7 +155,7 @@
       "caminho_origem": "docs/skills/refinar-task.md",
       "url": "https://github.com/Cris042/Minerva/blob/76a991d7296cddba5e595a07e9b3b6f8da581b78/docs/skills/refinar-task.md",
       "arquivos_sha256": {
-        ".agents/skills/refinar-task/SKILL.md": "427bd791c63a83f8ba278293ad62750b6fe98635c7a3eaa60bb9e6c4b977bdf9",
+        ".agents/skills/refinar-task/SKILL.md": "25e575d89096f465507d6ca9ffb161d2dafc3810c1f54383cff05c0eb2f8a228",
         ".agents/skills/refinar-task/UPSTREAM.md": "bd8afefdeff2633a7cd4923a4b4432b1eb7fff2db48ccd274e2b0ef7410e45a4"
       }
     },
@@ -165,6 +165,28 @@
       "origem": "Instrução explícita do usuário, 2026-10-16",
       "arquivos_sha256": {
         ".agents/skills/subir-sistema/SKILL.md": "8e5331e267fa0d451e9f153ea88a33aa1e85674f16d921ea213d983c372772d6"
+      }
+    },
+    {
+      "nome": "gerar-prd",
+      "repositorio": "Cris042/Minerva",
+      "commit": "76a991d7296cddba5e595a07e9b3b6f8da581b78",
+      "caminho_origem": "docs/skills/gerar-prd.md",
+      "url": "https://github.com/Cris042/Minerva/blob/76a991d7296cddba5e595a07e9b3b6f8da581b78/docs/skills/gerar-prd.md",
+      "arquivos_sha256": {
+        ".agents/skills/gerar-prd/SKILL.md": "10369572623d180b352d84225fbe89bb85035b77e52185c54d11638f36fe9baa",
+        ".agents/skills/gerar-prd/UPSTREAM.md": "28ed2fbfa5ec2e3fea7a8e244fca54df5d86e43d14c9e43c58e85a227c97ba41"
+      }
+    },
+    {
+      "nome": "gerar-hld",
+      "repositorio": "Cris042/Minerva",
+      "commit": "76a991d7296cddba5e595a07e9b3b6f8da581b78",
+      "caminho_origem": "docs/skills/gerar-hld.md",
+      "url": "https://github.com/Cris042/Minerva/blob/76a991d7296cddba5e595a07e9b3b6f8da581b78/docs/skills/gerar-hld.md",
+      "arquivos_sha256": {
+        ".agents/skills/gerar-hld/SKILL.md": "2fc9ba45267d11897194b404818ed0c97172e5b20d24a949942c69b405b3b113",
+        ".agents/skills/gerar-hld/UPSTREAM.md": "bccaeb89cb7998b42bcd6fb892b36927c504f8d6c43ae0129b39ac88423181ed"
       }
     }
   ]

@@ -28,7 +28,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 
 ## Pendências
 
-Leitor XLSX será escolhido na P03. DDD, SAGA e Object Calisthenics são decisões de projeto, não bibliotecas instaladas. Kafka e Redis preparados na fundação não significam regras financeiras implementadas. As 14 skills e seus hashes estão no [inventário de origens](skills/origens.json).
+Leitor XLSX será escolhido na P03. DDD, SAGA e Object Calisthenics são decisões de projeto, não bibliotecas instaladas. Kafka e Redis preparados na fundação não significam regras financeiras implementadas. As 16 skills e seus hashes estão no [inventário de origens](skills/origens.json).
 
 ## Ambiente observado
 

@@ -2,9 +2,11 @@
 
 ## Orientações e continuidade
 
-Leia [docs/rules.md](docs/rules.md), [roadmap](docs/roadmap.md), [ADRs](docs/adrs/README.md) e o estado real do Git. Responda e documente em pt-BR. Consulte ai-memory no escopo do projeto e confronte as lembranças com os arquivos atuais. Não recrie `continuidade.md` nem declare testes ou PRs sem evidência.
+Leia [docs/rules.md](docs/rules.md), [roadmap](docs/roadmap.md), [ADRs](docs/adrs/README.md) e o estado real do Git. Responda e documente em pt-BR. Consulte ai-memory no escopo do projeto e confronte as lembranças com os arquivos atuais. Aplique o [guia documental](docs/documentacao.md): revisar sistema, PRD/requisitos, HLD/desenho e ADRs antes da tarefa e conferir aderência ao concluir. Sinalize divergências e mantenha documentos proporcionais; sugira outros tipos somente com necessidade concreta e simplicidade. Não recrie `continuidade.md` nem declare testes ou PRs sem evidência.
 
 ## Estrutura e arquitetura
+
+Consulte [índice de estrutura no README](README.md#índice-de-estrutura) para a finalidade dos arquivos, [PRD](docs/prds/PRD-001-simulador-prospero.md) para requisitos e [HLDs](docs/hlds/README.md) para o ecossistema e cada serviço.
 
 `front-office/`, `middle-office/`, `matching-engine/` e `back-office/` são projetos Maven independentes com Quarkus e Java 26. Cada serviço possui PostgreSQL próprio. `frontend/` contém Angular, testes de componentes e E2E; `infra/` configura observabilidade e memória; `scripts/` reúne operação e verificações. O runner XLSX será implementado na P03.
 
