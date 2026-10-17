@@ -11,7 +11,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3,
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
 | UI00 | P02 | Aplicação inicial, proxy, painel técnico e container | Concluída — PR #1 integrado |
-| UI01 | P03 | Runner CLI `.xlsx`, exemplos e relatório via API | Aguardando revisão/merge — 49 testes runner + exemplo real validados |
+| UI01 | P03 | Runner CLI `.xlsx`, exemplos e relatório via API | Aguardando revisão/merge — PR #9, 49 testes runner + exemplo real validados |
 | UI02 | RF01 | Lista dos cinco ativos, cotações e profundidade | Planejada |
 | UI03 | RF02 | Boleta, tipos/validades e acompanhamento de submissão | Planejada |
 | UI04 | RF03, RF04 | Exibir validações, rejeições, reservas e poder de compra | Planejada |
