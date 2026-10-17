@@ -6,7 +6,7 @@ Produzir propostas de diagramas C4 rastreáveis à arquitetura do Próspero. Atu
 
 ## Entradas e acionamento
 
-Acionar quando o usuário pedir C4, contexto, containers, componentes ou código, ou quando um HLD precisar de visualização. Receber objetivo, escopo, estado desejado (implementado ou planejado) e caminhos das fontes: PRD/HLD quando existentes, PROJETO, ADRs, manifests e código pertinentes. FDD não é obrigatório.
+Acionar quando o usuário pedir C4, contexto, containers, componentes ou código, ou quando um HLD precisar de visualização. Receber objetivo, escopo, estado desejado (implementado ou planejado) e caminhos das fontes: PRD/HLD, ADRs, manifests e código pertinentes. FDD não é obrigatório.
 
 Confrontar documentos com implementação. Ausência de fonte ou conflito vira lacuna explícita, sem preencher com pesquisa externa ou novos serviços. ADR aceito só muda por decisão explícita registrada. Memória auxilia contexto, sem substituir fontes canônicas.
 

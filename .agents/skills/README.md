@@ -1,6 +1,6 @@
 # Skills do Próspero
 
-Este diretório contém 14 skills do projeto, adaptadas e com origens fixadas. O [catálogo completo](../../docs/skills/README.md) define gatilhos, fluxo e responsáveis; as [regras canônicas](../../docs/rules.md) e os [ADRs](../../docs/adrs/README.md) prevalecem sobre exemplos e procedimentos de terceiros.
+Este diretório contém 16 skills do projeto, adaptadas e com origens fixadas. O [catálogo completo](../../docs/skills/README.md) define gatilhos, fluxo e responsáveis; as [regras canônicas](../../docs/rules.md) e os [ADRs](../../docs/adrs/README.md) prevalecem sobre exemplos e procedimentos de terceiros.
 
 ## Entrada de toda tarefa
 
@@ -15,6 +15,8 @@ Comece por [refinar-task](refinar-task/SKILL.md): consultar a memória e os cont
 | [worktrees](worktrees/SKILL.md) | Isolar mudanças arriscadas ou paralelas com Git. |
 | [iss-audit](iss-audit/SKILL.md) | Validar issues e reproduzir alegações. |
 | [deep-research](deep-research/SKILL.md) | Briefing e organização de pesquisa fornecida. |
+| [gerar-prd](gerar-prd/SKILL.md) | Requisitos e aceite de produto relevantes. |
+| [gerar-hld](gerar-hld/SKILL.md) | Estrutura e fluxos macro relevantes. |
 | [gerar-adr](gerar-adr/SKILL.md) | Registrar decisões, alternativas e trade-offs. |
 | [tdd-workflow](tdd-workflow/SKILL.md) | RED → GREEN → REFACTOR e evidências de comportamento. |
 | [criar-migration](criar-migration/SKILL.md) | Alterar schema/dados com recuperação documentada. |
@@ -32,3 +34,5 @@ Leia primeiro o `SKILL.md` local, depois seu `UPSTREAM.md` e apenas os recursos 
 Revisão, testes e segurança usam três agentes distintos com esforço **medium**, separados do implementador. O refinamento pode distribuir os cinco pareceres em lotes quando o runtime tiver poucos slots.
 
 O ai-memory é uma ferramenta separada, integrada ao fluxo para recuperar contexto e registrar decisões operacionais/handoffs. Seu uso não substitui documentação vigente nem comprova execução de testes. [Origens e checksums](../../docs/skills/origens.json) permitem conferir a proveniência; atualizações exigem revisão explícita.
+
+O [guia documental](../../docs/documentacao.md) e o [playbook único](../../docs/playbook-desenvolvimento.md) orientam escolha proporcional de documentos e diagnóstico.

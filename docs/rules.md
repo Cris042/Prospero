@@ -4,7 +4,7 @@
 
 Este documento é o contrato canônico, independente de ferramenta, para pessoas e agentes. O [AGENTS.md](../AGENTS.md) aponta para ele. Instruções explícitas atuais do usuário prevalecem; decisões arquiteturais e seus motivos ficam nos [ADRs](adrs/README.md). Divergências materiais devem ser expostas, não resolvidas silenciosamente.
 
-A [arquitetura original](../prospero-arquitetura.md) continua como referência do domínio e dos requisitos. As substituições tecnológicas e estruturais são enumeradas no índice dos ADRs. Não importar regras do Minerva relativas a deploy, Obsidian, agentes ou fornecedores sem decisão para o Prospero.
+O [PRD-001](prds/PRD-001-simulador-prospero.md) é a referência de produto/requisitos; o [HLD do ecossistema](hlds/HLD-001-arquitetura-prospero.md) e seus quatro HLDs de serviço descrevem estrutura e fluxos. As substituições tecnológicas e estruturais são enumeradas no índice dos ADRs. Não importar regras do Minerva relativas a deploy, Obsidian, agentes ou fornecedores sem decisão para o Prospero.
 
 O projeto é de estudo, roda localmente e não contrata serviços, hospedagem, APIs ou ferramentas pagas. Não há dados nem operações financeiras reais. Saídas autorais, documentação, commits e PRs serão em pt-BR; identificadores e termos técnicos podem manter suas convenções.
 
@@ -32,11 +32,11 @@ Não há percentual mínimo de cobertura aprovado. Cada tarefa deve demonstrar o
 2. Use branch própria, por exemplo `task/p01-governanca` ou `task/rf05-matching`. Faça commits pequenos, com assunto imperativo em pt-BR; não existe convenção histórica a preservar neste workspace.
 3. Entregue implementação, testes proporcionais, documentação e evidências. Atualize [libs](libs.md) na mesma tarefa que introduzir ou alterar dependências.
 4. Abra um PR por tarefa usando o [modelo](../.github/PULL_REQUEST_TEMPLATE.md): o que mudou, por quê, trade-offs, requisitos, validação e limitações. Não faça merge automaticamente; a aprovação da entrega cabe ao usuário.
-5. Registre URL e estado do PR no roadmap e no ai-memory. Sem Git, remoto ou autenticação, prepare o resumo local e informe o impedimento; isso não equivale a abrir um PR. Não marque a tarefa concluída antes da revisão e do merge. O usuário autorizou continuar a P02 e a governança de skills/CI enquanto o destino remoto da P01 ainda está pendente; isso não transforma a P01 em mergeada.
+5. Registre URL e estado do PR no roadmap e no ai-memory. Sem Git, remoto ou autenticação, prepare o resumo local e informe o impedimento; isso não equivale a abrir um PR. Não marque a tarefa concluída antes da revisão e do merge. P01 e P02 foram integradas no PR #1; novas entregas mantêm PR próprio sem merge automático.
 
 ## Skills e verificação independente
 
-Use o [catálogo local](skills/README.md) para escolher skills por necessidade, não por palavra-chave. As 14 skills estão em `.agents/skills/`, com adaptadores locais e fontes/checksums fixados. Ler o adaptador antes do upstream; comandos externos, merge e release dependem do escopo autorizado, não da instalação da skill.
+Use o [catálogo local](skills/README.md) para escolher skills por necessidade, não por palavra-chave. As 16 skills estão em `.agents/skills/`, com adaptadores locais e fontes/checksums fixados. Ler o adaptador antes do upstream; comandos externos, merge e release dependem do escopo autorizado, não da instalação da skill.
 
 Revisão, testes e segurança devem rodar em **agentes separados entre si e do implementador, todos com esforço medium**. A revisão usa `pr-audit`, testes usam `tdd-workflow`/planejamento de evidências e segurança usa `security-audit`. Relatórios registram escopo, comandos/resultados, achados e limites. Nenhum agente aprova o próprio trabalho como revisão independente. O usuário decide merge.
 
@@ -58,8 +58,16 @@ Memórias são auxiliares: nunca substituem regras, ADRs, manifests ou estado re
 
 `docs/libs.md` diferencia decisão de adoção: registrar nome, finalidade, versão escolhida, versão resolvida, status e fonte de verificação. Sem manifest ou imagem configurada, uma dependência permanece planejada. Evitar tags `latest` ao implementar containers.
 
-Alterações arquiteturais devem atualizar ou substituir o ADR pertinente, preservando o histórico. Documentos de proposta original precisam de aviso quando deixarem de expressar decisões vigentes. Proteja alterações preexistentes e não publique dados privados para produzir evidências.
+Alterações arquiteturais devem atualizar ou substituir o ADR pertinente, preservando o histórico. Referências históricas devem apontar ao Git e ser identificadas como históricas, sem substituir PRD/HLD vigentes. Proteja alterações preexistentes e não publique dados privados para produzir evidências.
 
 ## Perfis de agentes
 
 O [catálogo de agentes](agentes/README.md) contém definições portáteis. Use c4-diagram-generator quando uma visualização C4 for necessária, com fontes explícitas e revisão independente; ele propõe texto em leitura, sem decidir arquitetura nem executar renderizadores. Adaptadores dependem do suporte e confiança do runtime, sem alterar configurações pessoais.
+
+## Documentação e aderência
+
+O [guia de documentação](documentacao.md) define o fluxo proporcional PRD → HLD → ADRs → implementação → revisão de aderência, responsabilidades, fontes de verdade, matriz e checklists obrigatórios. Antes de cada tarefa, revisar sistema e documentos pertinentes; registrar no refinamento/PR a comparação com código, lacunas e dispensas justificadas. Ao finalizar, atualizar documentos cujo comportamento, estrutura ou decisão mudou. Código não prevalece automaticamente sobre requisito/ADR. Não contrariar decisão aceita sem indicar explicitamente sua revisão/substituição.
+
+Registrar `[DOC-GAP]`, `[DOC-MISMATCH]`, `[ADR-VIOLATION]` e `[PRD-MISMATCH]` com fontes, evidência, impacto, ação, responsável e estado. Resolver bloqueios do escopo antes de implementar o que deles depende. Requisitos futuros identificados como planejados não são violações só por ainda não existirem.
+
+Use gerar-prd/gerar-hld/gerar-adr conforme a necessidade; referências atuais podem bastar a mudanças pequenas. A LLM pode sugerir outro documento ao usuário quando explicar a necessidade e o benefício, sempre preferindo a solução documental mais simples. FDD/LLD/RFC não são etapas obrigatórias. O [playbook único](playbook-desenvolvimento.md) é referência seletiva, não uma fonte paralela de decisões.

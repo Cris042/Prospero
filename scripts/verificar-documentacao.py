@@ -21,16 +21,14 @@ for path in files:
         if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*:', target) or target.startswith('#'):
             continue
         target = target.split('#')[0]
-        if path.name == 'prospero-arquitetura.md' and target == 'prospero-arquitetura.pdf':
-            continue  # Referência histórica ausente desde a proposta original.
         links += 1
         if not (path.parent / target).exists():
             errors.append(f'{path.relative_to(root)}: link ausente {target}')
 manifest = json.loads((root / 'docs/skills/origens.json').read_text())
 actual = {path.parent.name for path in (root / '.agents/skills').glob('*/SKILL.md')}
 declared = {item['nome'] for item in manifest['skills']}
-if actual != declared or len(actual) != 14:
-    errors.append('Catálogo de skills difere do inventário de 14 entradas.')
+if actual != declared or len(declared) != len(manifest['skills']):
+    errors.append('Catálogo de skills difere do inventário ou há nomes duplicados.')
 for item in manifest['skills']:
     if item.get('tipo') != 'local' and not re.fullmatch('[0-9a-f]{40}', item.get('commit', '')):
         errors.append(f"Origem não fixada: {item['nome']}")
@@ -54,4 +52,4 @@ for error in errors:
     print('ERRO:', error)
 if errors:
     sys.exit(1)
-print(f'OK: {len(files)} documentos, {links} links locais e 14 skills com hashes conferidos.')
+print(f'OK: {len(files)} documentos, {links} links locais e {len(actual)} skills com hashes conferidos.')

@@ -3,7 +3,7 @@
 - Data: 2026-10-16
 - Estado: aceita; implementação pendente
 - Decisor: usuário
-- Origem: planejamento do Prospero e [arquitetura original](../../prospero-arquitetura.md), seções 5, 6 e 14.
+- Origem: planejamento do Prospero e [proposta histórica no Git](https://github.com/mclovin137/Prospero/blob/c84aea222a17c28422e0050df9f477b487980470/prospero-arquitetura.md), seções 5, 6 e 14.
 
 ## Contexto
 
@@ -49,3 +49,5 @@ A decisão aumenta o consumo local de memória e a quantidade de configurações
 Na P02, compilar cada serviço isoladamente e verificar credenciais exclusivas, migrações e inicialização sem outro serviço Java disponível. Testes de arquitetura devem impedir REST → JPA e dependências de infraestrutura no domínio. A integração validará recuperação quando um consumidor ficar indisponível. Rever se o custo local inviabilizar a execução ou a separação provocar ciclos entre contextos.
 
 Relacionados: [ADR-002](ADR-002-padroes-dominio.md), [ADR-003](ADR-003-contratos-api.md), [regras](../rules.md).
+
+Nota documental — P08: a origem acima é histórica; o desenho vigente está no [HLD do ecossistema](../hlds/HLD-001-arquitetura-prospero.md) e HLDs dos serviços. Esta migração não altera o contexto ou a decisão.

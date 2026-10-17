@@ -11,6 +11,8 @@ As skills do Prospero ficam em `.agents/skills/<nome>/SKILL.md`, dentro do proje
 | [worktrees](../../.agents/skills/worktrees/SKILL.md) | Trabalho arriscado/paralelo que realmente exige isolamento e Git disponível | Orquestração |
 | [iss-audit](../../.agents/skills/iss-audit/SKILL.md) | Triagem ou correção originada de issue | Planejamento/revisão |
 | [deep-research](../../.agents/skills/deep-research/SKILL.md) | Pedido de briefing ou reestruturação de pesquisa fornecida | Planejamento/revisão |
+| [gerar-prd](../../.agents/skills/gerar-prd/SKILL.md) | Comportamento/escopo de produto relevante | Autor documental; revisão independente medium |
+| [gerar-hld](../../.agents/skills/gerar-hld/SKILL.md) | Estrutura, integração ou fluxo macro relevante | Autor documental; revisão independente medium |
 | [gerar-adr](../../.agents/skills/gerar-adr/SKILL.md) | Decisão arquitetural nova ou substituída | Implementação documental; revisão independente medium |
 | [tdd-workflow](../../.agents/skills/tdd-workflow/SKILL.md) | Funcionalidade, correção ou refatoração de código | Implementação; execução/evidências em agente de testes medium |
 | [criar-migration](../../.agents/skills/criar-migration/SKILL.md) | Alteração de schema/dados | Implementação; verificação em agente de testes medium |
@@ -30,13 +32,14 @@ O agente de revisão verifica comportamento/contrato e documentação; o de test
 ## Fluxo por tarefa
 
 1. Invocar `refinar-task` em cada nova tarefa: consultar regras, roadmap, ai-memory e ADRs; obter os cinco pareceres independentes e consolidar critérios antes da implementação. Auditar a issue se essa for a origem.
-2. Definir critérios de aceite e caminho de evidência com `verification-planning`; usar `worktrees` somente se necessário e possível.
-3. Resolver decisões arquiteturais com `gerar-adr` e pesquisas com `deep-research` quando esse for o pedido. Não criar documentos por catálogo.
-4. Implementar com TDD e `criar-migration` quando houver persistência alterada. Um cenário de planilha segue o ADR-004; testes internos continuam complementares.
-5. Delegar execuções a testes medium. Aplicar `loop-engineering` se falhar: hipótese, verificação e tentativas limitadas; não depender do runtime OMO inexistente.
-6. Delegar `pr-audit` e `security-audit` aos agentes próprios medium quando aplicáveis. Refinar a redação com `humanizer`, preservando fatos.
-7. Corrigir achados, validar o impacto, registrar evidências, atualizar inventário, roadmap e memória e abrir PR da tarefa. O usuário decide merge.
-8. Acionar `release` somente com novo pedido explícito, CI/evidências no commit correto e destino conhecido.
+2. Aplicar o [guia documental](../documentacao.md): revisar sistema, PRD/requisitos, HLD/desenho e ADRs; registrar aderência e tamanho proporcional da documentação.
+3. Definir critérios de aceite e caminho de evidência com `verification-planning`; usar `worktrees` somente se necessário e possível.
+4. Resolver decisões arquiteturais com `gerar-adr` e pesquisas com `deep-research` quando esse for o pedido. Não criar documentos por catálogo.
+5. Implementar com TDD e `criar-migration` quando houver persistência alterada. Um cenário de planilha segue o ADR-004; testes internos continuam complementares.
+6. Delegar execuções a testes medium. Aplicar `loop-engineering` se falhar: hipótese, verificação e tentativas limitadas; não depender do runtime OMO inexistente.
+7. Delegar `pr-audit` e `security-audit` aos agentes próprios medium quando aplicáveis. Refinar a redação com `humanizer`, preservando fatos.
+8. Corrigir achados, validar o impacto, registrar evidências, atualizar inventário, roadmap e memória e abrir PR da tarefa. O usuário decide merge.
+9. Acionar `release` somente com novo pedido explícito, CI/evidências no commit correto e destino conhecido.
 
 ## Adaptações obrigatórias
 
@@ -49,3 +52,5 @@ Migrações usam Flyway sem Undo pago: mudanças versionadas, recuperação por 
 ## Descoberta e instalação
 
 O catálogo e os caminhos explícitos permitem leitura por agentes mesmo antes de a ferramenta atualizar sua descoberta automática; novas skills podem exigir a próxima sessão/turno para aparecer na interface. O ai-memory é uma ferramenta distinta, instalada e validada na P04. A captura automática exige confiança manual nos hooks e reinício do Codex; veja [guia da memória](../memoria.md).
+
+O [guia documental](../documentacao.md) e o [playbook único](../playbook-desenvolvimento.md) orientam escolha proporcional de documentos e diagnóstico.
