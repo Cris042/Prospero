@@ -285,6 +285,109 @@ npm start
 
 `npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas da P03 usa três abas e executa por API: veja [contrato, exemplo e comandos](frontend/README.md#runner-xlsx--contrato-p03). `docker compose build runner-planilhas` e `docker compose run --rm --no-deps -T runner-planilhas` executam o exemplo técnico com a stack já disponível. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/rules.md#memória-e-retomada).
 
+## Recuperação, concorrência, desempenho e segurança — pareceres
+
+Cinco propostas foram avaliadas por **cinco agentes distintos**, confrontando requisitos, código e fontes oficiais. Todas têm aplicação com as ressalvas abaixo. **São desenhos/recomendações futuros:** a fundação atual não implementa liquidação, reservas, matching, autenticação de negócio ou arquivamento. Nenhum benchmark/falha financeira foi executado nesta avaliação.
+
+| Proposta | Parecer | Motivo e aplicação no Próspero |
+| --- | --- | --- |
+| Liquidação/notas como jobs resistentes a queda | Válida com ressalvas | Job persistente e claim atômico antes do efeito; processando abandonado vai para desconhecido/revisão e não é refeito automaticamente. Liquidação local confirma efeito/conclusão/outbox juntos; envio externo continua incerto sem confirmação confiável. Notas ainda são proposta de produto |
+| Limites contra write skew | Válida com ressalvas | Preferência inicial a validar: controle por conta/recurso atualizado atomicamente junto da reserva. Lock na conta ou serializable são alternativas com protocolo comum e tratamento de conflito; snapshot isolation sozinho não protege soma de reservas distintas |
+| Medir matching antes de otimizar | Válida | JMH para núcleo puro; async-profiler e carga integrada para CPU, alocação, espera e contenção. O perfil deve mostrar o gargalo; alocação/serialização não são causas comprovadas hoje |
+| HMAC/mTLS e Argon2 | Válida com distinções | HMAC autentica conteúdo; TLS mútuo no Kafka protege conexões cliente–broker e combina com ACLs. Não são equivalentes. Argon2id é candidato somente se adotarmos senhas locais |
+| Arquivar histórico e relatórios SQL em lotes | Válida com correção | Preservar registros originais e validar restauração antes de retirar cópia quente. Relatórios usam agregações/sumários; UPDATE apenas em projeções/estado mutáveis, sem reescrever negócios ou razão |
+
+**Jobs:** claim não prova efeito concluído; expiração não prova ausência de execução. Reconciliação reconhece resultado durável sem refazer e bloqueia worker antigo antes de eventual nova tentativa autorizada. A proposta não adiciona envio real de notas ou provedor externo. [Estados, limites e testes futuros](docs/hlds/HLD-005-back-office.md#jobs-recuperáveis-de-liquidação--avaliação-para-rf08).
+
+**Concorrência:** duas reservas de70 sobre disponível100 ilustram o write skew se ambas confirmarem em linhas diferentes. `FOR UPDATE` não renova snapshot antigo em `REPEATABLE READ`; todos os escritores precisam proteger a mesma invariante. `SERIALIZABLE` pode abortar e exige repetir a transação inteira com limites/idempotência. [Alternativas e teste em duas conexões](docs/hlds/HLD-003-middle-office.md#limites-concorrentes-e-write-skew--avaliação-para-rf04).
+
+**Desempenho:** medir com mesmos dados, correção/replay, JDK, heap e CPU; JMH usa aquecimento/forks, enquanto perfil integrado distingue fila, núcleo e publicação. O laboratório respeita o orçamento e não exige privilégios globais. [Protocolo e fontes JMH/async-profiler](docs/hlds/HLD-004-matching-engine.md#medir-antes-de-otimizar--laboratório-proposto).
+
+**Criptografia:** manter MO → ME → BO. MAC não cifra nem impede replay; TLS termina no broker e não assina o registro persistido. Chaves/certificados e deduplicação precisam de contratos. Kafka atual é PLAINTEXT; não há senhas de usuários a migrar. [Ameaças, mecanismos e critérios futuros](docs/hlds/HLD-001-arquitetura-prospero.md#eventos-autenticados-e-senhas--avaliação-de-mecanismos).
+
+**Histórico e relatórios:** arquivo frio não substitui backup; partição destacada não aparece automaticamente na consulta ao pai. Consulta sob demanda deve declarar recuperação/indisponibilidade, com autorização e paginação. SQL por conjuntos evita carregar tudo e atualizar linha a linha; coordenação limitada de lotes continua permitida. [Política proposta, fechamento e testes](docs/hlds/HLD-005-back-office.md#histórico-frio-e-fechamento-por-conjuntos--avaliação-para-rf08).
+
+## Regras de risco sem novo deploy — avaliação
+
+A proposta para o middle office é permitir alterar limites de forma controlada, com versão e auditoria. **Para limites numéricos com fórmulas estáveis, recomendamos primeiro parâmetros tipados/versionados e estratégias Java.** Uma DSL é candidata quando o analista precisa mudar combinações de condições; CEL Java restrito e compilador autoral foram comparados no [ADR-008](docs/adrs/ADR-008-politicas-risco.md). A decisão de adotar DSL permanece pendente; MO hoje só tem fundação e decimal técnico P05.
+
+Se adotada, aplicação proposta: escrever regra → tokens → árvore com precedência → tipos/unidades → otimização de constantes → instruções verificadas de VM de pilha. Compilar ao publicar versão e avaliar programa imutável por ordem, com `e`/`ou` em curto-circuito, sem reflexão/I/O/loops. `2%` representa razão decimal exata `0.02`, sem double; `patrimonio e var_95` deve ser recusado se as variáveis forem monetárias. Esses nomes são exemplos, sem fonte de VaR implementada. Não há medição que sustente “microssegundos”.
+
+Cada decisão usa uma versão inteira; ativação é atômica e rollback vale para decisões futuras. Reserva, limites concorrentes, deduplicação e outbox continuam protegidos pela transação do MO: a DSL decide, não movimenta recursos. Fonte/hash/versão do compilador permitem auditoria; erros nunca autorizam a ordem por padrão. [Motivos, pipeline e testes futuros](docs/adrs/ADR-008-politicas-risco.md), [aplicação no desenho do MO](docs/hlds/HLD-003-middle-office.md#políticas-alteráveis-sem-deploy--proposta-em-avaliação).
+
+### Cache LRU e Caffeine — resultado da análise
+
+“LRU Cache (146)” é um [exercício do LeetCode](https://leetcode.com/problems/lru-cache/), não um erro identificado no Próspero. A análise independente não encontrou cache artesanal nos módulos Java. O Redis atual usa `maxmemory 48mb` e `allkeys-lru` no container de 96 MiB; destina-se à projeção futura de cotações. Evicção poderá causar ausência de cotação: RF06 precisa tratar falta/idade e reconstrução, sem assumir que AOF impede remoção. [Configuração real](docker-compose.yml), [desenho FO](docs/hlds/HLD-002-front-office.md), [evicção Redis](https://redis.io/docs/latest/develop/reference/eviction/).
+
+`HashMap` + lista duplamente ligada implementa LRU com busca média e movimentação/remoção O(1), mas exige sincronização conjunta sob concorrência. Se precisarmos de cache local Java, Caffeine é candidato com W-TinyLFU e limites de tamanho/peso/expiração; não foi adotado. Não há evidência que justifique mais um cache hoje. Peso não é teto exato de heap; cache local não muda a política Redis. [Política Caffeine](https://github.com/ben-manes/caffeine/wiki/Efficiency), [limites](https://github.com/ben-manes/caffeine/wiki/Eviction).
+
+Reservas, deduplicação, SAGA, ordens ativas e resultados necessários do runner não podem desaparecer por popularidade. Medir memória, hits/misses e `evicted_keys` antes de escolher outra política. Nenhuma falha de cache/OOM foi reproduzida nesta avaliação.
+
+## Módulos de teste
+
+| Módulo | Finalidade e estado |
+| --- | --- |
+| Runner XLSX no frontend — P03 | Implementado: abas `Carga`, `Passos` e `Resultados`, chamadas exclusivamente por API, capturas, asserções tipadas e polling com prazo. O exemplo atual consulta identidade dos quatro serviços; não executa negociação |
+| API de carga em Go — P06 | Linguagem aprovada; arquitetura/pesquisa no [HLD-006](docs/hlds/HLD-006-api-carga.md). Controlador, gerador, métricas e ensaios de falha ainda planejados |
+| Testes internos e E2E | Complementam planilhas com domínio, precisão, concorrência, persistência, arquitetura e interface; não são substituídos pela carga |
+
+Com a stack já disponível, executar o exemplo XLSX pela raiz:
+
+```bash
+docker compose build runner-planilhas
+docker compose run --rm --no-deps -T runner-planilhas
+```
+
+O runner é ferramenta opt-in do perfil `testes`, sem porta e sem acesso direto a SQL/Kafka/Redis. Para execução local com Node/dependências instalados:
+
+```bash
+npm --prefix frontend run test:runner
+npm --prefix frontend run runner -- runner/exemplos/fundacao.xlsx --config runner/exemplos/local.json --cenario front-office
+```
+
+Saída JSON no stdout; códigos de saída: `0` sucesso, `1` cenário falhou, `2` entrada/configuração inválida. Credenciais ficam fora do Git. [Contrato completo, limites e exemplos](frontend/README.md#runner-xlsx--contrato-p03).
+
+Para a API Go, a recomendação inicial é `net/http` + Huma/humago para contrato/OpenAPI; chi, Gin e Fiber foram comparados. Vegeta, k6, Fortio e motor nativo continuam candidatos, condicionados a limites reais de bytes, concorrência, cancelamento e contagens. Não há dependências Go instaladas ou comando de inicialização P06. [Pesquisa e critérios](docs/hlds/HLD-006-api-carga.md).
+
+O teste futuro combinará rampas abertas/fechadas, saturação e queda/retorno de MS. Medirá oferta, admissão durável e conclusão separadamente, além de backlog, tempo de recuperação e reconciliação dos IDs/quantidades/reservas/negócios/lançamentos. Outbox e deduplicação atômicas com os efeitos, SAGA persistida e replay controlado são a estratégia planejada; timeout não autoriza liberar reserva ou declarar sucesso. O harness externo controla as falhas; a API de carga não recebe shell/socket Docker. Os cenários financeiros dependem das RFs e ainda não foram executados. [Matriz de falhas e consistência](docs/hlds/HLD-006-api-carga.md#desempenho-com-falhas-e-consistência-entre-serviços).
+
+O controle planejado usa JWT com **HS256 fixado pelo servidor**: rejeitar `none`, algoritmo divergente e assinatura/claims inválidas antes de admitir execução. O token não escolhe a política. Exemplo de biblioteca mal configurada pertence apenas à demonstração isolada/teste negativo, sem opção de bypass na API. [Contrato de segurança](docs/hlds/HLD-006-api-carga.md#segurança-implantação-e-orçamento), [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html).
+
+### Destaque: durabilidade custa I/O — medir fsync antes de dimensionar
+
+> **Commit síncrono com `fsync=on` aguarda o WAL durável pelo método configurado.** Num exemplo simplificado de flush de 0,55 ms, uma conexão sequencial teria teto aproximado de **1.818 commits/s**, antes dos demais custos. Isso não é benchmark do Próspero nem valor universal de SSD SATA. [WAL PostgreSQL 16](https://www.postgresql.org/docs/16/runtime-config-wal.html).
+
+Group commit compartilha sincronizações entre commits concorrentes. Mais conexões podem aumentar vazão, mas 200 conexões não garantem 20.000 operações/s. Pool maior e lotes limitados no relay são variáveis de experimento; medir espera, locks, CPU, I/O e idade da outbox antes de aumentar. Uma ordem pode exigir vários commits. [Group commit](https://www.postgresql.org/docs/16/wal-configuration.html).
+
+> **Não extrapolar fsync de NVMe local para EBS/Persistent Disk.** Armazenamento em rede pode ter latência maior; medir o volume real do WAL com `pg_test_fsync`, em arquivo de teste exclusivo e operação controlada. Não apontar para WAL existente. Isso compara sincronizações, não comprova TPS financeiro. Nenhuma medição foi executada nesta entrega. [Procedimento e fontes](docs/hlds/HLD-006-api-carga.md#destaque-wal-fsync-e-group-commit), [pg_test_fsync](https://www.postgresql.org/docs/16/pgtestfsync.html).
+
+Kafka normalmente usa page cache/flush do SO, sem fsync por mensagem. O perfil replicado **proposto** combina fator 3, `acks=all`, `min.insync.replicas=2` e produtor idempotente; abaixo do mínimo ISR, novas publicações não devem ser confirmadas. Isso não produz atomicidade entre bancos/Kafka nem proteção contra perda de todas as cópias. **Hoje há um único broker**, sem essa redundância ou produtores financeiros implementados. [Estratégia e limites](docs/hlds/HLD-006-api-carga.md#kafka-replicação-não-é-fsync-por-mensagem), [Kafka](https://kafka.apache.org/41/operations/hardware-and-os/).
+
+### GC do front office: quanto da alocação vira pausa?
+
+**Não existe conversão fixa de MB/s em pausa.** JSON/eventos/listas podem morrer rapidamente ou permanecer vivos; heap, retenção e CPU determinam parte do custo. Medir alocação estimada, dados vivos, pausas STW, trabalho concorrente e p99 HTTP na mesma janela. Exemplo aritmético: 120 pausas de 5 ms em 60 s representam 1% parado, sem provar que o p99 da aplicação é bom. Não há medição de “centenas de MB/s” no projeto.
+
+O [ADR-007](docs/adrs/ADR-007-coletor-gc.md) propõe **G1 como primeiro baseline**, com foco no equilíbrio entre vazão e pausas. A escolha final depende de evidências; nenhuma flag foi alterada.
+
+| Coletor | Quando comparar | Limite relevante |
+| --- | --- | --- |
+| G1 — `-XX:+UseG1GC` | Baseline para equilibrar vazão e pausas | Objetivo de pausa não é garantia; ainda há STW e possível Full GC |
+| Parallel — `-XX:+UseParallelGC` | Prioridade em vazão | Coleta STW pode piorar cauda; pouca CPU limita paralelismo |
+| ZGC — `-XX:+UseZGC` | Prioridade em pausas curtas | Trabalho concorrente disputa CPU e precisa folga de heap; não garante p99 HTTP |
+
+Fontes: [guia de coletores Java 26](https://docs.oracle.com/en/java/javase/26/gctuning/available-collectors.html), [tuning G1](https://docs.oracle.com/en/java/javase/26/gctuning/garbage-first-garbage-collector-tuning.html). As três flags são alternativas, nunca simultâneas.
+
+| Configuração | O que faz |
+| --- | --- |
+| `MaxRAMPercentage=65` — atual | Define teto percentual de heap pela ergonomia; aproximadamente 250 MiB no limite de 384 MiB. RSS inclui também memória nativa |
+| `InitialRAMPercentage=15` — atual | Dimensiona heap inicial percentual |
+| `ActiveProcessorCount=2` — atual | Informa dois processadores à JVM, embora a quota seja 1 CPU; não concede capacidade extra |
+| `-Xms` / `-Xmx` — ensaio | Heap inicial/máximo explícitos; preservar folga nativa e evitar conflito involuntário com percentuais |
+| `MaxGCPauseMillis=N` — ajuste posterior | Objetivo para G1/Parallel, sem garantia; não controla a pausa do ZGC |
+| `-Xlog:gc*,safepoint:stdout:time,uptime,level,tags` — diagnóstico | Logs para medir/coordenar pausas com latência; limitar volume e avaliar custo |
+
+As opções de diagnóstico/tuning ainda não estão aplicadas. Comparar mesmo build, heap, quota, dados e carga; depois reduzir alocações/retenção identificadas por perfil e variar heap/CPU separadamente. Logs GC/JFR limitados, CPU/throttling, RSS, erros e latência determinam a escolha. [Flags e protocolo completos](docs/adrs/ADR-007-coletor-gc.md#o-que-cada-configuração-faz).
+
 ## Operação local
 
 ```bash
@@ -303,6 +406,6 @@ docker compose start
 - [Perfis de agentes](docs/agentes/README.md), incluindo o gerador C4.
 - [Roadmap global](docs/roadmap.md): uma tarefa principal por requisito funcional.
 - Roadmaps: [FO](front-office/ROADMAP.md), [MO](middle-office/ROADMAP.md), [matching](matching-engine/ROADMAP.md), [BO](back-office/ROADMAP.md) e [Angular](frontend/ROADMAP.md).
-- [HLD do ecossistema e dos microsserviços](docs/hlds/README.md).
+- [HLD do ecossistema e dos microsserviços](docs/hlds/README.md); [API de carga Go](docs/hlds/HLD-006-api-carga.md) e [ADR de GC](docs/adrs/ADR-007-coletor-gc.md).
 
 Cada tarefa exige PR com alterações, motivos, trade-offs e validação. Repositório: [mclovin137/Prospero](https://github.com/mclovin137/Prospero). Veja [CI e runner dedicado](docs/rules.md#ci-e-runner); resumos locais não equivalem a PR aberto.
