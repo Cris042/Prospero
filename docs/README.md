@@ -5,7 +5,7 @@ Manter o mínimo que orienta escopo, qualidade de código, arquitetura e seguran
 | Pasta | Finalidade vigente |
 | --- | --- |
 | [prds/](prds/PRD-001-simulador-prospero.md) | Escopo, regras de negócio, RFs/RNFs e aceite. |
-| [hlds/](hlds/README.md) | Desenho do ecossistema e fronteiras dos quatro serviços. |
+| [hlds/](hlds/README.md) | Desenho do ecossistema, fronteiras dos quatro serviços e API técnica de carga em Go. |
 | [adrs/](adrs/README.md) | Decisões, alternativas, consequências e substituições. |
 | [c4/](c4/README.md) | Arquitetura, Kafka, SAGA, observabilidade, modelo de domínio e livro didático; fontes editáveis. |
 | [agentes/](agentes/README.md) | Perfil portátil do agente C4. |

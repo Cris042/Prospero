@@ -1,6 +1,6 @@
 # HLDs do Próspero
 
-A arquitetura vigente se organiza em um desenho transversal e quatro contextos independentes. Os documentos distinguem fundação implementada, funcionalidades planejadas e decisões pendentes; o [PRD](../prds/PRD-001-simulador-prospero.md) mantém os requisitos, e os [ADRs](../adrs/README.md), seus motivos.
+A arquitetura vigente se organiza em um desenho transversal, quatro contextos independentes e ferramentas técnicas com desenho próprio quando necessário. Os documentos distinguem fundação implementada, funcionalidades planejadas e decisões pendentes; o [PRD](../prds/PRD-001-simulador-prospero.md) mantém os requisitos, e os [ADRs](../adrs/README.md), seus motivos.
 
 | HLD | Escopo |
 | --- | --- |
@@ -9,6 +9,7 @@ A arquitetura vigente se organiza em um desenho transversal e quatro contextos i
 | [003 — Middle office](HLD-003-middle-office.md) | Validação, risco e reservas |
 | [004 — Matching engine](HLD-004-matching-engine.md) | Livro, sequência, eventos e recuperação |
 | [005 — Back office](HLD-005-back-office.md) | Negócio, razão, posição e liquidação |
+| [006 — API de carga em Go](HLD-006-api-carga.md) | Controle técnico, pesquisa de frameworks/motores, limites, medição e observabilidade; implementação planejada |
 
 [Guia documental](../rules.md#documentação-e-aderência), [playbook](../playbook-desenvolvimento.md). Cada evolução altera somente os documentos necessários; não criar outro HLD sem necessidade concreta.
 

@@ -32,6 +32,10 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 
 Runner XLSX implementado na P03, com aceite/PR no roadmap. DDD, SAGA e Object Calisthenics são decisões de projeto, não bibliotecas instaladas. Kafka e Redis preparados na fundação não significam regras financeiras implementadas. As 16 skills e seus hashes estão no [inventário de origens](skills/origens.json).
 
+## Go e ferramentas de carga — decisão e pesquisa
+
+Go foi escolhido pelo usuário para a API técnica P06 ([ADR-006](adrs/ADR-006-api-carga.md)). Ainda não há toolchain fixado, `go.mod`, módulos Go instalados ou imagem P06: não fazem parte do inventário runtime acima. A pesquisa recomenda avaliar `net/http` + Huma/humago; compara chi/Gin/Fiber e motores Vegeta/k6/Fortio/nativo. Técnicas de concorrência, limitação, métricas e testes estão no [HLD-006](hlds/HLD-006-api-carga.md). Versões consultadas são referências de pesquisa, não dependências adotadas; fixar e auditar versões antes da implementação.
+
 ## Ambiente observado
 
 Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam container. Node local 24.16.0. CI requer Compose compatível com `!override` e runner dedicado; consulte [CI](rules.md#ci-e-runner).
