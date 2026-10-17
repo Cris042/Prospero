@@ -43,5 +43,8 @@ COMPOSE_PARALLEL_LIMIT=1 "${compose[@]}" --progress plain build
 python3 scripts/verificar-ambiente.py --projeto "$project"
 "${compose[@]}" run --rm --no-deps -T runner-planilhas
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
-(cd frontend && npm exec playwright install chromium && npm run test:e2e)
+# Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
+playwright_deps=()
+[ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
+(cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium && npm run test:e2e)
 printf '%s\n' 'Testes independentes, aplicação empacotada e observabilidade validados.'

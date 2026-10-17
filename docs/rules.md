@@ -43,8 +43,8 @@ As 16 skills locais, gatilhos e checksums estão no [catálogo](skills/README.md
 
 ## CI e runner
 
-- Três gates em [.github/workflows](../.github/workflows/): revisão determinística, testes e segurança. Agentes semânticos da sessão são independentes; não presumir agentes IA executando na CI. Sem merge, release ou deploy automáticos, APIs pagas ou runner hospedado pago. A ativação remota permanece pendente conforme roadmap; validação local não a comprova.
-- Runner Linux x64 self-hosted dedicado, label `prospero`, sem compartilhar Docker/socket, HOME ou credenciais com Horus/host pessoal. Conta diferente no mesmo grupo Docker não isola. Uma instância serializa jobs/builds. Requer Docker, Compose compatível com `!override`, Python 3, Git, Bash, Node 24 e dependências Chromium; JDK 26 vem de container. Registro/tokens fora do Git; não contratar upgrade para habilitar proteção de branch.
+- Três gates em [.github/workflows](../.github/workflows/): revisão determinística, testes e segurança. Agentes semânticos da sessão são independentes; não presumir agentes IA executando na CI. Sem merge, release ou deploy automáticos, APIs pagas ou runner hospedado pago. Validação local não comprova os gates remotos; registrar links das execuções no PR.
+- Runner hospedado `ubuntu-24.04` do GitHub, gratuito por o repositório ser público, decidido pelo usuário em 2026-10-17. Cada job recebe VM efêmera própria, sem Docker/HOME/credenciais compartilhados com Horus ou host pessoal. Node 24 vem de `actions/setup-node` fixado; Docker, Compose, Python 3, Git e Bash vêm da imagem; JDK 26 vem de container; Playwright instala dependências Chromium somente quando `RUNNER_ENVIRONMENT=github-hosted`. Não contratar minutos/runners maiores nem upgrade para proteção de branch; se o repositório deixar de ser público, voltar ao runner self-hosted dedicado abaixo.
 - Forks negados **antes de reservar runner**, sem `pull_request_target`. Checks com token somente leitura e checkout sem credenciais; actions fixadas por commit. Comentário do PR em job separado, sem checkout, com escrita mínima, resultados enumerados e conferência do SHA atual.
 - `scripts/ci-testes.sh` exige IDs numéricos e usa projeto `prospero-ci-<run>-<attempt>`, imagens/tags próprias e portas loopback dinâmicas; volumes/redes exclusivos. Preflight recusa menos de 4096 MiB disponíveis. Não interromper outros projetos para obter orçamento.
 - Limpeza alcança apenas projeto/tags da execução, usando os mesmos arquivos Compose, inclusive após falha/cancelamento; nunca prune global ou volumes de desenvolvimento. Após queda abrupta do runner, remover só recursos identificados daquela execução. `.ci-evidencias/` é saída temporária de logs limitados, sem `.env`, dumps ou configuração expandida; não é pasta de documentação.
@@ -52,7 +52,9 @@ As 16 skills locais, gatilhos e checksums estão no [catálogo](skills/README.md
 
 Detalhes executáveis permanecem em [scripts](../scripts/) e workflows. Resultados e links dos checks pertencem ao PR; não duplicar configuração em outro guia. Conferir três gates antes de merge mesmo sem proteção automática de branch.
 
-### Preparar e ativar o runner dedicado
+### Alternativa: runner self-hosted dedicado
+
+Somente se o runner hospedado gratuito deixar de estar disponível. Trocar `runs-on` para `[self-hosted, linux, x64, prospero]` e cumprir os requisitos abaixo; nunca registrar a máquina compartilhada com Horus.
 
 A checagem de pré-instalação é `python3 scripts/verificar-runner-dedicado.py`. Ela não instala pacotes, baixa imagens, registra runner ou inicia serviço. Executar na VM/host destinado ao runner, com o usuário não root que executará os jobs. Exige Linux x64, HOME próprio sem credenciais pessoais, ferramentas e bibliotecas básicas do Chromium, Node 24, Compose com `!override`, daemon Docker local Linux x64, pelo menos 4096 MiB de RAM disponível, duas CPUs e 20 GiB livres no HOME e checkout. Os 20 GiB são margem operacional inicial para builds/caches; não comprovam que toda execução caberá. O preflight de cada job continua obrigatório. O espaço do armazenamento Docker e sua margem de crescimento precisam ser conferidos pelo operador na VM; acesso ao daemon não garante acesso de leitura ao filesystem de seus dados.
 
