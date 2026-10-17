@@ -1,6 +1,6 @@
 # Diagramas de arquitetura do Próspero
 
-Quatro recortes substituem as figuras C1/C2/C3 e o mapa antigos do README. Estrutura usa notação C4 local; Kafka/SAGA são vistas dinâmicas complementares, sem promover sequência a componente implementado. Fontes PlantUML autocontidas, sem biblioteca/includes remotos. O agente do [perfil C4](../agentes/c4-diagram-generator.md) propôs texto em leitura; edição e validação pertencem ao orquestrador e revisores.
+Seis recortes no README: os quatro fluxos arquiteturais substituem as figuras antigas, e dois modelos didáticos explicam domínio e formação de preço. Estrutura usa notação C4 local; Kafka/SAGA são vistas dinâmicas complementares, sem promover sequência a componente implementado. Fontes PlantUML autocontidas, sem biblioteca/includes remotos. O agente do [perfil C4](../agentes/c4-diagram-generator.md) propôs texto em leitura; edição e validação pertencem ao orquestrador e revisores.
 
 | Recorte | Imagem | Fonte editável | Escopo |
 | --- | --- | --- | --- |
@@ -8,6 +8,8 @@ Quatro recortes substituem as figuras C1/C2/C3 e o mapa antigos do README. Estru
 | Kafka e recuperação | [SVG](kafka-recuperacao.svg) | [PUML](kafka-recuperacao.puml) | Configuração atual, consumidores futuros e três falhas ilustrativas. |
 | SAGA e consistência | [SVG](saga-consistencia.svg) | [PUML](saga-consistencia.puml) | Fluxo futuro, rejeição, compensação, resultado desconhecido e recuperação para frente. |
 | Observabilidade | [SVG](observabilidade.svg) | [PUML](observabilidade.puml) | Rotas atuais de sinais e indicadores a implementar/monitorar. |
+| Modelo de domínio | [SVG](modelo-conceitual.svg) | [PUML](modelo-conceitual.puml) | Ordem, reserva, livro, execução, negócio, posição e razão por contexto; não é schema/C3 implementado. |
+| Formação de preço | [SVG](livro-market-exemplo.svg) | [PUML](livro-market-exemplo.puml) | Compra fictícia de 0,10 consumindo três níveis; sem teste executado ou escala de produto aprovada. |
 
 ## Fontes e limites
 
@@ -17,9 +19,15 @@ Quatro recortes substituem as figuras C1/C2/C3 e o mapa antigos do README. Estru
 
 **Simulação é ilustrativa:** nenhum comando de derrubada, ensaio de falha, replay financeiro, medição ou execução da stack acompanha esta revisão. Nós/setas de destino não declaram implementação. Reinício pode perder traces Jaeger; nó único Kafka não oferece HA. O [README](../../README.md) explica tópicos, responsabilidades dos consumidores e indicadores sem inventar nomes de grupos, partições, retries, DLQ ou séries financeiras.
 
+## Referências visuais e exemplos
+
+As quatro imagens distintas fornecidas pelo usuário inspiraram a apresentação: conceitos de mercado; requisitos e temas de estudo; papéis dos escritórios e modelo/eventos; Kafka e SAGA. Não foram copiadas para o repositório. Os diagramas são autorais e seguem PRD/HLD/ADRs locais: não importam Spring/JDBC, Java 25, Redis no BO, novos tópicos/grupos ou fórmulas de reserva das referências.
+
+O [PRD](../prds/PRD-001-simulador-prospero.md) e HLDs sustentam os conceitos, mas não aprovam novos schemas. O cenário de livro acrescenta preços/quantidades hipotéticos explícitos: 0,05 × 100,00 + 0,03 × 100,10 + 0,02 × 100,30 = 10,009; média desta compra = 100,09. Sobra 0,02 do nível originalmente com 0,04; último 100,30 representa +0,3% contra 100,00. Não é VWAP do dia, preço médio total de posição nem medição real. O lado bid foi omitido; não inferir spread do recorte.
+
 ## Manutenção e renderização local
 
-Manter somente quatro pares PUML/SVG. Atualizar fonte e imagem juntas, conferir fontes/legendas e inspecionar leitura. PlantUML 1.2025.2 é ferramenta temporária opcional de documentação, fora das dependências do produto; Smetana nas vistas estruturais dispensa Graphviz. Sem envio a renderizador externo:
+Manter seis pares PUML/SVG úteis, sem cópias de capturas ou relatório paralelo. Atualizar fonte e imagem juntas, conferir fontes/legendas e inspecionar leitura. PlantUML 1.2025.2 é ferramenta temporária opcional de documentação, fora das dependências do produto; Smetana nas vistas estruturais dispensa Graphviz. Sem envio a renderizador externo:
 
 ```bash
 java -jar /caminho/local/plantuml-1.2025.2.jar -tsvg -charset UTF-8 docs/c4/*.puml

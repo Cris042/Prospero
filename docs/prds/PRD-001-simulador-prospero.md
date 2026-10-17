@@ -25,7 +25,7 @@ Esses papéis descrevem o domínio; não criam novas telas, serviços ou permiss
 
 O investidor poderá acompanhar cotação, spread, profundidade, execuções, posição e lucro/prejuízo; enviar ordens Market, Limit, Stop e Stop Limit, com validade Dia, IOC ou FOK, e vincular Stop Loss/Take Profit em OCO. Participantes simulados fornecerão ofertas. Haverá risco prévio, reservas, execuções parciais, cancelamento de saldo, razão em partidas dobradas e liquidação D+2.
 
-Estão fora do escopo dados reais, múltiplas bolsas, FIX/UMDF, leilões, circuit breaker de bolsa, iceberg, corretagem, impostos e aluguel real de ações. Venda a descoberto será simulada com limites. O projeto roda localmente e não contrata serviços pagos.
+Estão fora do escopo dados reais, múltiplas bolsas e roteamento inteligente entre elas, FIX/UMDF, leilões, circuit breaker de bolsa, iceberg, corretagem, emolumentos, impostos e aluguel real de ações. Venda a descoberto será simulada com limites. O projeto roda localmente e não contrata serviços pagos.
 
 
 ## Fidelidade e simplificações
