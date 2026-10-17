@@ -36,6 +36,22 @@ Catálogo de comandos/eventos, chaves e passagem para ordenação por conta prec
 
 Ativo quente limita throughput de sua sequência; partições/GC/alocação exigem medição. JFR/JMH/async-profiler, ZGC e bibliotecas de propriedades são alternativas não adotadas por este HLD. [Roadmap ME](../../matching-engine/ROADMAP.md); RNF01–RNF04/RNF06–RNF08.
 
+## Medir antes de otimizar — laboratório proposto
+
+**Parecer: válido com ressalvas.** JMH e async-profiler complementam o desenho P06 e ADR-007; não estão instalados/adotados. Ainda não existe livro financeiro para medir. Alocação/serialização, árvore, locks, Kafka e quota são hipóteses; nenhum gargalo local foi identificado. Não complexificar estrutura por intuição nem transformar benchmark de terceiros em capacidade do Próspero.
+
+1. Fixar correção: log/seed, profundidade, níveis, concentração por ativo e proporções de comandos; candidatos produzem mesmos negócios/eventos/estado/replay, preservando preço-tempo e quantidades.
+2. JMH mede núcleo puro em harness/JVMs de laboratório, separado do runtime do serviço. Entradas em estado parametrizado, retorno/Blackhole contra eliminação de código e constantes; aquecimento, medição, forks independentes e repetições. Restaurar livro sem retirar do tempo medido trabalho real ou medir estado progressivamente esvaziado. Um escritor por livro; benchmark separado para serialização quando pertinente. Definir duração/forks após piloto com orçamento; não importar os 60 s candidatos da P06 automaticamente.
+3. Sob carga integrada P06, medir oferta/admissão/conclusão, filas/lag, falhas/descartes e latências. Separar núcleo, espera na partição, publicação e espera por contraparte. Média ns/op JMH não comprova p99 boleta→negócio; não inventar percentil adicional para a meta matching <1 ms/ordem do PRD.
+4. async-profiler: CPU, wall, alloc e lock são perfis diferentes. Correlacionar com GC/safepoints, bytes/operação, heap/dados vivos/RSS e throttling. Alocação não equivale a retenção; comparar janelas com/sem profiler e registrar unidade, resolução, perdas e interferência.
+5. Otimizar uma dimensão sustentada pelo perfil, repetir comparação e validar invariantes/replay. Nenhum ganho ou pausa é garantido pela ferramenta.
+
+Fontes JMH: [projeto oficial](https://github.com/openjdk/jmh/blob/master/README.md), [DCE](https://github.com/openjdk/jmh/blob/master/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample_08_DeadCode.java), [constantes](https://github.com/openjdk/jmh/blob/master/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample_10_ConstantFold.java) e [forks](https://github.com/openjdk/jmh/blob/master/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample_12_Forking.java). Perfis: [modos async-profiler](https://github.com/async-profiler/async-profiler/blob/master/docs/ProfilingModes.md).
+
+Laboratório deve fixar versões/artefatos compatíveis com Temurin26/kernel/arquitetura e conferir ferramentas disponíveis na imagem JRE. Runtime atual: 384 MiB/1 CPU, JVM percebe dois processadores, UID10001, filesystem somente leitura e tmpfs limitado; orçar processo JMH/forks, memória nativa, gerador/telemetria e saídas. Não executar carga de outros projetos para obter números. Perfis privados/limitados com dados sintéticos, sem publicar payloads ou segredos.
+
+Attach requer identidade/permissões adequadas; `perf_events` pode estar bloqueado. Avaliar agente de startup ou motor `ctimer` suportado, declarando perda de resolução/stacks do kernel. Não habilitar container privilegiado, socket Docker, sysctls globais ou desativar seccomp por rotina. Se o perfil não for viável no orçamento, registrar a lacuna. [Containers](https://github.com/async-profiler/async-profiler/blob/master/docs/ProfilingInContainer.md), [motores CPU](https://github.com/async-profiler/async-profiler/blob/master/docs/CpuSamplingEngines.md), [compatibilidade](https://github.com/async-profiler/async-profiler/blob/master/CHANGELOG.md). Nenhuma instalação, carga ou benchmark nesta avaliação.
+
 ## Segurança, observabilidade e testes
 
 Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação e autorização por conta/papel são pendências, sem RBAC presumido. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.

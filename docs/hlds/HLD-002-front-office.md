@@ -74,6 +74,12 @@ Dicionário migrado da proposta histórica. **Planejado e incompleto**, não sch
 | `payload` | `jsonb` | — |
 | `publicado_em` | `timestamptz` | — |
 
+## Histórico de ordens — conservação planejada
+
+A avaliação de arquivamento é válida com condições: FO continua proprietário do histórico de ordens/SAGA e não consulta tabelas BO. Mover somente ordens elegíveis encerradas, preservando pendências, correlações, reentrega/deduplicação e recuperação. Não há tabela financeira ou volume medido para adotar partições/arquivo frio hoje.
+
+A política proposta no [HLD-005](HLD-005-back-office.md#histórico-frio-e-fechamento-por-conjuntos--avaliação-para-rf08) exige arquivo verificado/restaurável, retenção explícita, controle de acesso, consulta por conta/período paginada e falha/recuperação declaradas. Não apagar a verdade de negócio nem responder vazio porque o dado saiu da área quente; restauração temporária versus leitura de arquivo permanecem alternativas. Estado corrente de uma ordem pode mudar conforme seu ciclo, mas arquivamento não autoriza alterar silenciosamente negócios/razão ou apagar sua trajetória.
+
 ## Segurança, observabilidade e testes
 
 Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação e autorização por conta/papel são pendências, sem RBAC presumido. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.

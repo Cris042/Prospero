@@ -285,6 +285,28 @@ npm start
 
 `npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas da P03 usa três abas e executa por API: veja [contrato, exemplo e comandos](frontend/README.md#runner-xlsx--contrato-p03). `docker compose build runner-planilhas` e `docker compose run --rm --no-deps -T runner-planilhas` executam o exemplo técnico com a stack já disponível. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/rules.md#memória-e-retomada).
 
+## Recuperação, concorrência, desempenho e segurança — pareceres
+
+Cinco propostas foram avaliadas por **cinco agentes distintos**, confrontando requisitos, código e fontes oficiais. Todas têm aplicação com as ressalvas abaixo. **São desenhos/recomendações futuros:** a fundação atual não implementa liquidação, reservas, matching, autenticação de negócio ou arquivamento. Nenhum benchmark/falha financeira foi executado nesta avaliação.
+
+| Proposta | Parecer | Motivo e aplicação no Próspero |
+| --- | --- | --- |
+| Liquidação/notas como jobs resistentes a queda | Válida com ressalvas | Job persistente e claim atômico antes do efeito; processando abandonado vai para desconhecido/revisão e não é refeito automaticamente. Liquidação local confirma efeito/conclusão/outbox juntos; envio externo continua incerto sem confirmação confiável. Notas ainda são proposta de produto |
+| Limites contra write skew | Válida com ressalvas | Preferência inicial a validar: controle por conta/recurso atualizado atomicamente junto da reserva. Lock na conta ou serializable são alternativas com protocolo comum e tratamento de conflito; snapshot isolation sozinho não protege soma de reservas distintas |
+| Medir matching antes de otimizar | Válida | JMH para núcleo puro; async-profiler e carga integrada para CPU, alocação, espera e contenção. O perfil deve mostrar o gargalo; alocação/serialização não são causas comprovadas hoje |
+| HMAC/mTLS e Argon2 | Válida com distinções | HMAC autentica conteúdo; TLS mútuo no Kafka protege conexões cliente–broker e combina com ACLs. Não são equivalentes. Argon2id é candidato somente se adotarmos senhas locais |
+| Arquivar histórico e relatórios SQL em lotes | Válida com correção | Preservar registros originais e validar restauração antes de retirar cópia quente. Relatórios usam agregações/sumários; UPDATE apenas em projeções/estado mutáveis, sem reescrever negócios ou razão |
+
+**Jobs:** claim não prova efeito concluído; expiração não prova ausência de execução. Reconciliação reconhece resultado durável sem refazer e bloqueia worker antigo antes de eventual nova tentativa autorizada. A proposta não adiciona envio real de notas ou provedor externo. [Estados, limites e testes futuros](docs/hlds/HLD-005-back-office.md#jobs-recuperáveis-de-liquidação--avaliação-para-rf08).
+
+**Concorrência:** duas reservas de70 sobre disponível100 ilustram o write skew se ambas confirmarem em linhas diferentes. `FOR UPDATE` não renova snapshot antigo em `REPEATABLE READ`; todos os escritores precisam proteger a mesma invariante. `SERIALIZABLE` pode abortar e exige repetir a transação inteira com limites/idempotência. [Alternativas e teste em duas conexões](docs/hlds/HLD-003-middle-office.md#limites-concorrentes-e-write-skew--avaliação-para-rf04).
+
+**Desempenho:** medir com mesmos dados, correção/replay, JDK, heap e CPU; JMH usa aquecimento/forks, enquanto perfil integrado distingue fila, núcleo e publicação. O laboratório respeita o orçamento e não exige privilégios globais. [Protocolo e fontes JMH/async-profiler](docs/hlds/HLD-004-matching-engine.md#medir-antes-de-otimizar--laboratório-proposto).
+
+**Criptografia:** manter MO → ME → BO. MAC não cifra nem impede replay; TLS termina no broker e não assina o registro persistido. Chaves/certificados e deduplicação precisam de contratos. Kafka atual é PLAINTEXT; não há senhas de usuários a migrar. [Ameaças, mecanismos e critérios futuros](docs/hlds/HLD-001-arquitetura-prospero.md#eventos-autenticados-e-senhas--avaliação-de-mecanismos).
+
+**Histórico e relatórios:** arquivo frio não substitui backup; partição destacada não aparece automaticamente na consulta ao pai. Consulta sob demanda deve declarar recuperação/indisponibilidade, com autorização e paginação. SQL por conjuntos evita carregar tudo e atualizar linha a linha; coordenação limitada de lotes continua permitida. [Política proposta, fechamento e testes](docs/hlds/HLD-005-back-office.md#histórico-frio-e-fechamento-por-conjuntos--avaliação-para-rf08).
+
 ## Regras de risco sem novo deploy — avaliação
 
 A proposta para o middle office é permitir alterar limites de forma controlada, com versão e auditoria. **Para limites numéricos com fórmulas estáveis, recomendamos primeiro parâmetros tipados/versionados e estratégias Java.** Uma DSL é candidata quando o analista precisa mudar combinações de condições; CEL Java restrito e compilador autoral foram comparados no [ADR-008](docs/adrs/ADR-008-politicas-risco.md). A decisão de adotar DSL permanece pendente; MO hoje só tem fundação e decimal técnico P05.

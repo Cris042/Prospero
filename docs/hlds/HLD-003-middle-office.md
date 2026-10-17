@@ -40,6 +40,24 @@ Se escolhida a DSL: administração autorizada compila/valida fora do caminho da
 
 Gramática/funções enumeradas, aritmética exata sem double, curto-circuito, limites de compilação/VM e ausência de I/O/reflexão/loops são critérios de avaliação. Não aceitar bytecode externo; verificar instruções/saltos/pilha. Erro, dado obrigatório ausente e orçamento excedido nunca autorizam ordem por padrão. API administrativa, papéis, vigência/distribuição de versões, fatos e política de falhas serão refinados antes do código. Não há prova de execução em microssegundos. O ADR detalha pipeline, exemplos, alternativas e testes futuros.
 
+## Limites concorrentes e write skew — avaliação para RF04
+
+**Parecer: válido com ressalvas.** Duas transações podem ler disponível 100 e inserir reservas distintas de 70; juntas violam o limite se ambas confirmarem. É write skew de uma invariante agregada, diferente de sobrescrever a mesma linha (lost update). Snapshot isolation/`REPEATABLE READ` PostgreSQL não elimina essa anomalia. Nenhuma tabela/reserva financeira existe hoje: é risco de desenho, não defeito reproduzido. [Isolamento PostgreSQL 16](https://www.postgresql.org/docs/16/transaction-iso.html).
+
+Recomendação inicial a validar: linha local de controle por conta/recurso com atualização condicional que confere suficiência e altera disponível/reservado, na mesma transação de reserva, decisão/versionamento, deduplicação e outbox. Todos os escritores — admissão, consumo, liberação e alteração de limite/fatos pertinentes — preservam a mesma invariante. Não materializar sem definir quais limites incluem conta, ativo, posição e exposição vendida.
+
+| Alternativa | Condição de validade |
+| --- | --- |
+| `SELECT … FOR UPDATE` na conta/guardião | Protocolo de todos os escritores; em `READ COMMITTED`, adquirir guardião primeiro e consultar agregado em comando posterior com leitura atual, sem reutilizar estado antigo do ORM |
+| Linha materializada comum | Teste de suficiência e mutação atômicos; controle e reserva confirmam/revertem juntos |
+| `SERIALIZABLE` | Transações participantes usam o protocolo/isolações necessários; tratar abortos e repetir a transação inteira, sem efeitos externos antecipados |
+
+**Lock sozinho não renova snapshot.** Em `REPEATABLE READ`, bloquear guardião sem modificá-lo não torna recente um agregado lido no snapshot antigo. Essa ressalva é inferência das regras de snapshot/locking documentadas; não anunciar segurança apenas por adicionar `FOR UPDATE`. Bloquear só a ordem ou reservas existentes não protege novas inserções/conjunto vazio; `SUM(...) FOR UPDATE` não é mecanismo válido para bloquear o agregado. Conta ausente não fornece guardião: rejeitar ou definir criação única/idempotente. Locks de múltiplos recursos têm ordem determinística e transações curtas, sem esperar Kafka/outro MS. [Locks](https://www.postgresql.org/docs/16/explicit-locking.html), [restrições SELECT](https://www.postgresql.org/docs/16/sql-select.html).
+
+`40001` exige rollback/repetição de toda a transação, inclusive leituras e decisão; `40P01` pode ter repetição limitada após rollback. Definir tentativas e espera com dispersão, identidade idempotente e resolução de commit desconhecido. Não tratar qualquer `23505` como transitório. [Falhas de serialização](https://www.postgresql.org/docs/16/mvcc-serialization-failure-handling.html).
+
+Teste futuro em PostgreSQL 16 real: duas conexões/transações, barreira após leitura sem proteção para reproduzir 140 sobre 100; depois proteção permite somente uma reserva de 70, a outra reavalia/rejeita ou aborta/repetirá e rejeitará. Controlar aquisição sem barreira que exija dois donos do mesmo lock. Inverter vencedor, testar rollback, ausência/conjunto vazio, contas independentes, todos os escritores e reentrega; conferir invariante por nova leitura após commits. O perfil `%test` atual desativa datasource: seus testes não comprovam essa concorrência. Nenhum cenário foi executado nesta entrega.
+
 ## Recuperação, riscos e pendências
 
 Definir atomicidade entre reserva e evento de confirmação, deduplicação e consumo/liberação em execução parcial, preço melhor, IOC, rejeição e cancelamento. Proteger limites compartilhados contra duas ordens concorrentes; escolher update condicional/lock/versão/isolamento conforme invariante e teste, sem prescrever solução não refinada.
