@@ -285,6 +285,71 @@ npm start
 
 `npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas da P03 usa três abas e executa por API: veja [contrato, exemplo e comandos](frontend/README.md#runner-xlsx--contrato-p03). `docker compose build runner-planilhas` e `docker compose run --rm --no-deps -T runner-planilhas` executam o exemplo técnico com a stack já disponível. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/rules.md#memória-e-retomada).
 
+## Módulos de teste
+
+| Módulo | Finalidade e estado |
+| --- | --- |
+| Runner XLSX no frontend — P03 | Implementado: abas `Carga`, `Passos` e `Resultados`, chamadas exclusivamente por API, capturas, asserções tipadas e polling com prazo. O exemplo atual consulta identidade dos quatro serviços; não executa negociação |
+| API de carga em Go — P06 | Linguagem aprovada; arquitetura/pesquisa no [HLD-006](docs/hlds/HLD-006-api-carga.md). Controlador, gerador, métricas e ensaios de falha ainda planejados |
+| Testes internos e E2E | Complementam planilhas com domínio, precisão, concorrência, persistência, arquitetura e interface; não são substituídos pela carga |
+
+Com a stack já disponível, executar o exemplo XLSX pela raiz:
+
+```bash
+docker compose build runner-planilhas
+docker compose run --rm --no-deps -T runner-planilhas
+```
+
+O runner é ferramenta opt-in do perfil `testes`, sem porta e sem acesso direto a SQL/Kafka/Redis. Para execução local com Node/dependências instalados:
+
+```bash
+npm --prefix frontend run test:runner
+npm --prefix frontend run runner -- runner/exemplos/fundacao.xlsx --config runner/exemplos/local.json --cenario front-office
+```
+
+Saída JSON no stdout; códigos de saída: `0` sucesso, `1` cenário falhou, `2` entrada/configuração inválida. Credenciais ficam fora do Git. [Contrato completo, limites e exemplos](frontend/README.md#runner-xlsx--contrato-p03).
+
+Para a API Go, a recomendação inicial é `net/http` + Huma/humago para contrato/OpenAPI; chi, Gin e Fiber foram comparados. Vegeta, k6, Fortio e motor nativo continuam candidatos, condicionados a limites reais de bytes, concorrência, cancelamento e contagens. Não há dependências Go instaladas ou comando de inicialização P06. [Pesquisa e critérios](docs/hlds/HLD-006-api-carga.md).
+
+O teste futuro combinará rampas abertas/fechadas, saturação e queda/retorno de MS. Medirá oferta, admissão durável e conclusão separadamente, além de backlog, tempo de recuperação e reconciliação dos IDs/quantidades/reservas/negócios/lançamentos. Outbox e deduplicação atômicas com os efeitos, SAGA persistida e replay controlado são a estratégia planejada; timeout não autoriza liberar reserva ou declarar sucesso. O harness externo controla as falhas; a API de carga não recebe shell/socket Docker. Os cenários financeiros dependem das RFs e ainda não foram executados. [Matriz de falhas e consistência](docs/hlds/HLD-006-api-carga.md#desempenho-com-falhas-e-consistência-entre-serviços).
+
+O controle planejado usa JWT com **HS256 fixado pelo servidor**: rejeitar `none`, algoritmo divergente e assinatura/claims inválidas antes de admitir execução. O token não escolhe a política. Exemplo de biblioteca mal configurada pertence apenas à demonstração isolada/teste negativo, sem opção de bypass na API. [Contrato de segurança](docs/hlds/HLD-006-api-carga.md#segurança-implantação-e-orçamento), [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html).
+
+### Destaque: durabilidade custa I/O — medir fsync antes de dimensionar
+
+> **Commit síncrono com `fsync=on` aguarda o WAL durável pelo método configurado.** Num exemplo simplificado de flush de 0,55 ms, uma conexão sequencial teria teto aproximado de **1.818 commits/s**, antes dos demais custos. Isso não é benchmark do Próspero nem valor universal de SSD SATA. [WAL PostgreSQL 16](https://www.postgresql.org/docs/16/runtime-config-wal.html).
+
+Group commit compartilha sincronizações entre commits concorrentes. Mais conexões podem aumentar vazão, mas 200 conexões não garantem 20.000 operações/s. Pool maior e lotes limitados no relay são variáveis de experimento; medir espera, locks, CPU, I/O e idade da outbox antes de aumentar. Uma ordem pode exigir vários commits. [Group commit](https://www.postgresql.org/docs/16/wal-configuration.html).
+
+> **Não extrapolar fsync de NVMe local para EBS/Persistent Disk.** Armazenamento em rede pode ter latência maior; medir o volume real do WAL com `pg_test_fsync`, em arquivo de teste exclusivo e operação controlada. Não apontar para WAL existente. Isso compara sincronizações, não comprova TPS financeiro. Nenhuma medição foi executada nesta entrega. [Procedimento e fontes](docs/hlds/HLD-006-api-carga.md#destaque-wal-fsync-e-group-commit), [pg_test_fsync](https://www.postgresql.org/docs/16/pgtestfsync.html).
+
+Kafka normalmente usa page cache/flush do SO, sem fsync por mensagem. O perfil replicado **proposto** combina fator 3, `acks=all`, `min.insync.replicas=2` e produtor idempotente; abaixo do mínimo ISR, novas publicações não devem ser confirmadas. Isso não produz atomicidade entre bancos/Kafka nem proteção contra perda de todas as cópias. **Hoje há um único broker**, sem essa redundância ou produtores financeiros implementados. [Estratégia e limites](docs/hlds/HLD-006-api-carga.md#kafka-replicação-não-é-fsync-por-mensagem), [Kafka](https://kafka.apache.org/41/operations/hardware-and-os/).
+
+### GC do front office: quanto da alocação vira pausa?
+
+**Não existe conversão fixa de MB/s em pausa.** JSON/eventos/listas podem morrer rapidamente ou permanecer vivos; heap, retenção e CPU determinam parte do custo. Medir alocação estimada, dados vivos, pausas STW, trabalho concorrente e p99 HTTP na mesma janela. Exemplo aritmético: 120 pausas de 5 ms em 60 s representam 1% parado, sem provar que o p99 da aplicação é bom. Não há medição de “centenas de MB/s” no projeto.
+
+O [ADR-007](docs/adrs/ADR-007-coletor-gc.md) propõe **G1 como primeiro baseline**, com foco no equilíbrio entre vazão e pausas. A escolha final depende de evidências; nenhuma flag foi alterada.
+
+| Coletor | Quando comparar | Limite relevante |
+| --- | --- | --- |
+| G1 — `-XX:+UseG1GC` | Baseline para equilibrar vazão e pausas | Objetivo de pausa não é garantia; ainda há STW e possível Full GC |
+| Parallel — `-XX:+UseParallelGC` | Prioridade em vazão | Coleta STW pode piorar cauda; pouca CPU limita paralelismo |
+| ZGC — `-XX:+UseZGC` | Prioridade em pausas curtas | Trabalho concorrente disputa CPU e precisa folga de heap; não garante p99 HTTP |
+
+Fontes: [guia de coletores Java 26](https://docs.oracle.com/en/java/javase/26/gctuning/available-collectors.html), [tuning G1](https://docs.oracle.com/en/java/javase/26/gctuning/garbage-first-garbage-collector-tuning.html). As três flags são alternativas, nunca simultâneas.
+
+| Configuração | O que faz |
+| --- | --- |
+| `MaxRAMPercentage=65` — atual | Define teto percentual de heap pela ergonomia; aproximadamente 250 MiB no limite de 384 MiB. RSS inclui também memória nativa |
+| `InitialRAMPercentage=15` — atual | Dimensiona heap inicial percentual |
+| `ActiveProcessorCount=2` — atual | Informa dois processadores à JVM, embora a quota seja 1 CPU; não concede capacidade extra |
+| `-Xms` / `-Xmx` — ensaio | Heap inicial/máximo explícitos; preservar folga nativa e evitar conflito involuntário com percentuais |
+| `MaxGCPauseMillis=N` — ajuste posterior | Objetivo para G1/Parallel, sem garantia; não controla a pausa do ZGC |
+| `-Xlog:gc*,safepoint:stdout:time,uptime,level,tags` — diagnóstico | Logs para medir/coordenar pausas com latência; limitar volume e avaliar custo |
+
+As opções de diagnóstico/tuning ainda não estão aplicadas. Comparar mesmo build, heap, quota, dados e carga; depois reduzir alocações/retenção identificadas por perfil e variar heap/CPU separadamente. Logs GC/JFR limitados, CPU/throttling, RSS, erros e latência determinam a escolha. [Flags e protocolo completos](docs/adrs/ADR-007-coletor-gc.md#o-que-cada-configuração-faz).
+
 ## Operação local
 
 ```bash
@@ -303,6 +368,6 @@ docker compose start
 - [Perfis de agentes](docs/agentes/README.md), incluindo o gerador C4.
 - [Roadmap global](docs/roadmap.md): uma tarefa principal por requisito funcional.
 - Roadmaps: [FO](front-office/ROADMAP.md), [MO](middle-office/ROADMAP.md), [matching](matching-engine/ROADMAP.md), [BO](back-office/ROADMAP.md) e [Angular](frontend/ROADMAP.md).
-- [HLD do ecossistema e dos microsserviços](docs/hlds/README.md).
+- [HLD do ecossistema e dos microsserviços](docs/hlds/README.md); [API de carga Go](docs/hlds/HLD-006-api-carga.md) e [ADR de GC](docs/adrs/ADR-007-coletor-gc.md).
 
 Cada tarefa exige PR com alterações, motivos, trade-offs e validação. Repositório: [mclovin137/Prospero](https://github.com/mclovin137/Prospero). Veja [CI e runner dedicado](docs/rules.md#ci-e-runner); resumos locais não equivalem a PR aberto.

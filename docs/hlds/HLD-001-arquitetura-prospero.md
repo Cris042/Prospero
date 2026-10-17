@@ -51,7 +51,7 @@ Ambiente de estudo, sem dados/operações financeiras reais. Portas publicadas e
 
 Diferentemente da centralização dos três sinais no Collector proposta no PDF (§14), a configuração vigente usa coleta direta de métricas pelo Prometheus. Prometheus coleta métricas das quatro aplicações; OTel envia traces/logs para Jaeger/Loki; Grafana integra fontes. O painel atual é técnico. Traces Jaeger usam memória e não persistem após reinício; demais componentes persistentes usam volumes conforme Compose. Métricas de host/container/DB/Kafka detalhadas ainda exigem coletores e não podem aparecer como zero por ausência de fonte.
 
-A [P06](../roadmap.md) planeja gerador/controlador local limitado e dashboards técnicos, complementares aos quatro de negócio previstos na V01. Sem carga financeira medida. Metas RNF04 permanecem no PRD e exigem hardware, carga, janela e amostras documentados. Labels de métricas devem ter cardinalidade limitada; correlação detalhada fica em logs/traces.
+A [P06](../roadmap.md) planeja API de controle em **Go**, gerador local limitado e dashboards técnicos, complementares aos quatro de negócio previstos na V01. A linguagem foi aceita no ADR-006; [HLD-006](HLD-006-api-carga.md) reúne desenho, pesquisa de frameworks/motores, limites e plano de evidência, sem serviço Go implementado. Sem carga financeira medida. Metas RNF04 permanecem no PRD e exigem hardware, carga, janela e amostras documentados. Labels de métricas devem ter cardinalidade limitada; correlação detalhada fica em logs/traces.
 
 ## Escalabilidade, resiliência e implantação
 
@@ -68,7 +68,7 @@ Builds independentes por serviço; JDK26 e versões fixadas no ADR-005. Comandos
 | Regras financeiras ainda abertas | Definir escalas, calendários e concorrência antes das tarefas dependentes. |
 | Observabilidade ou gerador saturados distorcem medições | Orçamento conjunto e métricas separadas; não comprovar capacidade com endpoint de identidade. |
 
-Decisões: [ADR-001 backend/fronteiras](../adrs/ADR-001-arquitetura-backend.md), [ADR-002 padrões](../adrs/ADR-002-padroes-dominio.md), [ADR-003 HTTP](../adrs/ADR-003-contratos-api.md), [ADR-004 testes](../adrs/ADR-004-testes-planilha.md) e [ADR-005 versões](../adrs/ADR-005-versoes-fundacao.md). Aceita não significa implementada; evolução incompatível exige substituição explícita. Novas decisões da carga serão avaliadas na P06.
+Decisões: [ADR-001 backend/fronteiras](../adrs/ADR-001-arquitetura-backend.md), [ADR-002 padrões](../adrs/ADR-002-padroes-dominio.md), [ADR-003 HTTP](../adrs/ADR-003-contratos-api.md), [ADR-004 testes](../adrs/ADR-004-testes-planilha.md) e [ADR-005 versões](../adrs/ADR-005-versoes-fundacao.md). Aceita não significa implementada; evolução incompatível exige substituição explícita. A linguagem Go da carga foi aceita no [ADR-006](../adrs/ADR-006-api-carga.md); escolhas de framework/motor seguem em avaliação na P06.
 
 ## Verificação e rastreabilidade
 

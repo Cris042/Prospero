@@ -1,15 +1,15 @@
 # ADR-006 — Linguagem e isolamento da API de carga
 
 - Data: 2026-10-17
-- Estado: **Proposta**; nenhuma linguagem ou motor adotado
-- Decisor: usuário; escolha pendente
+- Estado: **Aceita para a linguagem Go**; desenho, framework e motor em avaliação, implementação planejada
+- Decisor: usuário; aceite explícito de Go em 2026-10-17
 - Origem: P06 e pedido do usuário para avaliar Go ou Rust
 
 ## Contexto e escopo
 
-A P06 precisa iniciar, consultar e cancelar execuções locais, limitar o tráfego e apresentar carga oferecida/atingida, erros, descartes, latência e recursos do gerador separadamente do sistema. O usuário pediu avaliar Go ou Rust para essa API. Hoje não há controlador ou gerador implementado; os quatro serviços financeiros continuam Java/Quarkus e a P03 entrega apenas o runner XLSX.
+A P06 precisa iniciar, consultar e cancelar execuções locais, limitar o tráfego e apresentar carga oferecida/atingida, erros, descartes, latência e recursos do gerador separadamente do sistema. O usuário pediu avaliar Go ou Rust para essa API e depois autorizou explicitamente adotar Go. Hoje não há controlador ou gerador implementado; os quatro serviços financeiros continuam Java/Quarkus e a P03 entrega apenas o runner XLSX.
 
-Propõe-se uma ferramenta técnica em container Compose opt-in, fora dos processos medidos, sem banco financeiro, acesso a Kafka/Redis, dependência de implementação dos quatro serviços ou socket Docker. Não cria um quinto contexto de negócio. A API continua sujeita ao ADR-003 e aos cenários por HTTP/XLSX do ADR-004. O diretório, contrato exato, versão do toolchain e motor serão fixados antes do código dependente.
+Propõe-se uma ferramenta técnica em container Compose opt-in, fora dos processos medidos, sem banco financeiro, acesso a Kafka/Redis, dependência de implementação dos quatro serviços ou socket Docker. Não cria um quinto contexto de negócio. A API continua sujeita ao ADR-003 e aos cenários por HTTP/XLSX do ADR-004. O diretório, contrato exato, versão do toolchain, framework e motor serão fixados antes do código dependente. A pesquisa e o desenho macro estão no [HLD-006](../hlds/HLD-006-api-carga.md).
 
 A escolha da linguagem do controlador é separada da escolha do gerador. Esta análise não altera requisitos financeiros, não reduz o aceite da P06 e não comprova RNF04/RNF07.
 
@@ -28,20 +28,20 @@ Implementação e manutenção proporcionais; custo financeiro zero; isolamento 
 
 Go não está no PATH do host observado; Rust/Cargo 1.96.0 estão disponíveis. Docker permite builds isolados de ambas as opções; a instalação atual não decide arquitetura. Versões de adoção exigirão verificação/fixação próprias, sem `latest`.
 
-## Proposta e escolha do motor
+## Decisão de linguagem e avaliação do motor
 
-**Recomendação: Go para a API técnica**, pela simplicidade de manutenção e cobertura da biblioteca padrão. É recomendação, sem aceite presumido. Não há implementação autorizada por este ADR proposto.
+**Go adotado como linguagem da API técnica**, por aceite explícito do usuário: “pode adotar GO”. A recomendação anterior considerou simplicidade de manutenção e cobertura da biblioteca padrão, sem alegar superioridade de desempenho. A implementação permanece planejada; a aprovação da linguagem não representa adoção automática de frameworks ou motores.
 
 O motor permanece uma decisão separada:
 
 - **k6 local supervisionado:** reaproveita modelos aberto/fechado, executores e métricas. Exige adaptar o contrato local, limitar tráfego/saídas, fixar binário e scripts, mapear contagens e comprovar término do processo filho. Não aceitar script, comando ou argumentos livres do cliente; sem shell. A API interna, se utilizada, permanece restrita ao supervisor. Conferir capacidades da versão fixada: notas da v2 removem `externally-controlled` e controles legados; não projetar sobre exemplos antigos de pause/resume/scale/status.
 - **Gerador próprio restrito em Go:** mantém binário único e permite impor limites durante leitura/agendamento diretamente. Transfere ao projeto a responsabilidade por agendamento, categorias de descarte, contabilidade, estatística e transporte. Só escolher após confrontar o custo do adaptador k6 com os aceites; não construir ferramenta de carga genérica por antecipação.
 
-Arquitetura e viabilidade preferem avaliar primeiro k6; operação e segurança favorecem gerador próprio limitado; QA exige validar ambos pelos mesmos critérios. Todos recomendam Go para o controlador sem concluir vantagem de desempenho. A divergência do motor permanece explícita.
+Arquitetura e viabilidade preferem avaliar primeiro k6; operação e segurança favorecem gerador próprio limitado; QA exige validar ambos pelos mesmos critérios. Todos recomendam Go para o controlador sem concluir vantagem de desempenho. A divergência do motor permanece explícita. A pesquisa solicitada após o aceite também incluiu Vegeta como biblioteca Go e Fortio; [comparação e critérios no HLD-006](../hlds/HLD-006-api-carga.md#pesquisa-do-motor-de-carga).
 
 ## Condições antes da implementação
 
-1. Decidir linguagem e motor; registrar evidência de aceite e limites da entrega, sem converter proposta em decisão aceita retroativamente.
+1. Linguagem resolvida: Go. Validar e registrar framework, motor, versões e limites da entrega; recomendações da pesquisa não equivalem a bibliotecas instaladas.
 2. API autenticada por credencial externa ao Git/imagem, alvos por serviço/rota enumerados, origem/Host e entradas limitados; nenhuma URL/header/comando arbitrário. Separar credencial de controle do tráfego gerado.
 3. Configurar clientes explicitamente: timeout, limite de resposta/conexões, proxy do ambiente desabilitado e redirects recusados. Go e reqwest seguem redirects por padrão; o transporte padrão Go consulta proxies do ambiente. Não depender desses defaults.
 4. Fixar orçamento também no modo fechado: VUs não limitam RPS. Definir teto global, pacing declarado, limite absoluto de chamadas e ausência de rajadas para recuperar chegadas atrasadas.
@@ -52,11 +52,11 @@ Arquitetura e viabilidade preferem avaliar primeiro k6; operação e segurança 
 
 ## Validação e consequências
 
-Após a decisão, testes derivados de contrato antes da implementação: relógio/transporte controlados, corrida de início, aberto versus fechado com alvo lento, saturação/descarte, conservação de contagens, limites, cancelamento e morte do controlador, autenticação/Origin/Host, token ausente nos relatórios e métricas reais confrontadas com resultados. API/OpenAPI/Problem Details e workbook P03 cobrem iniciar, consultar, cancelar e rejeições; falhas de infraestrutura usam harness próprio.
+Após fechar as escolhas técnicas restantes, testes derivados de contrato antes da implementação: relógio/transporte controlados, corrida de início, aberto versus fechado com alvo lento, saturação/descarte, conservação de contagens, limites, cancelamento e morte do controlador, autenticação/Origin/Host, token ausente nos relatórios e métricas reais confrontadas com resultados. API/OpenAPI/Problem Details e workbook P03 cobrem iniciar, consultar, cancelar e rejeições; falhas de infraestrutura usam harness próprio.
 
-Go acrescentaria uma stack técnica ao projeto e exigiria CI, inventário e imagem específicos. Rust acrescentaria também decisões de runtime/crates. k6 acrescentaria binário/processo; gerador próprio acrescentaria código crítico de medição. Em todos os casos, gerador e aplicações compartilham hardware local, portanto isolamento de container não elimina interferência. O guia GC Go esclarece que o limite de memória do runtime é flexível e não substitui o cgroup.
+A implementação Go acrescentará uma stack técnica e exigirá CI, inventário e imagem específicos. Rust foi alternativa avaliada, não escolhida. k6 acrescentaria binário/processo; gerador próprio acrescentaria código crítico de medição. Em todos os casos, gerador e aplicações compartilham hardware local, portanto isolamento de container não elimina interferência. O guia GC Go esclarece que o limite de memória do runtime é flexível e não substitui o cgroup.
 
-Revisitar após experimento equivalente revelar saturação do gerador, necessidade de protocolo novo ou custo de manutenção incompatível com o recorte. Uma eventual adoção altera HLD-001, libs, Compose, CI e P06; PRD só muda com alteração de requisito. Não substitui ADR-001 dos quatro contextos Java.
+Revisitar após experimento equivalente revelar saturação do gerador, necessidade de protocolo novo ou custo de manutenção incompatível com o recorte. A implementação afetará HLD-001, libs, Compose, CI e P06; PRD só muda com alteração de requisito. Não substitui ADR-001 dos quatro contextos Java.
 
 ## Fontes
 
@@ -67,4 +67,6 @@ Revisitar após experimento equivalente revelar saturação do gerador, necessid
 
 ## Histórico e aceite
 
-2026-10-17: proposta após cinco perspectivas independentes medium e rodada complementar Go/Rust solicitada pelo usuário. Nenhum build, benchmark ou código P06 executado. **Decisão: pendente do usuário.**
+- 2026-10-17: proposta após cinco perspectivas independentes medium e rodada complementar Go/Rust solicitada pelo usuário.
+- 2026-10-17: usuário autoriza “pode adotar GO” e solicita pesquisa de frameworks/técnicas, HLD e atualização do README. **Go aceito**, sem reconfirmar a escolha; framework/motor e orçamento continuam em avaliação técnica.
+- Pesquisa/documentação não executaram build, benchmark ou código P06; fontes, alternativas e desenho estão no HLD-006.
