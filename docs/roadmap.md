@@ -91,7 +91,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### RF03 — Validação da ordem
 
 - Dependências: RF02.
-- Entrega: validação de lote, tick, Stop Limit com limite e túnel de ±10% do preço de referência.
+- Entrega: validação de lote, tick, Stop Limit com limite e túnel de ±10% do último preço; tratar referência inicial/defasada conforme definição da RF03.
 - Definir: escalas, arredondamento/overflow, referência antes do primeiro negócio e para cotação defasada; túnel para ordens sem preço limite.
 - Aceite/testes: limites e valores imediatamente fora deles, entradas inválidas e erro síncrono/estado de rejeição assíncrona coerentes; `.xlsx` e testes puros.
 - RNF: RNF01.
@@ -115,7 +115,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### RF06 — Formação e atualização do mercado
 
 - Dependências: RF05.
-- Entrega: último preço, bid/ask e VWAP por negócio, projeção Redis e atualização da interface. Alterações de ofertas sem negócio também atualizam profundidade/bid/ask.
+- Entrega: último preço, bid/ask e VWAP do dia por negócio, projeção Redis e atualização da interface. Alterações de ofertas sem negócio também atualizam profundidade/bid/ask.
 - Definir: sessão do VWAP, atualização/expiração de cotação e bootstrap da projeção sem consulta a banco alheio.
 - Aceite/testes: negócio, inserção e cancelamento alteram seus indicadores corretos; reentrega não soma volume duas vezes; dados ausentes/defasados são distinguíveis; planilha com espera limitada.
 - RNFs: RNF01, RNF06, RNF07.
@@ -165,6 +165,8 @@ Dependências: P06 e RF01–RF10. Entregar cenários completos, carga reproduzí
 | RNF06 — Idempotência | Reentregas sem duplicar negócios, lançamentos, reservas ou posições | RF04–RF08, RF10 |
 | RNF07 — Observabilidade | Trace por ordem, logs com `traceId`, métricas e quatro dashboards provisionados | P02, RF06, RF09 |
 | RNF08 — Ambiente local | Compose reproduzível para todos os componentes, volumes e instruções sem serviços pagos | P02, P03 |
+
+A V01 também entregará alertas locais orientados às metas e sintomas de negócio, com condições, janela e teste de disparo/recuperação documentados; ferramenta e limiares serão definidos com as medições, sem criar novo serviço por antecipação. GIF do fluxo e roteiro de demonstração de cinco minutos só entram no README quando houver negociação executável.
 
 Os quatro dashboards cobrirão fluxo de ordens, risco/reservas, matching/mercado e back office/liquidação. Falha de uma meta deve gerar evidência e ajuste, não mudança silenciosa do requisito. Compensações, falhas de consumidor e reinícios serão exercitados por harness de infraestrutura; planilhas continuarão usando apenas APIs.
 

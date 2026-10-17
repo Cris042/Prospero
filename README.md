@@ -4,7 +4,35 @@ Simulador local de mercado financeiro com cinco ações fictícias, livro de ofe
 
 ## Estado atual
 
-A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais. **Negociação, risco e liquidação ainda não foram implementados.** A evidência de execução desta etapa ficará no [resumo P02](docs/entregas/P02.md).
+A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais. **Negociação, risco e liquidação ainda não foram implementados.** A evidência de execução desta etapa está no [resumo P02](docs/entregas/P02.md).
+
+## Arquitetura e estrutura
+
+O C1 mostra o **produto planejado**. Formador de mercado e liquidação são simulados; não há conexão com bolsa ou câmara reais.
+
+![C4 C1: contexto planejado do Próspero](docs/c4/prospero-c1.svg)
+
+O C2 mostra a **fundação configurada**: o frontend consulta as quatro APIs técnicas, cada serviço possui PostgreSQL próprio e Kafka é verificado para prontidão. Redis ainda não serve cotações; as setas não representam negociação implementada.
+
+![C4 C2: containers da fundação atual](docs/c4/prospero-c2.svg)
+
+O [catálogo C4](docs/c4/README.md) inclui fontes editáveis, limites, o [C2 de telemetria](docs/c4/prospero-telemetria-c2.svg) e o C3 da identidade técnica. O [HLD do ecossistema](docs/hlds/HLD-001-arquitetura-prospero.md) mostra o fluxo financeiro de destino: FO coordena a SAGA, MO valida/reserva, ME executa e BO contabiliza/liquida, por eventos Kafka.
+
+O mapa abaixo localiza as principais partes do repositório; as linhas indicam organização de pastas, sem dependência de código entre serviços.
+
+```mermaid
+flowchart TB
+    R["Próspero / raiz"] --> FO["front-office/ — entrada e SAGA planejadas"]
+    R --> MO["middle-office/ — risco e reservas planejados"]
+    R --> ME["matching-engine/ — livro e matching planejados"]
+    R --> BO["back-office/ — razão e D+2 planejados"]
+    R --> UI["frontend/ — Angular; runner XLSX na P03"]
+    R --> INF["infra/ — telemetria e memória local"]
+    R --> S["scripts/ — operação e verificações"]
+    R --> D["docs/ — PRD, HLDs, ADRs e evidências"]
+```
+
+A [comparação com o PDF original](docs/evidencias/arquitetura-pdf-aderencia.md) explica o que foi preservado, as substituições aceitas e os detalhes documentais corrigidos.
 
 ## Subir o ambiente
 

@@ -1,0 +1,36 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam backgroundColor white
+title C2 — Próspero: recorte da telemetria configurada
+rectangle "Próspero — containers locais" {
+ rectangle "Front office" as fo <<Container Quarkus>>
+ rectangle "Middle office" as mo <<Container Quarkus>>
+ rectangle "Matching engine" as me <<Container Quarkus>>
+ rectangle "Back office" as bo <<Container Quarkus>>
+ rectangle "OpenTelemetry Collector" as o <<Container>>
+ rectangle "Jaeger\nTraces em memória" as j <<Container>>
+ rectangle "Loki" as l <<Container>>
+ rectangle "Prometheus" as p <<Container>>
+ rectangle "Grafana" as g <<Container>>
+}
+fo --> o : OTLP logs/traces
+mo --> o : OTLP logs/traces
+me --> o : OTLP logs/traces
+bo --> o : OTLP logs/traces
+o --> j : Traces
+o --> l : Logs
+p --> fo : GET /q/metrics
+p --> mo : GET /q/metrics
+p --> me : GET /q/metrics
+p --> bo : GET /q/metrics
+g --> p : Consulta métricas
+g --> j : Consulta traces
+g --> l : Consulta logs
+legend bottom
+Notação C4 local. Recorte dos mesmos serviços do C2 de fundação, sem duplicação de deploy.
+Prometheus coleta métricas diretamente; Collector encaminha logs e traces.
+Configuração técnica não comprova trace financeiro nem metas RNF medidas.
+endlegend
+@enduml

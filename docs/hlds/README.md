@@ -11,3 +11,5 @@ A arquitetura vigente se organiza em um desenho transversal e quatro contextos i
 | [005 — Back office](HLD-005-back-office.md) | Negócio, razão, posição e liquidação |
 
 [Guia documental](../documentacao.md), [playbook](../playbook-desenvolvimento.md) e [migração/aderência](../evidencias/P08-aderencia.md). Cada evolução altera somente os documentos necessários; não criar outro HLD sem necessidade concreta.
+
+Visualizações: [C4 de contexto, containers atuais e componentes técnicos](../c4/README.md). A [comparação com o PDF](../evidencias/arquitetura-pdf-aderencia.md) registra preservações, mudanças decididas e lacunas.

@@ -10,6 +10,8 @@ A P05 adiciona apenas conversão decimal técnica pura no MO, sem endpoint/regra
 
 ## Arquitetura
 
+O [catálogo C4](../c4/README.md) separa contexto de produto planejado, containers da fundação configurada e componentes reais. A [comparação com o PDF](../evidencias/arquitetura-pdf-aderencia.md) registra diferenças e rastreabilidade.
+
 ```mermaid
 flowchart LR
     UI[Angular] -->|API REST / WebSocket| FO[Front office]
@@ -73,7 +75,7 @@ Ambiente de estudo, sem dados/operações financeiras reais. Portas publicadas e
 
 ## Observabilidade e desempenho
 
-Prometheus coleta métricas das quatro aplicações; OTel envia traces/logs para Jaeger/Loki; Grafana integra fontes. O painel atual é técnico. Traces Jaeger usam memória e não persistem após reinício; demais componentes persistentes usam volumes conforme Compose. Métricas de host/container/DB/Kafka detalhadas ainda exigem coletores e não podem aparecer como zero por ausência de fonte.
+Diferentemente da centralização dos três sinais no Collector proposta no PDF (§14), a configuração vigente usa coleta direta de métricas pelo Prometheus. Prometheus coleta métricas das quatro aplicações; OTel envia traces/logs para Jaeger/Loki; Grafana integra fontes. O painel atual é técnico. Traces Jaeger usam memória e não persistem após reinício; demais componentes persistentes usam volumes conforme Compose. Métricas de host/container/DB/Kafka detalhadas ainda exigem coletores e não podem aparecer como zero por ausência de fonte.
 
 A [P06](../planos/P06-carga-observabilidade.md) planeja gerador/controlador local limitado e dashboards técnicos, complementares aos quatro de negócio previstos na V01. Sem carga financeira medida. Metas RNF04 permanecem no PRD e exigem hardware, carga, janela e amostras documentados. Labels de métricas devem ter cardinalidade limitada; correlação detalhada fica em logs/traces.
 

@@ -10,6 +10,7 @@ Leia o [PRD](prds/PRD-001-simulador-prospero.md) para entender o produto e os re
 
 | Pasta | Finalidade |
 | --- | --- |
+| [c4/](c4/README.md) | Diagramas C4, fontes PlantUML locais, imagens e limites de cada nível. |
 | [adrs/](adrs/README.md) | Decisões arquiteturais, contexto, alternativas, consequências e histórico de substituições. |
 | [agentes/](agentes/README.md) | Perfis dos agentes e orientações de uso, incluindo o gerador de diagramas C4. |
 | [entregas/](entregas/) | Resumos das entregas realizadas e suas limitações; não substituem o status do roadmap. |

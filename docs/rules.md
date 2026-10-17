@@ -18,6 +18,12 @@ O projeto é de estudo, roda localmente e não contrata serviços, hospedagem, A
 - Valores monetários, quantidades e preços usam objetos de valor sem `double`. Escalas, arredondamento, overflow e calendário precisam de definição antes das respectivas implementações.
 - Não criar biblioteca compartilhada por antecipação. A necessidade e o acoplamento de qualquer contrato ou tipo compartilhado devem ser justificados.
 
+## Consultas e revisão de desenvolvimento
+
+Por orientação explícita do usuário, não usar `LIKE` nas consultas do projeto, inclusive via ORM; não contornar com `ILIKE` ou funções que escondam varredura integral. Usar igualdade por chave/filtro indexável ou busca textual adequada ao requisito, com parâmetros, projeção e limites. Evitar full table scans desnecessários: validar plano e volume; `LIMIT` sozinho não garante isso. `Seq Scan` intencional em tabela pequena/manutenção pode ser justificável, sem forçar o otimizador a usar índice. Registrar motivo e orçamento quando houver varredura necessária.
+
+Consultar os gatilhos de arquitetura, segurança e SQL do [playbook](playbook-desenvolvimento.md) durante desenvolvimento e revisão; aplicar somente o pertinente e documentar trade-offs. O guia não adota réplicas, cache, autenticação, webhooks ou infraestrutura por antecipação, nem substitui ADRs.
+
 ## Contratos HTTP e testes
 
 Todo endpoint de negócio segue [ADR-003](adrs/ADR-003-contratos-api.md): `/api/v1`, OpenAPI/Swagger, DTOs e códigos HTTP adequados. GET não exige corpo; respostas sem conteúdo não ganham DTO artificial. Status HTTP descreve o resultado da requisição, não presume conclusão de uma SAGA.
