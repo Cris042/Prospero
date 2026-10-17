@@ -62,9 +62,17 @@ for service, port in [('front-office', 8081), ('middle-office', 8082), ('matchin
              lambda body, _, s=service: json.loads(body).get('servico') == s)
 
 prometheus = endereco('prometheus', 9090, 19090)
+
+
+def alvos_servicos(body):
+    # A ferramenta de carga é opt-in; seu alvo pode estar ausente sem afetar a fundação.
+    return [item for item in json.loads(body)['data']['activeTargets']
+            if item['labels'].get('job') != 'prospero-carga']
+
+
 aguardar('Prometheus: quatro alvos UP', prometheus + '/api/v1/targets',
-         lambda body, _: len(json.loads(body)['data']['activeTargets']) == 4
-         and all(item['health'] == 'up' for item in json.loads(body)['data']['activeTargets']))
+         lambda body, _: len(alvos_servicos(body)) == 4
+         and all(item['health'] == 'up' for item in alvos_servicos(body)))
 aguardar('Grafana', endereco('grafana', 3000, 13000) + '/api/health',
          lambda body, _: json.loads(body).get('database') == 'ok')
 aguardar('Loki', endereco('loki', 3100, 13100) + '/ready', lambda body, _: 'ready' in body.lower())
