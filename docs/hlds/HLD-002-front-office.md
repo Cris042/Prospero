@@ -24,7 +24,7 @@ Organização por funcionalidade sob `br.prospero.fo`: REST → Actor; Actor coo
 
 Receber DTO → validar estrutura → Actor registra ordem e intenção de publicação na mesma transação local → publisher recuperável Kafka → respostas/eventos avançam a máquina de estados persistida. Estratégia exata de idempotência de submissão, contratos e `201`/`202` deve ser definida na RF02, sem confirmar execução ao aceitar processamento.
 
-Redis é projeção futura de cotações, com idade/ausência explícitas. FO hoje tem conectividade configurada na rede de cotações, mas não há consulta de mercado implementada. Negócio não usa HTTP entre MS. Nomes de comandos, envelopes e tópicos dependem do catálogo transversal do HLD-001.
+RF01 implementada conforme [ADR-009](../adrs/ADR-009-projecao-mercado-fo.md): projeção de leitura no PostgreSQL do FO (`snapshot_mercado`, uma linha JSONB por namespace/ticker), consulta `GET /api/v1/ativos` e `/api/v1/ativos/{ticker}/livro` e preparação sintética local por namespace, todas com JWT. Redis permanece opção de cache futuro, sem uso atual. Atualização por negócios entra na RF06. Negócio não usa HTTP entre MS. Nomes de comandos, envelopes e tópicos dependem do catálogo transversal do HLD-001.
 
 ## Recuperação, riscos e pendências
 

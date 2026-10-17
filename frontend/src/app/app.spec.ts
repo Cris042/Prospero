@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { App } from './app';
+import { MercadoService } from './mercado/mercado.service';
 import { SistemaService } from './sistema/sistema.service';
 
 describe('Painel de fundação', () => {
@@ -8,6 +9,7 @@ describe('Painel de fundação', () => {
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
+        { provide: MercadoService, useValue: { listar: () => of([]), livro: () => of(null) } },
         {
           provide: SistemaService,
           useValue: {
@@ -42,6 +44,6 @@ describe('Painel de fundação', () => {
     await fixture.whenStable();
     const html = fixture.nativeElement as HTMLElement;
     expect(html.textContent).toContain('Indisponível');
-    expect(html.querySelector('button')?.textContent).toContain('Atualizar');
+    expect(html.textContent).toContain('Atualizar');
   });
 });

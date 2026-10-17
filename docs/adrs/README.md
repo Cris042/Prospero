@@ -12,6 +12,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-006](ADR-006-api-carga.md) | Linguagem e isolamento da API de carga; Go escolhido | Go aceito; stdlib/executor restrito em validação |
 | [ADR-007](ADR-007-coletor-gc.md) | G1 como baseline; comparação Parallel/ZGC e medição de pausas | Proposta; sem mudança de runtime |
 | [ADR-008](ADR-008-politicas-risco.md) | Parâmetros versionados versus DSL de risco no MO | Proposta; sem implementação |
+| [ADR-009](ADR-009-projecao-mercado-fo.md) | Projeção de mercado no PostgreSQL do FO e JWT local da RF01 | Aceita e implementada |
 
 ## Relação com a proposta original
 

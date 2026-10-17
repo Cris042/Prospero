@@ -4,7 +4,7 @@ Simulador local de mercado financeiro com cinco ações fictícias, livro de ofe
 
 ## Estado atual
 
-A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais. **Negociação, risco e liquidação ainda não foram implementados.** Estado e PRs de entrega estão no [roadmap](docs/roadmap.md).
+A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais e, desde a RF01, o mercado: cinco ativos fictícios com último preço, variação, bid/ask, spread, volume e livro agregado em cinco níveis, a partir de snapshots sintéticos preparados por API ([ADR-009](docs/adrs/ADR-009-projecao-mercado-fo.md); `python3 scripts/mercado.py preparar-demo` popula a demonstração). **Negociação, risco e liquidação ainda não foram implementados.** Estado e PRs de entrega estão no [roadmap](docs/roadmap.md).
 
 ## Escopo do simulador
 

@@ -8,12 +8,14 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
+import { Mercado } from './mercado/mercado';
 import { EstadoServico, SistemaService } from './sistema/sistema.service';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.html',
   styleUrl: './app.css',
+  imports: [Mercado],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App implements OnInit {
