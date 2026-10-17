@@ -6,7 +6,7 @@ Leia [docs/rules.md](docs/rules.md), [roadmap](docs/roadmap.md), [ADRs](docs/adr
 
 ## Estrutura e arquitetura
 
-Consulte [índice de estrutura no README](README.md#índice-de-estrutura) para a finalidade dos arquivos, [PRD](docs/prds/PRD-001-simulador-prospero.md) para requisitos e [HLDs](docs/hlds/README.md) para o ecossistema e cada serviço.
+Consulte [índice da documentação](docs/README.md) para a finalidade das pastas e arquivos de `docs/`, [PRD](docs/prds/PRD-001-simulador-prospero.md) para requisitos e [HLDs](docs/hlds/README.md) para o ecossistema e cada serviço.
 
 `front-office/`, `middle-office/`, `matching-engine/` e `back-office/` são projetos Maven independentes com Quarkus e Java 26. Cada serviço possui PostgreSQL próprio. `frontend/` contém Angular, testes de componentes e E2E; `infra/` configura observabilidade e memória; `scripts/` reúne operação e verificações. O runner XLSX será implementado na P03.
 

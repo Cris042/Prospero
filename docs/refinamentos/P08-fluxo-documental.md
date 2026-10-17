@@ -39,3 +39,9 @@ O usuário autorizou explicitamente remover PROJETO e proposta original e substi
 Também solicitado índice de estrutura no README: mapa de pastas e arquivos mantidos, sem listar conteúdo privado/gerado como fonte de código. Trata-se da navegação documental da mesma tarefa, sem mudança no runtime.
 
 Aceite complementar: um PRD e cinco HLDs, oito estruturas históricas de dados preservadas como referência proposta, requisitos/atores/exclusões e pendências conservados, dois documentos anteriores removidos com links ativos atualizados e origem histórica rastreável. O índice no README explica cada arquivo mantido e arquivos gerados por categoria.
+
+## Correção do índice documental
+
+O usuário esclareceu que o índice deve ficar em `docs/README.md`, explicando as pastas documentais e os arquivos diretamente em `docs/`. O inventário completo acrescentado ao README da raiz foi removido; o README raiz recupera sua estrutura anterior, com links ajustados aos documentos vigentes. Esta correção substitui a interpretação anterior de inventariar todos os arquivos do projeto. Não altera produto, arquitetura ou runtime, nem exige novo refinamento material.
+
+Verificação independente da correção: QA aprovou 72 documentos, 329 links e 16 skills/hashes, cobertura dos oito arquivos diretos e onze pastas de docs, e diff sem problemas. Revisão confirmou a restauração do README raiz, exceto por dois links atualizados para fontes vigentes. Evidências anteriores sobre o inventário completo descrevem a versão anterior, substituída por esta correção.

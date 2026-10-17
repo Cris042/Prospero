@@ -68,7 +68,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 - Dependências: P01 e P07; [refinamento](refinamentos/P08-fluxo-documental.md).
 - Estado: aguardando revisão/merge — [PR #5](https://github.com/mclovin137/Prospero/pull/5), branch `task/p08-fluxo-documental`, empilhado sobre P07.
-- Entrega: guia PRD/HLD/ADR, PRD e cinco HLDs (ecossistema + quatro MS), substituição dos dois documentos anteriores, ESTRUTURA na raiz, skills gerar-prd/gerar-hld e playbook único a partir da análise das cinco referências Minerva.
+- Entrega: guia PRD/HLD/ADR, PRD e cinco HLDs (ecossistema + quatro MS), substituição dos dois documentos anteriores, índice em docs/README.md, skills gerar-prd/gerar-hld e playbook único a partir da análise das cinco referências Minerva.
 - Aceite: revisão de aderência com evidências, requisitos preservados, documentos sem duplicação, links/hashes e exercícios independentes das skills; sem mudanças de runtime ou requisitos financeiros.
 - Dispensa XLSX: documentação sem endpoint novo, ADR-004.
 

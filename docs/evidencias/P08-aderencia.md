@@ -30,7 +30,7 @@ O usuário autorizou remover `PROJETO.md` e `prospero-arquitetura.md` após subs
 | Proposta §11: riscos | HLD-001 e seções de recuperação locais | Preservado; não liberar reserva só por timeout |
 | Proposta §12: opcionais | HLD-001/004/005 | Alternativas, sem adoção automática de GC/segurança/arquivamento/jobs |
 | Proposta §13: 12 semanas | Roadmap vigente | Cronograma descartado, já substituído; nenhuma conclusão retroativa |
-| Proposta §14: pastas/classes | HLDs locais, ADR-001 e README (índice de estrutura) | Stack/caminhos atuais; nomes futuros são candidatos, sem módulo comum obrigatório |
+| Proposta §14: pastas/classes | HLDs locais, ADR-001 e docs/README.md (índice documental) | Stack/caminhos atuais; nomes futuros são candidatos, sem módulo comum obrigatório |
 | Proposta §15.1: precisão/build/ativos/exemplo | PRD, HLD-003/004, libs e P05 | Build resolvido; regras financeiras/exemplo detalhado continuam pendentes |
 | Proposta §15.2: ordens/risco | PRD, HLD-002/003/004 | Preservadas combinações, OCO/parciais, referências e corridas |
 | Proposta §15.3: persistência/recuperação | HLDs locais + catálogo HLD-001 | Preservados contas/eventos, append-only, tempo/IDs, snapshot/offset e publicação abortada |
