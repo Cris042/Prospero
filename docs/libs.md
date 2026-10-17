@@ -27,14 +27,21 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | Loki / Grafana / Jaeger | 3.7.8 / 13.2.4 / 2.22.0 | Logs, dashboards e traces |
 | ai-memory | 3.1.0 | CLI e container separado; [guia](rules.md#memória-e-retomada) |
 | Gitleaks / Trivy | 8.30.1 / 0.76.0 | CI; imagens fixadas por digest |
+| Go | 1.27.2 | Módulo `ferramentas/carga`; API e executor técnicos com biblioteca padrão, sem módulos runtime externos |
+| Imagem builder Go | 1.27.2-bookworm | Dockerfile e CI; digest `sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61`; runtime `scratch`, binário estático sem shell |
+| govulncheck | 1.8.0 | Scanner oficial de desenvolvimento/CI, instalado por versão e verificado pelo Go checksum database; fora do módulo runtime |
 
 ## Pendências
 
 Runner XLSX implementado na P03, com aceite/PR no roadmap. DDD, SAGA e Object Calisthenics são decisões de projeto, não bibliotecas instaladas. Kafka e Redis preparados na fundação não significam regras financeiras implementadas. As 16 skills e seus hashes estão no [inventário de origens](skills/origens.json).
 
-## Go e ferramentas de carga — decisão e pesquisa
+## Go e ferramentas de carga — adoção P06
 
-Go foi escolhido pelo usuário para a API técnica P06 ([ADR-006](adrs/ADR-006-api-carga.md)). Ainda não há toolchain fixado, `go.mod`, módulos Go instalados ou imagem P06: não fazem parte do inventário runtime acima. A pesquisa recomenda avaliar `net/http` + Huma/humago; compara chi/Gin/Fiber e motores Vegeta/k6/Fortio/nativo. Técnicas de concorrência, limitação, métricas e testes estão no [HLD-006](hlds/HLD-006-api-carga.md). Versões consultadas são referências de pesquisa, não dependências adotadas; fixar e auditar versões antes da implementação.
+Go 1.27.2 e `net/http` com executor nativo restrito foram adotados conforme [ADR-006](adrs/ADR-006-api-carga.md). O módulo independente usa somente biblioteca padrão em runtime; não instala Huma, Vegeta ou cliente Prometheus. A exposição textual de métricas tem nomes e labels finitos, com séries de recursos obtidas do processo; API e gerador compartilham essas medições. [HLD-006](hlds/HLD-006-api-carga.md) registra limites, contrato, fontes e pendências da etapa A. Não equivale a capacidade financeira ou RNF04 comprovado.
+
+Experimento descartável com Go 1.27.2, Huma 2.39.1/humago e Vegeta 12.12.0: contratos válidos/negativos, sanitização e OpenAPI; streaming contínuo demonstrou que `MaxBody` limita retenção, mas mantém drenagem, e `Stop` não abortou imediatamente a leitura. Executor nativo usa leitura limitada e contexto cancelável; a decisão e os limites de interpretação ficam no ADR. Essas dependências pertencem somente ao experimento fora do repositório.
+
+Builder oficial fixado por digest consultado no registry Docker Hub; CI usa a mesma imagem com GCC para `go test -race`, `gofmt` e `go vet`. A imagem final `scratch` contém somente o binário Go estático, usuário 65532 e healthcheck implementado pelo próprio binário. Não há dependência Debian no runtime. O scanner [govulncheck 1.8.0](https://github.com/golang/vuln/releases/tag/v1.8.0) (1.1.4 entrava em pânico no SSA do stdlib Go 1.27) é instalado temporariamente com versão fixada e consulta a [base oficial](https://go.dev/doc/security/vuln/); falha de rede/instalação/scan reprova o check. Sem `latest` e sem interpretar uma etapa não executada como aprovação.
 
 ## Ambiente observado
 

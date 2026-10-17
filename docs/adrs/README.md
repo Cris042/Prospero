@@ -9,7 +9,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-003](ADR-003-contratos-api.md) | Versionamento, OpenAPI, DTOs e semântica HTTP | Aceita |
 | [ADR-004](ADR-004-testes-planilha.md) | Quando criar planilhas e como testar por API | Aceita |
 | [ADR-005](ADR-005-versoes-fundacao.md) | Versões concretas e ferramentas da fundação | Implementada; revisão no PR |
-| [ADR-006](ADR-006-api-carga.md) | Linguagem e isolamento da API de carga; Go escolhido | Go aceito; framework/motor em avaliação |
+| [ADR-006](ADR-006-api-carga.md) | Linguagem e isolamento da API de carga; Go escolhido | Go aceito; stdlib/executor restrito em validação |
 | [ADR-007](ADR-007-coletor-gc.md) | G1 como baseline; comparação Parallel/ZGC e medição de pausas | Proposta; sem mudança de runtime |
 | [ADR-008](ADR-008-politicas-risco.md) | Parâmetros versionados versus DSL de risco no MO | Proposta; sem implementação |
 

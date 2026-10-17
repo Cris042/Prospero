@@ -328,7 +328,7 @@ Reservas, deduplicação, SAGA, ordens ativas e resultados necessários do runne
 | Módulo | Finalidade e estado |
 | --- | --- |
 | Runner XLSX no frontend — P03 | Implementado: abas `Carga`, `Passos` e `Resultados`, chamadas exclusivamente por API, capturas, asserções tipadas e polling com prazo. O exemplo atual consulta identidade dos quatro serviços; não executa negociação |
-| API de carga em Go — P06 | Linguagem aprovada; arquitetura/pesquisa no [HLD-006](docs/hlds/HLD-006-api-carga.md). Controlador, gerador, métricas e ensaios de falha ainda planejados |
+| API de carga em Go — P06 | Etapa A em implementação/revisão: controle autenticado, executor técnico limitado e painel de métricas. Cenários financeiros/falhas dependem das RFs; [contrato e limites](docs/hlds/HLD-006-api-carga.md) |
 | Testes internos e E2E | Complementam planilhas com domínio, precisão, concorrência, persistência, arquitetura e interface; não são substituídos pela carga |
 
 Com a stack já disponível, executar o exemplo XLSX pela raiz:
@@ -347,11 +347,26 @@ npm --prefix frontend run runner -- runner/exemplos/fundacao.xlsx --config runne
 
 Saída JSON no stdout; códigos de saída: `0` sucesso, `1` cenário falhou, `2` entrada/configuração inválida. Credenciais ficam fora do Git. [Contrato completo, limites e exemplos](frontend/README.md#runner-xlsx--contrato-p03).
 
-Para a API Go, a recomendação inicial é `net/http` + Huma/humago para contrato/OpenAPI; chi, Gin e Fiber foram comparados. Vegeta, k6, Fortio e motor nativo continuam candidatos, condicionados a limites reais de bytes, concorrência, cancelamento e contagens. Não há dependências Go instaladas ou comando de inicialização P06. [Pesquisa e critérios](docs/hlds/HLD-006-api-carga.md).
+### API de carga técnica — P06, etapa A
+
+A ferramenta em `ferramentas/carga` usa Go 1.27.2, `net/http` e executor nativo, com [OpenAPI](ferramentas/carga/openapi.json) explícito. Oferece carga apenas sobre `GET /api/v1/sistema` dos quatro MS, uma execução global, até cinco estágios, 60 s, 100 RPS, 16 VUs, 32 chamadas em voo e 6000 chamadas. No modo fechado, RPS limita oportunidades globais e VUs limita ocupação; se os VUs estiverem bloqueados, a vazão diminui. VUs não comprovam usuários autenticados. O relatório separa oferta prevista/percorrida, contagens, quantis e janelas com duração planejada e observada; aquecimento e medição não se sobrepõem. [Decisão e experimento](docs/adrs/ADR-006-api-carga.md), [contrato completo](docs/hlds/HLD-006-api-carga.md).
+
+Com a stack local já disponível, preparar as chaves e iniciar somente a ferramenta:
+
+```bash
+python3 scripts/carga.py preparar
+docker compose -f docker-compose.yml -f docker-compose.carga.yml --profile carga build api-carga
+docker compose -f docker-compose.yml -f docker-compose.carga.yml --profile carga up -d --no-deps api-carga
+python3 scripts/carga.py baseline
+```
+
+A API fica em `127.0.0.1:8090`; o listener de métricas `9091` é interno, sem publicação no host. O perfil `carga` é opt-in e não inicia no Compose padrão nem executa carga na CI. O container usa 384 MiB/1 CPU, usuário 65532, filesystem somente leitura e nenhum socket Docker/banco. `.carga-local/` guarda artefatos privados com diretório `0700`; as duas chaves ficam `0444` dentro dele para os binds individuais do UID 65532. Demais artefatos permanecem privados; não versionar esse diretório.
+
+O script no host verifica orçamento e saúde de Prometheus (`/-/ready`), Grafana (`/api/health`) e Collector (`/`) nos endpoints próprios de leitura antes de emitir atestado HS256 de até 30 s, vinculado à instância e ao plano, com nonce de uso único e `telemetria:true`. O atestado não reserva recursos. Enviá-lo em `X-Prospero-Preflight` ou `autorizacao` do corpo; ambos juntos resultam em `400`. Chaves de controle e preflight são distintas. O [painel técnico](infra/grafana/dashboards/carga.json) usa métricas reais do processo Go e JVM; API e gerador compartilham o processo. Fontes detalhadas de host/cgroups, disco/rede, DB/Kafka/outbox continuam ausentes e não aparecem como zero. Esta etapa não mede negociação nem comprova RNF04.
 
 O teste futuro combinará rampas abertas/fechadas, saturação e queda/retorno de MS. Medirá oferta, admissão durável e conclusão separadamente, além de backlog, tempo de recuperação e reconciliação dos IDs/quantidades/reservas/negócios/lançamentos. Outbox e deduplicação atômicas com os efeitos, SAGA persistida e replay controlado são a estratégia planejada; timeout não autoriza liberar reserva ou declarar sucesso. O harness externo controla as falhas; a API de carga não recebe shell/socket Docker. Os cenários financeiros dependem das RFs e ainda não foram executados. [Matriz de falhas e consistência](docs/hlds/HLD-006-api-carga.md#desempenho-com-falhas-e-consistência-entre-serviços).
 
-O controle planejado usa JWT com **HS256 fixado pelo servidor**: rejeitar `none`, algoritmo divergente e assinatura/claims inválidas antes de admitir execução. O token não escolhe a política. Exemplo de biblioteca mal configurada pertence apenas à demonstração isolada/teste negativo, sem opção de bypass na API. [Contrato de segurança](docs/hlds/HLD-006-api-carga.md#segurança-implantação-e-orçamento), [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html).
+O controle da ferramenta usa JWT com **HS256 fixado pelo servidor**: rejeita `none`, algoritmo divergente e assinatura/claims inválidas antes de admitir execução. O token não escolhe a política. Exemplo de biblioteca mal configurada pertence apenas à demonstração isolada/teste negativo, sem opção de bypass na API. [Contrato de segurança](docs/hlds/HLD-006-api-carga.md#segurança-implantação-e-orçamento), [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html).
 
 ### Destaque: durabilidade custa I/O — medir fsync antes de dimensionar
 

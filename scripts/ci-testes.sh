@@ -36,6 +36,12 @@ for service in front-office middle-office matching-engine back-office; do
     -v "$PWD:/workspace" -v "$cache:/maven" -w "/workspace/$service" \
     eclipse-temurin:26.0.2.1_1-jdk-noble sh ./mvnw -B -ntp verify
  done
+# Race usa o toolchain com GCC; os alvos dos testes são servidores descartáveis.
+docker run --rm --user "$(id -u):$(id -g)" --memory=1g --cpus=2 --pids-limit=128 \
+  --network=none --read-only --tmpfs /tmp:rw,exec,size=536870912 \
+  -e GOCACHE=/tmp/go-build -e GOTMPDIR=/tmp -e GOTOOLCHAIN=local -e CGO_ENABLED=1 \
+  -v "$PWD/ferramentas/carga:/src:ro" -w /src \
+  golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 go test -race -count=1 ./...
 npm --prefix frontend ci --no-fund --no-audit
 npm --prefix frontend run test:runner
 npm --prefix frontend test -- --watch=false

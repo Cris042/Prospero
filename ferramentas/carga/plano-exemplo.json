@@ -1,0 +1,13 @@
+{
+  "servico": "front-office",
+  "modo": "ABERTO",
+  "estagios": [
+    { "duracaoMs": 1000, "rps": 2, "vus": 0 },
+    { "duracaoMs": 1000, "rps": 4, "vus": 0 }
+  ],
+  "aquecimentoMs": 500,
+  "concorrencia": 2,
+  "maxChamadas": 10,
+  "timeoutMs": 1000,
+  "maxRespostaBytes": 4096
+}

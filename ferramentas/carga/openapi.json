@@ -1,0 +1,1558 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Próspero — Controle técnico de carga",
+    "version": "0.1.0",
+    "description": "Etapa A local opt-in; não mede capacidade financeira ou RNF04. API+gerador no mesmo processo; métricas /metrics em listener interno separado :9091, sem bearer administrativo. Host permitido; todo Origin recusado. JWT HS256 fixo, emissor prospero-local, audiência prospero-carga, exp e escopo carga:controle; chaves externas distintas, rotação por reinício."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8090"
+    }
+  ],
+  "security": [
+    {
+      "controle": []
+    }
+  ],
+  "paths": {
+    "/api/v1/sistema": {
+      "get": {
+        "operationId": "consultarSistemaCarga",
+        "summary": "Obter identidade da instância para preflight externo.",
+        "responses": {
+          "200": {
+            "description": "Identidade técnica.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/System"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "JSON inválido, chave duplicada ou query não permitida.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "JWT ausente/inválido/expirado ou algoritmo diferente de HS256.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "Bearer"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host/Origin recusado ou escopo insuficiente.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite administrativo ou intervalo entre execuções.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/execucoes-carga": {
+      "post": {
+        "operationId": "iniciarExecucaoCarga",
+        "summary": "Validar atestado e admitir uma execução global.",
+        "description": "Aceita somente GET /api/v1/sistema do serviço enumerado. 202 confirma admissão, não conclusão. Autenticação precede parsing do plano.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Start"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Execução admitida.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Location": {
+                "description": "Caminho relativo da consulta.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^/api/v1/execucoes-carga/[0-9a-f]{32}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "JSON inválido/chave duplicada/query não permitida ou atestado enviado simultaneamente no header e no corpo.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "JWT ausente/inválido/expirado ou algoritmo diferente de HS256.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "Bearer"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host/Origin recusado ou escopo insuficiente.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rota, execução ou histórico ausente/expirado.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método não permitido.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Outra execução global ativa.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Corpo maior que 16384 bytes.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type diferente de application/json.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Plano fora dos limites ou alvo indisponível.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite administrativo ou intervalo entre execuções.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Preflight ausente/inválido/expirado/reutilizado ou encerramento.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Prospero-Preflight",
+            "in": "header",
+            "required": false,
+            "description": "JWT preflight externo fresco, alternativo a body.autorizacao. Ambos são recusados (400). Até 4096 bytes; exige telemetria=true.",
+            "schema": {
+              "type": "string",
+              "maxLength": 4096,
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/execucoes-carga/{id}": {
+      "get": {
+        "operationId": "consultarExecucaoCarga",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatório em andamento ou terminal.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "JSON inválido, chave duplicada ou query não permitida.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "JWT ausente/inválido/expirado ou algoritmo diferente de HS256.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "Bearer"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host/Origin recusado ou escopo insuficiente.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rota, execução ou histórico ausente/expirado.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método não permitido.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite administrativo ou intervalo entre execuções.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/execucoes-carga/{id}/cancelamentos": {
+      "post": {
+        "operationId": "cancelarExecucaoCarga",
+        "summary": "Cancelamento idempotente; preserva histórico.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Execução já terminal.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Encerramento solicitado; consultar até terminal.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "JSON inválido, chave duplicada ou query não permitida.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "JWT ausente/inválido/expirado ou algoritmo diferente de HS256.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "Bearer"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host/Origin recusado ou escopo insuficiente.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rota, execução ou histórico ausente/expirado.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método não permitido.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite administrativo ou intervalo entre execuções.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "consultarContratoCarga",
+        "responses": {
+          "200": {
+            "description": "Contrato OpenAPI 3.1.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "JSON inválido, chave duplicada ou query não permitida.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "JWT ausente/inválido/expirado ou algoritmo diferente de HS256.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "Bearer"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host/Origin recusado ou escopo insuficiente.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite administrativo ou intervalo entre execuções.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre no-store.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "coletarMetricasCarga",
+        "summary": "Métricas Prometheus no listener interno de telemetria.",
+        "description": "Sem publicação no host. Cumulativos do processo; sem labels de execução/usuário. Contadores HTTP por servico, buckets por servico/le. CPU/RSS/heap/GC/goroutines/FDs representam API+gerador. RSS/FDs são omitidos se /proc indisponível; ausência não é zero. Histograma inclui chamadas medidas, incluindo erros; relatórios preservam quantis exatos. Séries: carga_oferecidas_total, carga_iniciadas_total, carga_finalizadas_total, carga_descartadas_total, carga_erros_http_total, carga_timeouts_total, carga_bytes_lidos_total, carga_falhas_transporte_total, carga_canceladas_em_voo_total, carga_limites_resposta_total, carga_execucao_ativa, carga_process_cpu_seconds_total, carga_process_resident_memory_bytes, carga_go_heap_bytes, carga_go_goroutines, carga_go_gc_cycles_total, carga_process_open_fds, carga_duracao_seconds_bucket, carga_duracao_seconds_count, carga_duracao_seconds_sum, carga_scheduler_delay_seconds_max.",
+        "servers": [
+          {
+            "url": "http://api-carga:9091"
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Formato textual Prometheus 0.0.4.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Query recusada; corpo vazio."
+          },
+          "405": {
+            "description": "Método não permitido."
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "consultarSaudeCarga",
+        "summary": "Healthcheck interno do processo; não comprova prontidão financeira.",
+        "servers": [
+          {
+            "url": "http://api-carga:9091"
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Processo aceita operações; sem corpo."
+          },
+          "503": {
+            "description": "Processo encerrando; sem corpo."
+          },
+          "405": {
+            "description": "Método não permitido."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "controle": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT HS256"
+      }
+    },
+    "schemas": {
+      "Stage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "duracaoMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 60000
+          },
+          "rps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "vus": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+          }
+        },
+        "required": [
+          "duracaoMs",
+          "rps",
+          "vus"
+        ]
+      },
+      "Plan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "servico": {
+            "type": "string",
+            "enum": [
+              "front-office",
+              "middle-office",
+              "matching-engine",
+              "back-office"
+            ]
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "ABERTO",
+              "FECHADO"
+            ]
+          },
+          "estagios": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            }
+          },
+          "aquecimentoMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 59999
+          },
+          "concorrencia": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "maxChamadas": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6000
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          },
+          "maxRespostaBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65536
+          }
+        },
+        "required": [
+          "servico",
+          "modo",
+          "estagios",
+          "aquecimentoMs",
+          "concorrencia",
+          "maxChamadas",
+          "timeoutMs",
+          "maxRespostaBytes"
+        ],
+        "description": "Soma das durações até 60000 ms; aquecimento menor que a soma. ABERTO exige vus=0; FECHADO exige 1≤vus≤concorrencia. Estágios são degraus, sem interpolação. Sem propriedades/chaves duplicadas, queries, destinos ou cabeçalhos arbitrários. No modo FECHADO, rps limita oportunidades globais e vus limita ocupação simultânea; VUs bloqueados reduzem throughput. Não simula contas/usuários autenticados. Nenhuma rajada recupera oportunidades atrasadas.",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "modo": {
+                  "const": "ABERTO"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "estagios": {
+                  "items": {
+                    "properties": {
+                      "vus": {
+                        "const": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "modo": {
+                  "const": "FECHADO"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "estagios": {
+                  "items": {
+                    "required": [
+                      "vus"
+                    ],
+                    "properties": {
+                      "vus": {
+                        "minimum": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Counts": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "oferecidas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "iniciadas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "naoIniciadas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "descartadas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "interrompidas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "finalizadas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "emVoo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "respostasHTTP": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "errosHTTP": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "timeouts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "falhasTransporte": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "canceladasEmVoo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limitesResposta": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytesLidos": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "oferecidas",
+          "iniciadas",
+          "naoIniciadas",
+          "descartadas",
+          "interrompidas",
+          "finalizadas",
+          "emVoo",
+          "respostasHTTP",
+          "errosHTTP",
+          "timeouts",
+          "falhasTransporte",
+          "canceladasEmVoo",
+          "limitesResposta",
+          "bytesLidos"
+        ],
+        "description": "Oferecidas=iniciadas+naoIniciadas; naoIniciadas=descartadas+interrompidas; iniciadas=finalizadas+emVoo. Erros HTTP são subconjunto de respostasHTTP. Categorias terminais de transporte são disjuntas; bytesLidos incluem o byte sentinela de excesso e não representam bytes no fio."
+      },
+      "Quantiles": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "amostras": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6000
+          },
+          "p50Us": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "p95Us": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "p99Us": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maximoUs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "amostras",
+          "p50Us",
+          "p95Us",
+          "p99Us",
+          "maximoUs"
+        ],
+        "description": "Nearest rank em microssegundos, incluindo erros; população declarada no relatório. null quando não há amostras."
+      },
+      "Window": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "estagio": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fase": {
+            "type": "string",
+            "enum": [
+              "AQUECIMENTO",
+              "MEDICAO"
+            ]
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duracaoMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Duração planejada desta fase, sem sobreposição aquecimento/medição."
+          },
+          "contagens": {
+            "$ref": "#/components/schemas/Counts"
+          },
+          "quantis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Quantiles"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duracaoObservadaMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Tempo observado limitado à duração planejada da fase; diferencia cancelamento de fase completa."
+          }
+        },
+        "required": [
+          "estagio",
+          "fase",
+          "inicio",
+          "duracaoMs",
+          "contagens",
+          "quantis",
+          "duracaoObservadaMs"
+        ]
+      },
+      "Environment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "go": {
+            "type": "string"
+          },
+          "memoriaDisponivelMiB": {
+            "type": "integer",
+            "minimum": 1024
+          },
+          "discoLivreMiB": {
+            "type": "integer",
+            "minimum": 1024
+          },
+          "cpusHost": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "preflightEm": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fonte": {
+            "type": "string",
+            "enum": [
+              "operador-host-assinado"
+            ]
+          },
+          "recursosProcesso": {
+            "type": "string",
+            "enum": [
+              "controle+gerador"
+            ]
+          }
+        },
+        "required": [
+          "go",
+          "memoriaDisponivelMiB",
+          "discoLivreMiB",
+          "cpusHost",
+          "preflightEm",
+          "fonte",
+          "recursosProcesso"
+        ]
+      },
+      "Report": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "instancia": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "AGUARDANDO",
+              "EXECUTANDO",
+              "ENCERRANDO",
+              "CONCLUIDA",
+              "CANCELADA",
+              "FALHA"
+            ]
+          },
+          "plano": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fim": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "contagens": {
+            "$ref": "#/components/schemas/Counts"
+          },
+          "medicao": {
+            "$ref": "#/components/schemas/Counts"
+          },
+          "quantis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Quantiles"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "atrasoMaximoUs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "janelas": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Window"
+            },
+            "maxItems": 10
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "ambiente": {
+            "$ref": "#/components/schemas/Environment"
+          },
+          "populacao": {
+            "type": "string"
+          },
+          "ofertasPrevistas": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Quantidade de oportunidades prevista no calendário ABERTO completo antes dos tetos/cancelamento; null no modo FECHADO. Não equivale à oferta efetivamente percorrida."
+          }
+        },
+        "required": [
+          "id",
+          "instancia",
+          "estado",
+          "plano",
+          "inicio",
+          "fim",
+          "contagens",
+          "medicao",
+          "quantis",
+          "atrasoMaximoUs",
+          "janelas",
+          "motivo",
+          "ambiente",
+          "populacao",
+          "ofertasPrevistas"
+        ],
+        "description": "Histórico volátil: até 20 resultados/20min/4MiB; reinício perde resultados sem repetir tráfego. Terminal exige emVoo=0. Aquecimento consome orçamento e fica fora da população de medição. Janelas usam duracaoMs planejada e duracaoObservadaMs efetivamente observada; fases não se sobrepõem."
+      },
+      "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri"
+          },
+          "codigo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "codigo"
+        ]
+      },
+      "Start": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plano": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "autorizacao": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "JWT HS256 preflight fresco, uso único, alternativa ao header X-Prospero-Preflight. Nunca enviar ambos. Chave distinta do bearer; iat/exp≤30s, audiência=instância, nonce, hash SHA256 do plano normalizado, RAM/disco livres≥1024MiB, CPU≥1 e telemetria=true. Nunca persistido no relatório."
+          }
+        },
+        "required": [
+          "plano"
+        ],
+        "description": "Informar o atestado em autorizacao OU X-Prospero-Preflight. Ambos resultam em 400; nenhum atestado válido resulta em 503."
+      },
+      "System": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "instancia": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "servico": {
+            "type": "string",
+            "enum": [
+              "api-carga"
+            ]
+          },
+          "etapa": {
+            "type": "string",
+            "enum": [
+              "TECNICA"
+            ]
+          }
+        },
+        "required": [
+          "instancia",
+          "servico",
+          "etapa"
+        ]
+      }
+    }
+  }
+}
