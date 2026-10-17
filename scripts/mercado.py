@@ -5,6 +5,7 @@ import datetime
 import json
 import os
 import urllib.request
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 from pathlib import Path
 import sys
@@ -57,8 +58,8 @@ def preparar_demo(origem):
     print("Namespace principal preparado com dados sintéticos de demonstração.")
 
 
-def escrever_privado(destino, conteudo):
-    # Arquivo legível pelo UID do container via bind individual; criado sem seguir symlink.
+def escrever_config(destino, conteudo):
+    # 0644 para o UID do container ler via bind individual: o destino deve estar em diretório privado (0700).
     fd = os.open(destino, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
     with os.fdopen(fd, "w") as stream:
         stream.write(conteudo)
@@ -78,8 +79,10 @@ def main():
     d.add_argument("--origem", default="http://127.0.0.1:8081")
     args = parser.parse_args()
     if args.comando == "preparar-demo":
-        if not args.origem.startswith(("http://127.0.0.1:", "http://localhost:")):
-            raise SystemExit("Origem deve ser local (loopback).")
+        partes = urlsplit(args.origem)
+        if (partes.scheme != "http" or partes.hostname not in {"127.0.0.1", "localhost"} or partes.username
+                or partes.password or partes.path not in {"", "/"} or partes.query or partes.fragment):
+            raise SystemExit("Origem deve ser http local (loopback), sem credenciais nem caminho.")
         preparar_demo(args.origem)
         return
     if args.comando == "token":
@@ -87,7 +90,7 @@ def main():
         return
     config = {"servicos": {"front-office": {"origem": args.origem, "headers": {
         "Authorization": "Bearer " + token("preparacao", args.validade)}}}}
-    escrever_privado(args.destino, json.dumps(config, indent=2) + "\n")
+    escrever_config(args.destino, json.dumps(config, indent=2) + "\n")
     print("Configuração do runner gravada; token não exibido.")
 
 

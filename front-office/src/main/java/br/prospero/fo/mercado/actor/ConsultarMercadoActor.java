@@ -19,6 +19,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +32,7 @@ import static br.prospero.fo.mercado.helper.ConversorDecimal.texto;
 @ApplicationScoped
 public class ConsultarMercadoActor {
     public static final String ORIGEM = "PREPARACAO_SINTETICA";
+    private static final ZoneId SESSAO = ZoneId.of("America/Sao_Paulo");
     private final RepositorioMercado repositorio;
     private final Duration idadeMaxima;
 
@@ -54,13 +57,13 @@ public class ConsultarMercadoActor {
         SnapshotMercado snapshot = repositorio.snapshot(namespace, ativo.ticker()).orElse(null);
         Indicadores indicadores = CalculadoraIndicadores.calcular(ativo, snapshot);
         if (snapshot == null) {
-            LadoResponseDTO vazio = new LadoResponseDTO(List.of(), 0, 0);
-            return new LivroResponseDTO(ticker, namespace, indicadores.estadoLivro().name(), vazio, vazio, null, null, false);
+            return new LivroResponseDTO(ticker, namespace, indicadores.estadoLivro().name(), null, null, null, null,
+                    null, false, null);
         }
         return new LivroResponseDTO(ticker, namespace, indicadores.estadoLivro().name(),
                 lado(AgregadorLivro.agregar(snapshot.ofertas(), Lado.COMPRA)),
                 lado(AgregadorLivro.agregar(snapshot.ofertas(), Lado.VENDA)),
-                snapshot.revisao(), snapshot.preparadoEm(), defasado(snapshot, Instant.now()));
+                snapshot.revisao(), snapshot.sessao(), snapshot.preparadoEm(), defasado(snapshot, Instant.now()), ORIGEM);
     }
 
     private AtivoResponseDTO resumo(Ativo ativo, SnapshotMercado snapshot, Instant agora) {
@@ -75,7 +78,8 @@ public class ConsultarMercadoActor {
     }
 
     private boolean defasado(SnapshotMercado snapshot, Instant agora) {
-        return snapshot.preparadoEm().plus(idadeMaxima).isBefore(agora);
+        return snapshot.preparadoEm().plus(idadeMaxima).isBefore(agora)
+                || snapshot.sessao().isBefore(LocalDate.ofInstant(agora, SESSAO));
     }
 
     private static LadoResponseDTO lado(LadoAgregado lado) {

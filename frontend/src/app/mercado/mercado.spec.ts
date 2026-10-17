@@ -3,6 +3,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { Mercado } from './mercado';
 import {
   AtivoResumo,
+  formatarData,
   formatarDecimal,
   formatarInteiro,
   formatarVariacao,
@@ -41,8 +42,11 @@ function livro(ticker: string, preco: string): Livro {
       quantidadeTotal: 100,
     },
     venda: { niveis: [], niveisTotal: 0, quantidadeTotal: 0 },
-    preparadoEm: null,
-    defasado: false,
+    revisao: 3,
+    sessao: '2026-10-16',
+    preparadoEm: '2026-10-16T12:00:00Z',
+    defasado: true,
+    origem: 'PREPARACAO_SINTETICA',
   };
 }
 
@@ -56,6 +60,7 @@ describe('Formatação decimal textual', () => {
     expect(formatarVariacao('0.00')).toBe('0,00');
     expect(formatarInteiro(1500)).toBe('1.500');
     expect(formatarInteiro(null)).toBe('—');
+    expect(formatarData('2026-10-17')).toBe('17/10/2026');
   });
 });
 
@@ -112,6 +117,11 @@ describe('Mercado', () => {
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Livro de BETA3');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('19,99');
+    // Selos vêm da resposta do livro (mesma revisão), não da listagem.
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Defasado');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Sessão 16/10/2026 · revisão 3',
+    );
   });
 
   it('informa erro de consulta sem quebrar a tela', async () => {

@@ -36,13 +36,17 @@ export interface LadoLivro {
   readonly quantidadeTotal: number;
 }
 
+/** Resposta autossuficiente: selos e níveis vêm da mesma revisão do snapshot. */
 export interface Livro {
   readonly ticker: string;
   readonly estadoLivro: EstadoLivro;
-  readonly compra: LadoLivro;
-  readonly venda: LadoLivro;
+  readonly compra: LadoLivro | null;
+  readonly venda: LadoLivro | null;
+  readonly revisao: number | null;
+  readonly sessao: string | null;
   readonly preparadoEm: string | null;
   readonly defasado: boolean;
+  readonly origem: string | null;
 }
 
 const BASE = '/servicos/front-office/api/v1/ativos';
@@ -73,6 +77,13 @@ export function formatarVariacao(texto: string | null, sufixo = ''): string {
   if (texto === null) return '—';
   const sinal = texto.startsWith('-') || /^0(\.0+)?$/.test(texto) ? '' : '+';
   return sinal + formatarDecimal(texto) + sufixo;
+}
+
+/** Data ISO (aaaa-mm-dd) em dd/mm/aaaa, sem Date nem fuso do navegador. */
+export function formatarData(texto: string | null): string {
+  if (texto === null) return '—';
+  const [ano, mes, dia] = texto.split('-');
+  return `${dia}/${mes}/${ano}`;
 }
 
 export function formatarInteiro(valor: number | null): string {

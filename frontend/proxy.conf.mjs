@@ -14,6 +14,24 @@ function tokenLeitura() {
 }
 
 const token = tokenLeitura();
+const PREPARACAO = /preparacoes-mercado/i;
+
+// Rota genérica do FO: bloqueia preparação mesmo codificada e descarta Authorization do cliente.
+function semPreparacao(req, res) {
+  let caminho = req.url ?? '';
+  try {
+    caminho = decodeURIComponent(caminho);
+  } catch {
+    caminho = 'preparacoes-mercado';
+  }
+  if (PREPARACAO.test(caminho)) {
+    res.statusCode = 403;
+    res.end('{"erro":"Preparação indisponível pelo navegador"}');
+    return false;
+  }
+  delete req.headers.authorization;
+  return undefined;
+}
 const servico = (porta) => ({ target: `http://localhost:${porta}`, secure: false });
 
 export default {
@@ -30,7 +48,11 @@ export default {
     pathRewrite: { '^/servicos/front-office': '' },
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   },
-  '/servicos/front-office': { ...servico(8081), pathRewrite: { '^/servicos/front-office': '' } },
+  '/servicos/front-office': {
+    ...servico(8081),
+    pathRewrite: { '^/servicos/front-office': '' },
+    bypass: semPreparacao,
+  },
   '/servicos/middle-office': { ...servico(8082), pathRewrite: { '^/servicos/middle-office': '' } },
   '/servicos/matching-engine': {
     ...servico(8083),

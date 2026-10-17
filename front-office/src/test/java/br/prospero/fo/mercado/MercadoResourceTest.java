@@ -115,7 +115,8 @@ class MercadoResourceTest {
         given().auth().oauth2(leitura()).queryParam("namespace", a.toString()).when().get("/api/v1/ativos/BETA3/livro")
                 .then().body("estadoLivro", equalTo("VAZIO")).body("revisao", equalTo(2));
         given().auth().oauth2(leitura()).queryParam("namespace", b.toString()).when().get("/api/v1/ativos/BETA3/livro")
-                .then().body("estadoLivro", equalTo("SEM_DADOS")).body("revisao", nullValue());
+                .then().body("estadoLivro", equalTo("SEM_DADOS")).body("revisao", nullValue())
+                .body("compra", nullValue()).body("venda", nullValue()).body("origem", nullValue());
         for (int i = 0; i < 2; i++) {
             given().auth().oauth2(preparo()).when().delete("/api/v1/preparacoes-mercado/" + a).then().statusCode(204);
         }
@@ -202,6 +203,56 @@ class MercadoResourceTest {
         given().auth().oauth2(leitura()).contentType(ContentType.JSON).body(snapshotCompleto())
                 .when().put("/api/v1/preparacoes-mercado/" + UUID.randomUUID() + "/ativos/ALFA3").then().statusCode(403);
         given().auth().oauth2(leitura()).when().delete("/api/v1/preparacoes-mercado/" + UUID.randomUUID()).then().statusCode(403);
+    }
+
+    @Test
+    void recusaCoercoesSilenciosasDeTipo() {
+        UUID ns = UUID.randomUUID();
+        for (String corpo : new String[]{
+                "{\"sessao\":\"" + HOJE + "\",\"negocios\":[],\"ofertas\":[{\"lado\":\"VENDA\",\"preco\":\"10.10\",\"quantidade\":1.5}]}",
+                "{\"sessao\":\"" + HOJE + "\",\"negocios\":[],\"ofertas\":[{\"lado\":\"VENDA\",\"preco\":\"10.10\",\"quantidade\":\"100\"}]}",
+                "{\"sessao\":\"" + HOJE + "\",\"negocios\":[],\"ofertas\":[{\"lado\":\"VENDA\",\"preco\":10.5,\"quantidade\":1}]}",
+                "{\"sessao\":\"" + HOJE + "\",\"negocios\":[{\"preco\":\"10.10\",\"quantidade\":1.0}],\"ofertas\":[]}",
+                "{\"sessao\":"}) {
+            given().auth().oauth2(preparo()).contentType(ContentType.JSON).body(corpo)
+                    .when().put("/api/v1/preparacoes-mercado/" + ns + "/ativos/ALFA3").then()
+                    .statusCode(400).contentType("application/problem+json").body("codigo", equalTo("JSON_INVALIDO"));
+        }
+        given().auth().oauth2(leitura()).queryParam("namespace", ns.toString()).when().get("/api/v1/ativos/ALFA3/livro")
+                .then().body("estadoLivro", equalTo("SEM_DADOS"));
+    }
+
+    @Test
+    void problemDetailsTrazOcorrenciaCorrelacaoEAutenticacao() {
+        given().header("X-Request-ID", "req-12345678").when().get("/api/v1/ativos").then()
+                .statusCode(401).contentType("application/problem+json").header("WWW-Authenticate", "Bearer")
+                .body("codigo", equalTo("AUTENTICACAO_INVALIDA")).body("instance", equalTo("/api/v1/ativos"))
+                .body("correlacao", equalTo("req-12345678"));
+        given().auth().oauth2(preparo()).when().get("/api/v1/ativos").then()
+                .statusCode(403).contentType("application/problem+json").body("codigo", equalTo("PERMISSAO_INSUFICIENTE"));
+        given().auth().oauth2(leitura()).header("X-Request-ID", "<script>").queryParam("namespace", "x")
+                .when().get("/api/v1/ativos").then().statusCode(400)
+                .body("correlacao", org.hamcrest.Matchers.matchesPattern("[0-9a-f-]{36}"));
+        given().auth().oauth2(preparo()).contentType(ContentType.TEXT).body("x")
+                .when().put("/api/v1/preparacoes-mercado/" + UUID.randomUUID() + "/ativos/ALFA3").then()
+                .statusCode(415).contentType("application/problem+json");
+    }
+
+    @Test
+    void sessaoAnteriorFicaDefasadaEExcessoDeOfertasE422() {
+        UUID ns = UUID.randomUUID();
+        preparar(ns, "ALFA3", Map.of("sessao", "2020-01-02", "ofertas", java.util.List.of(), "negocios", java.util.List.of()), 200);
+        given().auth().oauth2(leitura()).queryParam("namespace", ns.toString()).when().get("/api/v1/ativos/ALFA3/livro")
+                .then().body("defasado", equalTo(true)).body("sessao", equalTo("2020-01-02"))
+                .body("origem", equalTo("PREPARACAO_SINTETICA"));
+        java.util.List<Map<String, Object>> muitas = new java.util.ArrayList<>();
+        for (int i = 0; i < 201; i++) {
+            muitas.add(Map.of("lado", i % 2 == 0 ? "COMPRA" : "VENDA", "preco", i % 2 == 0 ? "9.00" : "11.00", "quantidade", 1));
+        }
+        given().auth().oauth2(preparo()).contentType(ContentType.JSON)
+                .body(Map.of("sessao", HOJE, "ofertas", muitas, "negocios", java.util.List.of()))
+                .when().put("/api/v1/preparacoes-mercado/" + ns + "/ativos/ALFA3").then()
+                .statusCode(422).body("codigo", equalTo("LIMITE_EXCEDIDO"));
     }
 
     @Test

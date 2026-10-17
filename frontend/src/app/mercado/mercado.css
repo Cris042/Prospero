@@ -93,6 +93,10 @@ td:first-child {
   display: block;
   font-size: 12px;
 }
+.estado-livro {
+  font-size: 12px;
+  color: #54665e;
+}
 .alerta {
   padding: 12px 16px;
   border-radius: 8px;

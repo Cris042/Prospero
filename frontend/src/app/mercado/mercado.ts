@@ -12,6 +12,7 @@ import { catchError, finalize, of, Subject, switchMap, tap } from 'rxjs';
 import {
   AtivoResumo,
   EstadoLivro,
+  formatarData,
   formatarDecimal,
   formatarInteiro,
   formatarVariacao,
@@ -50,6 +51,7 @@ export class Mercado implements OnInit {
   readonly decimal = formatarDecimal;
   readonly variacao = formatarVariacao;
   readonly inteiro = formatarInteiro;
+  readonly data = formatarData;
   readonly estado = (e: EstadoLivro) => DESCRICAO_ESTADO[e];
 
   ngOnInit(): void {

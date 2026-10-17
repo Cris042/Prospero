@@ -30,6 +30,7 @@
           <th scope="col">Spread</th>
           <th scope="col">Volume (qtd.)</th>
           <th scope="col">Volume (R$)</th>
+          <th scope="col">Livro</th>
         </tr>
       </thead>
       <tbody>
@@ -55,10 +56,11 @@
             <td>{{ decimal(ativo.spread) }}</td>
             <td>{{ inteiro(ativo.volumeQuantidade) }}</td>
             <td>{{ decimal(ativo.volumeFinanceiro) }}</td>
+            <td class="estado-livro">{{ estado(ativo.estadoLivro) }}</td>
           </tr>
         } @empty {
           <tr>
-            <td colspan="8">
+            <td colspan="9">
               {{ carregando() ? 'Consultando ativos…' : 'Nenhum ativo disponível.' }}
             </td>
           </tr>
@@ -72,23 +74,37 @@
   </p>
 
   @if (ativoSelecionado(); as ativo) {
-    <div class="livro" role="region" aria-labelledby="livro-titulo" aria-live="polite">
+    <div class="livro" role="region" aria-labelledby="livro-titulo">
       <header>
         <h3 id="livro-titulo">Livro de {{ ativo.ticker }}</h3>
-        <span class="selo">{{ estado(ativo.estadoLivro) }}</span>
-        @if (ativo.origem === 'PREPARACAO_SINTETICA') {
-          <span class="selo sintetico">Dados sintéticos</span>
-        }
-        @if (ativo.defasado) {
-          <span class="selo defasado">Defasado</span>
+        @if (livro(); as livro) {
+          <span class="selo">{{ estado(livro.estadoLivro) }}</span>
+          @if (livro.origem === 'PREPARACAO_SINTETICA') {
+            <span class="selo sintetico">Dados sintéticos</span>
+          }
+          @if (livro.defasado) {
+            <span class="selo defasado">Defasado</span>
+          }
+          @if (livro.sessao) {
+            <span class="selo">Sessão {{ data(livro.sessao) }} · revisão {{ livro.revisao }}</span>
+          }
         }
       </header>
+      <p class="sr-only" aria-live="polite">
+        {{
+          carregandoLivro()
+            ? 'Consultando o livro de ' + ativo.ticker
+            : erroLivro()
+              ? 'Falha ao consultar o livro de ' + ativo.ticker
+              : 'Livro de ' + ativo.ticker + ' atualizado'
+        }}
+      </p>
       @if (carregandoLivro()) {
         <p>Consultando o livro…</p>
       } @else if (erroLivro()) {
         <p class="alerta" role="alert">Não foi possível consultar o livro de {{ ativo.ticker }}.</p>
       } @else if (livro(); as livro) {
-        @if (livro.estadoLivro === 'SEM_DADOS') {
+        @if (livro.compra === null || livro.venda === null) {
           <p>Nenhum snapshot preparado para este ativo.</p>
         } @else {
           <div class="lados">
