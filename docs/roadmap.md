@@ -45,6 +45,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 - Entrega: 14 skills adaptadas, proveniência, memória local persistente e workflows de revisão, testes e segurança com comentários em pt-BR.
 - Aceite: revisão independente medium por especialidade, sem segredos publicados; CI executável em runner isolado e gratuito. A ativação exige provisionar esse runner; a máquina compartilhada com Horus não será registrada.
 - Estado: implementação integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); ativação pendente. Checks locais não equivalem a execução no GitHub. Ver [guia CI](rules.md#ci-e-runner).
+- Preparação da ativação (2026-10-17): checagem `scripts/verificar-runner-dedicado.py` e roteiro na seção CI das rules, com atestado explícito de isolamento, requisitos locais e recusa sem modificar o host. Consulta remota encontrou zero runners registrados; o Docker do host atual compartilha Horus e havia 3183 MiB de RAM disponível na inspeção, portanto ele não será registrado. Próximo passo externo: obter acesso a host/VM dedicado gratuito, validar sob usuário próprio e só então registrar e executar os três gates no GitHub. Preparação local não conclui a ativação nem altera o aceite.
 
 ### P05 — Núcleo decimal exato no middle office
 
