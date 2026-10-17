@@ -283,7 +283,7 @@ npm run build
 npm start
 ```
 
-`npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas permanece na P03. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/rules.md#memória-e-retomada).
+`npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas da P03 usa três abas e executa por API: veja [contrato, exemplo e comandos](frontend/README.md#runner-xlsx--contrato-p03). `docker compose build runner-planilhas` e `docker compose run --rm --no-deps -T runner-planilhas` executam o exemplo técnico com a stack já disponível. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/rules.md#memória-e-retomada).
 
 ## Operação local
 

@@ -72,7 +72,7 @@ Decisões: [ADR-001 backend/fronteiras](../adrs/ADR-001-arquitetura-backend.md),
 
 ## Verificação e rastreabilidade
 
-Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF10/P03 ainda planejados; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
+Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF10 ainda planejados; P03 implementada, com validação/revisão e estado de PR no roadmap; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
 
 ## HLDs dos contextos
 
@@ -87,7 +87,7 @@ Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclov
 
 Versões configuradas: Java26/Quarkus3.40.1 e PostgreSQL16 para cada MS, Kafka4.1.0/KRaft, Redis8.2.2, Angular22.2.3/TypeScript6/RxJS7/Node24 e Nginx. OpenTelemetry Collector, Loki, Prometheus, Grafana e Jaeger compõem a telemetria. O [inventário](../libs.md) registra versões exatas, resolvidas e overrides; Dockerfiles/POMs/lockfile/Compose são evidência da adoção.
 
-Angular hoje exibe identidade/saúde dos serviços, com proxy Nginx para as APIs técnicas. Boleta, livro, ordens, posição e tempo real são destino. Signals/RxJS suportam apresentação; WebSocket pelo FO ainda será definido. Runner XLSX será módulo CLI no projeto frontend, sem testar pelo DOM nem acessar bancos; parser e formato permanecem P03. UI tem testes de componentes e E2E conforme [roadmap Angular](../../frontend/ROADMAP.md).
+Angular hoje exibe identidade/saúde dos serviços, com proxy Nginx para as APIs técnicas. Boleta, livro, ordens, posição e tempo real são destino. Signals/RxJS suportam apresentação; WebSocket pelo FO ainda será definido. Runner XLSX é módulo CLI Node em `frontend/runner`, sem testar pelo DOM nem acessar bancos. Preflight yauzl conta bytes ZIP antes de ExcelJS, ambos em worker limitado; validação integral compila o plano antes do primeiro HTTP. Executor sequencial isola capturas por cenário e limita polling GET/respostas/tempo. Configuração externa confiável fornece origens e credenciais; planilhas não redirecionam nem executam código. Container opt-in `runner-planilhas`, sem dependências/portas automáticas, usuário sem privilégios e limites de memória/CPU. [Contrato/execução](../../frontend/README.md#runner-xlsx--contrato-p03); estado P03 no roadmap. Exemplo atual é técnico; carga POST/IDs/polling usam servidor descartável de testes, sem API financeira fictícia. UI tem testes de componentes e E2E conforme [roadmap Angular](../../frontend/ROADMAP.md).
 
 ## Catálogo de eventos: referência ainda não contratada
 
