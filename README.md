@@ -85,6 +85,7 @@ docker compose start
 
 - [Escopo, arquitetura e RFs/RNFs](PROJETO.md).
 - [Regras canônicas](docs/rules.md), [ADRs](docs/adrs/README.md), [inventário](docs/libs.md) e [catálogo de skills](docs/skills/README.md).
+- [Perfis de agentes](docs/agentes/README.md), incluindo o gerador C4.
 - [Roadmap global](docs/roadmap.md): uma tarefa principal por requisito funcional.
 - Roadmaps: [FO](front-office/ROADMAP.md), [MO](middle-office/ROADMAP.md), [matching](matching-engine/ROADMAP.md), [BO](back-office/ROADMAP.md) e [Angular](frontend/ROADMAP.md).
 - [Arquitetura original](prospero-arquitetura.md), preservada como histórico com as decisões substituídas identificadas.

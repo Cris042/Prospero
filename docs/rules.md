@@ -59,3 +59,7 @@ Memórias são auxiliares: nunca substituem regras, ADRs, manifests ou estado re
 `docs/libs.md` diferencia decisão de adoção: registrar nome, finalidade, versão escolhida, versão resolvida, status e fonte de verificação. Sem manifest ou imagem configurada, uma dependência permanece planejada. Evitar tags `latest` ao implementar containers.
 
 Alterações arquiteturais devem atualizar ou substituir o ADR pertinente, preservando o histórico. Documentos de proposta original precisam de aviso quando deixarem de expressar decisões vigentes. Proteja alterações preexistentes e não publique dados privados para produzir evidências.
+
+## Perfis de agentes
+
+O [catálogo de agentes](agentes/README.md) contém definições portáteis. Use c4-diagram-generator quando uma visualização C4 for necessária, com fontes explícitas e revisão independente; ele propõe texto em leitura, sem decidir arquitetura nem executar renderizadores. Adaptadores dependem do suporte e confiança do runtime, sem alterar configurações pessoais.
