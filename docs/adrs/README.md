@@ -9,6 +9,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-003](ADR-003-contratos-api.md) | Versionamento, OpenAPI, DTOs e semântica HTTP | Aceita |
 | [ADR-004](ADR-004-testes-planilha.md) | Quando criar planilhas e como testar por API | Aceita |
 | [ADR-005](ADR-005-versoes-fundacao.md) | Versões concretas e ferramentas da fundação | Implementada; revisão no PR |
+| [ADR-006](ADR-006-api-carga.md) | Linguagem e isolamento da API de carga; comparação Go/Rust | Proposta; decisão pendente |
 
 ## Relação com a proposta original
 
