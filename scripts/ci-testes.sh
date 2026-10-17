@@ -15,7 +15,7 @@ cleanup() {
     "${compose[@]}" logs --no-color --tail=80 > .ci-evidencias/compose.log 2>&1 || true
   fi
   "${compose[@]}" down --volumes --remove-orphans || true
-  for service in front-office middle-office matching-engine back-office frontend; do
+  for service in front-office middle-office matching-engine back-office frontend runner-planilhas; do
     docker image rm "prospero/$service:$PROSPERO_CI_TAG" >/dev/null 2>&1 || true
   done
   exit "$code"
@@ -34,11 +34,14 @@ for service in front-office middle-office matching-engine back-office; do
     eclipse-temurin:26.0.2.1_1-jdk-noble sh ./mvnw -B -ntp verify
  done
 npm --prefix frontend ci --no-fund --no-audit
+npm --prefix frontend run test:runner
 npm --prefix frontend test -- --watch=false
 npm --prefix frontend run build
 COMPOSE_PARALLEL_LIMIT=1 "${compose[@]}" --progress plain build
+"${compose[@]}" build runner-planilhas
 "${compose[@]}" up -d --wait --wait-timeout 240
 python3 scripts/verificar-ambiente.py --projeto "$project"
+"${compose[@]}" run --rm --no-deps -T runner-planilhas
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 (cd frontend && npm exec playwright install chromium && npm run test:e2e)
 printf '%s\n' 'Testes independentes, aplicação empacotada e observabilidade validados.'

@@ -1,5 +1,7 @@
 # Compose >=2.24.4. Usar com -p prospero-ci-<run>-<attempt>.
 services:
+  runner-planilhas:
+    image: prospero/runner-planilhas:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
   front-office:
     image: prospero/front-office:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
     ports: !override

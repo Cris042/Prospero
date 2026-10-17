@@ -17,6 +17,8 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | Angular / Node | 22.2.3 / 24.16.0 | package-lock / imagem builder |
 | TypeScript / RxJS | 6.0.3 / 7.8.2 | package-lock |
 | Vitest / Playwright | 5.0.5 / 1.64.1 | Testes de componentes / navegador |
+| ExcelJS / yauzl | 4.4.0 / 3.4.0 | Runner XLSX Node (fora do bundle); preflight ZIP limitado, package-lock |
+| UUID (override ExcelJS) | 11.1.1 | Correção GHSA-w5hq-g745-h8pq; API CommonJS v4 usada pelo ExcelJS |
 | Prettier | 3.9.10 | Formatação frontend |
 | Nginx | 1.28.0-alpine | Imagem runtime frontend |
 | PostgreSQL / Redis | 16.14-alpine / 8.2.2-alpine | Bancos isolados / projeção futura |
@@ -28,7 +30,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 
 ## Pendências
 
-Leitor XLSX será escolhido na P03. DDD, SAGA e Object Calisthenics são decisões de projeto, não bibliotecas instaladas. Kafka e Redis preparados na fundação não significam regras financeiras implementadas. As 16 skills e seus hashes estão no [inventário de origens](skills/origens.json).
+Runner XLSX implementado na P03, com aceite/PR no roadmap. DDD, SAGA e Object Calisthenics são decisões de projeto, não bibliotecas instaladas. Kafka e Redis preparados na fundação não significam regras financeiras implementadas. As 16 skills e seus hashes estão no [inventário de origens](skills/origens.json).
 
 ## Ambiente observado
 
@@ -37,3 +39,9 @@ Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam co
 ## Override de segurança
 
 LZ4 1.11.4 substitui 1.11.1 gerida transitivamente pelo baseline. A auditoria Trivy identificou CVE-2026-106451; o [advisory do mantenedor](https://github.com/yawkat/lz4-java/security/advisories/GHSA-mcr4-qmvw-px4g) indica correção em 1.11.4. Reavaliar e remover o override quando o BOM passar a incorporar uma versão corrigida. O scanner classificou HIGH; o mantenedor classifica LOW e condiciona a exploração ao ambiente de diretório temporário compartilhado.
+
+## Leitura XLSX
+
+ExcelJS 4.4.0 (MIT) lê/escreve o exemplo e os fixtures, conforme [documentação oficial fixada](https://github.com/exceljs/exceljs/blob/v4.4.0/README.md). A alternativa [read-excel-file](https://github.com/catamphetamine/read-excel-file) separaria leitura e geração; ExcelJS permite as duas capacidades com o mesmo modelo, ao custo de mais transitivas. O parser não executa fórmulas nem resolve links externos. [yauzl](https://github.com/thejoshwolfe/yauzl) valida entradas/tamanhos e permite contabilizar bytes realmente descomprimidos antes de ExcelJS. Limites e contrato ficam no [README frontend](../frontend/README.md#runner-xlsx--contrato-p03).
+
+O override UUID 11.1.1 mantém exportação CommonJS `v4`, único uso no ExcelJS (`cf-rule-ext-xform`); corrige [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq). Remover quando ExcelJS atualizar sua dependência. Auditoria produção executada localmente em 2026-10-17 após instalação: zero vulnerabilidades; não substitui auditorias futuras nem scan de imagens.

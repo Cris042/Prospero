@@ -1,7 +1,7 @@
 # ADR-004 — Quando criar testes por planilha
 
 - Data: 2026-10-16
-- Estado: aceita; implementação pendente
+- Estado: aceita; implementação P03 em revisão conforme roadmap
 - Decisor: usuário
 - Origem: decisão de criar runner `.xlsx` no projeto frontend, com todos os passos dos cenários via API.
 
@@ -24,7 +24,7 @@ Todo endpoint de negócio terá teste por API. A planilha cobre comportamento, n
 
 ## Execução e independência
 
-O runner será um módulo de testes dentro de `frontend/`, executável por linha de comando em container, sem navegador obrigatório e sem importação de Excel na interface nesta entrega. Não é um quinto microsserviço de negócio. Implementação e escolha da biblioteca XLSX pertencem à P03.
+O runner é implementado na P03 como módulo de testes dentro de `frontend/`, executável por linha de comando em container, sem navegador obrigatório e sem importação de Excel na interface nesta entrega. Não é um quinto microsserviço de negócio. ExcelJS e preflight ZIP yauzl foram escolhidos na P03; versões/proveniência no inventário.
 
 Cada workbook `.xlsx` deve declarar seus cenários e conter três abas:
 
@@ -32,7 +32,7 @@ Cada workbook `.xlsx` deve declarar seus cenários e conter três abas:
 - **Passos:** ordem, identificador, método, caminho, headers e corpo; referências a valores capturados de passos anteriores.
 - **Resultados:** status HTTP, headers e campos esperados, incluindo condições de conclusão assíncrona.
 
-A P03 fixará e documentará colunas e sintaxe antes de criar o parser. A planilha precisa ser capaz de definir cenários sem alterações no código do runner. Configuração externa fornece somente ambiente, credenciais e limites operacionais, não dados de negócio ocultos.
+A P03 fixou colunas, sintaxe e limites antes do parser no [contrato do frontend](../../frontend/README.md#runner-xlsx--contrato-p03). A planilha precisa ser capaz de definir cenários sem alterações no código do runner. Configuração externa fornece somente ambiente, credenciais e limites operacionais, não dados de negócio ocultos.
 
 Carga, execução, consultas e eventual limpeza usam exclusivamente APIs. Proibidos SQL, consultas a Redis ou publicação direta no Kafka pelo runner. Não usar endpoints de teste que burlem invariantes ou um endpoint genérico para executar código/SQL. APIs locais de preparação, se necessárias, devem ter finalidade explícita, validação, documentação e isolamento do perfil de teste.
 

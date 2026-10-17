@@ -376,6 +376,30 @@ services:
       options:
         max-size: 5m
         max-file: '2'
+  runner-planilhas:
+    image: prospero/runner-planilhas:0.1.0
+    profiles:
+    - testes
+    build:
+      context: ./frontend
+      dockerfile: runner/Dockerfile
+    networks:
+    - web
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+    - /tmp:size=16m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
   frontend:
     image: prospero/frontend:0.1.0
     build:

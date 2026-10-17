@@ -1,0 +1,8 @@
+{
+  "servicos": {
+    "front-office": { "origem": "http://front-office:8080" },
+    "middle-office": { "origem": "http://middle-office:8080" },
+    "matching-engine": { "origem": "http://matching-engine:8080" },
+    "back-office": { "origem": "http://back-office:8080" }
+  }
+}
