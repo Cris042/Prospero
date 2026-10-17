@@ -35,4 +35,4 @@ Revisão, testes e segurança usam três agentes distintos com esforço **medium
 
 O ai-memory é uma ferramenta separada, integrada ao fluxo para recuperar contexto e registrar decisões operacionais/handoffs. Seu uso não substitui documentação vigente nem comprova execução de testes. [Origens e checksums](../../docs/skills/origens.json) permitem conferir a proveniência; atualizações exigem revisão explícita.
 
-O [guia documental](../../docs/documentacao.md) e o [playbook único](../../docs/playbook-desenvolvimento.md) orientam escolha proporcional de documentos e diagnóstico.
+O [guia documental](../../docs/rules.md#documentação-e-aderência) e o [playbook único](../../docs/playbook-desenvolvimento.md) orientam escolha proporcional de documentos e diagnóstico.

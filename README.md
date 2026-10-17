@@ -4,7 +4,7 @@ Simulador local de mercado financeiro com cinco ações fictícias, livro de ofe
 
 ## Estado atual
 
-A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais. **Negociação, risco e liquidação ainda não foram implementados.** A evidência de execução desta etapa está no [resumo P02](docs/entregas/P02.md).
+A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais. **Negociação, risco e liquidação ainda não foram implementados.** Estado e PRs de entrega estão no [roadmap](docs/roadmap.md).
 
 ## Arquitetura e estrutura
 
@@ -29,10 +29,10 @@ flowchart TB
     R --> UI["frontend/ — Angular; runner XLSX na P03"]
     R --> INF["infra/ — telemetria e memória local"]
     R --> S["scripts/ — operação e verificações"]
-    R --> D["docs/ — PRD, HLDs, ADRs e evidências"]
+    R --> D["docs/ — PRD, HLDs, ADRs, regras e playbook"]
 ```
 
-A [comparação com o PDF original](docs/evidencias/arquitetura-pdf-aderencia.md) explica o que foi preservado, as substituições aceitas e os detalhes documentais corrigidos.
+As [decisões frente à proposta original](docs/adrs/README.md) explicam as substituições aceitas; PRD/HLDs preservam os requisitos e o desenho vigentes.
 
 ## Subir o ambiente
 
@@ -96,7 +96,7 @@ npm run build
 npm start
 ```
 
-`npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas permanece na P03. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/memoria.md).
+`npm start` usa proxy para as APIs locais nas portas 8081–8084. A validação estática complementar roda com `python3 scripts/verificar-estrutura.py` na raiz. O runner de planilhas permanece na P03. O ai-memory já está instalado; veja [configuração e ativação dos hooks](docs/rules.md#memória-e-retomada).
 
 ## Operação local
 
@@ -118,4 +118,4 @@ docker compose start
 - Roadmaps: [FO](front-office/ROADMAP.md), [MO](middle-office/ROADMAP.md), [matching](matching-engine/ROADMAP.md), [BO](back-office/ROADMAP.md) e [Angular](frontend/ROADMAP.md).
 - [HLD do ecossistema e dos microsserviços](docs/hlds/README.md).
 
-Cada tarefa exige PR com alterações, motivos, trade-offs e validação. Repositório: [mclovin137/Prospero](https://github.com/mclovin137/Prospero). Veja [CI e runner dedicado](docs/ci.md); resumos locais não equivalem a PR aberto.
+Cada tarefa exige PR com alterações, motivos, trade-offs e validação. Repositório: [mclovin137/Prospero](https://github.com/mclovin137/Prospero). Veja [CI e runner dedicado](docs/rules.md#ci-e-runner); resumos locais não equivalem a PR aberto.

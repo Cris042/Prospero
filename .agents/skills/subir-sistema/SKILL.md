@@ -44,6 +44,6 @@ O smoke testa dependências e observabilidade reais. Quando houver mudança de i
 
 Não executar `down -v`, `system prune`, `volume prune`, remoção de imagens/containers antigos ou reset de bancos como parte normal da subida. Operações destrutivas exigem pedido explícito, escopo exato e preservação de dados quando aplicável.
 
-O ai-memory é um serviço independente da aplicação; consultar o [guia de memória](../../../docs/memoria.md) para sua operação. Não reiniciar ou limpar a memória para corrigir o mercado simulado.
+O ai-memory é um serviço independente da aplicação; consultar o [guia de memória](../../../docs/rules.md#memória-e-retomada) para sua operação. Não reiniciar ou limpar a memória para corrigir o mercado simulado.
 
 Ao concluir, registrar no ai-memory comandos, versões, falhas/correções, resultado real da verificação e próximo passo. Atualizar o status da tarefa no roadmap quando aplicável. Informar URLs locais, componentes prontos e limitações; não declarar negociação ou metas não funcionais ainda não implementadas como aprovadas.

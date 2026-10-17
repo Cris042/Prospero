@@ -10,7 +10,7 @@ A P05 adiciona apenas conversão decimal técnica pura no MO, sem endpoint/regra
 
 ## Arquitetura
 
-O [catálogo C4](../c4/README.md) separa contexto de produto planejado, containers da fundação configurada e componentes reais. A [comparação com o PDF](../evidencias/arquitetura-pdf-aderencia.md) registra diferenças e rastreabilidade.
+O [catálogo C4](../c4/README.md) separa contexto de produto planejado, containers da fundação configurada e componentes reais. O [índice de ADRs](../adrs/README.md) registra as substituições frente à proposta original.
 
 ```mermaid
 flowchart LR
@@ -77,13 +77,13 @@ Ambiente de estudo, sem dados/operações financeiras reais. Portas publicadas e
 
 Diferentemente da centralização dos três sinais no Collector proposta no PDF (§14), a configuração vigente usa coleta direta de métricas pelo Prometheus. Prometheus coleta métricas das quatro aplicações; OTel envia traces/logs para Jaeger/Loki; Grafana integra fontes. O painel atual é técnico. Traces Jaeger usam memória e não persistem após reinício; demais componentes persistentes usam volumes conforme Compose. Métricas de host/container/DB/Kafka detalhadas ainda exigem coletores e não podem aparecer como zero por ausência de fonte.
 
-A [P06](../planos/P06-carga-observabilidade.md) planeja gerador/controlador local limitado e dashboards técnicos, complementares aos quatro de negócio previstos na V01. Sem carga financeira medida. Metas RNF04 permanecem no PRD e exigem hardware, carga, janela e amostras documentados. Labels de métricas devem ter cardinalidade limitada; correlação detalhada fica em logs/traces.
+A [P06](../roadmap.md) planeja gerador/controlador local limitado e dashboards técnicos, complementares aos quatro de negócio previstos na V01. Sem carga financeira medida. Metas RNF04 permanecem no PRD e exigem hardware, carga, janela e amostras documentados. Labels de métricas devem ter cardinalidade limitada; correlação detalhada fica em logs/traces.
 
 ## Escalabilidade, resiliência e implantação
 
 Inicialmente uma stack Compose local; nenhuma promessa de alta disponibilidade, cluster ou escala horizontal validada. ME terá escritor único por ativo e replay determinístico. Integração assíncrona exige tratar atraso e reentrega; não prometer exactly-once fim a fim ou conclusão sem participantes.
 
-Builds independentes por serviço; JDK26 e versões fixadas no ADR-005. Comandos reais e portas no [README](../../README.md), operação na skill subir-sistema e CI no [guia](../ci.md). CI remota depende de runner dedicado; checks locais não comprovam execução GitHub. Flyway evolui cada banco sem acesso a tabelas de outro serviço. Não executar limpeza destrutiva de volumes para iniciar/validar.
+Builds independentes por serviço; JDK26 e versões fixadas no ADR-005. Comandos reais e portas no [README](../../README.md), operação na skill subir-sistema e CI no [guia](../rules.md#ci-e-runner). CI remota depende de runner dedicado; checks locais não comprovam execução GitHub. Flyway evolui cada banco sem acesso a tabelas de outro serviço. Não executar limpeza destrutiva de volumes para iniciar/validar.
 
 ## Riscos, trade-offs e decisões
 
@@ -98,7 +98,7 @@ Decisões: [ADR-001 backend/fronteiras](../adrs/ADR-001-arquitetura-backend.md),
 
 ## Verificação e rastreabilidade
 
-Fundação: P02 e suas [evidências](../evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF10/P03 ainda planejados; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
+Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF10/P03 ainda planejados; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
 
 ## HLDs dos contextos
 
@@ -132,4 +132,4 @@ Banco por serviço, volumes e Kafka com retenção não comprovam backup/restaur
 
 Estudos úteis: liquidez/impacto/slippage, estruturas ordenadas/FIFO, concorrência e determinismo, consistência/transações, DDD e telemetria. Melhorias históricas como JMH/async-profiler, ZGC, HMAC/mTLS/Argon2, arquivamento frio, réplicas ou jobs especializados ficam como alternativas futuras, sem adoção ou custos implícitos. Desenho de segurança/capacidade adicional só quando necessário pelo guia documental.
 
-A [matriz de migração e aderência](../evidencias/P08-aderencia.md) registra a substituição dos dois documentos anteriores e o destino de seu conteúdo. A origem histórica permanece no Git; este conjunto de HLDs e o PRD passam a ser referências vigentes.
+A documentação histórica permanece no Git e nos PRs ligados pelo roadmap; PRD, HLDs e ADRs são as referências vigentes. Não duplicar relatórios no checkout.

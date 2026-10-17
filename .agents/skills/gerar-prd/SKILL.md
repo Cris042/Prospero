@@ -5,7 +5,7 @@ description: Criar ou atualizar requisitos de produto, escopo e aceite de funcio
 
 # Gerar PRD do Próspero
 
-Use para nova funcionalidade relevante, fluxo ou mudança de regra de negócio. Comece pelo [guia documental](../../../docs/documentacao.md), regras, roadmap, PRD existente, ADRs pertinentes e memória no escopo do projeto, confrontando com código atual.
+Use para nova funcionalidade relevante, fluxo ou mudança de regra de negócio. Comece pelo [guia documental](../../../docs/rules.md#documentação-e-aderência), regras, roadmap, PRD existente, ADRs pertinentes e memória no escopo do projeto, confrontando com código atual.
 
 Reaproveite respostas e requisitos já fornecidos. Pergunte somente por lacunas que bloqueiam o comportamento ou aceite; decisões novas de negócio voltam ao usuário. Não imponha entrevista por etapas nem confirmações repetidas. Identifique hipótese, pendência e estado real, sem inventar aprovação ou metas.
 

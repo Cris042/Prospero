@@ -39,7 +39,7 @@ Estão fora do escopo dados reais, múltiplas bolsas, FIX/UMDF, leilões, circui
 | Universo e sessões | Cinco ativos fictícios; sem múltiplas bolsas, leilões ou circuit breaker de bolsa. |
 | Custos e protocolos | Sem corretagem, emolumentos, impostos, FIX ou UMDF. |
 
-A comparação com a proposta de origem está na [análise do PDF](../evidencias/arquitetura-pdf-aderencia.md). Calendário, bootstrap de preços e regras ainda abertas permanecem nas tarefas pertinentes.
+As substituições frente à proposta de origem estão no [índice de ADRs](../adrs/README.md). Calendário, bootstrap de preços e regras ainda abertas permanecem nas tarefas pertinentes.
 
 ## Requisitos funcionais
 

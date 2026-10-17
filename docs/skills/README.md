@@ -32,7 +32,7 @@ O agente de revisão verifica comportamento/contrato e documentação; o de test
 ## Fluxo por tarefa
 
 1. Invocar `refinar-task` em cada nova tarefa: consultar regras, roadmap, ai-memory e ADRs; obter os cinco pareceres independentes e consolidar critérios antes da implementação. Auditar a issue se essa for a origem.
-2. Aplicar o [guia documental](../documentacao.md): revisar sistema, PRD/requisitos, HLD/desenho e ADRs; registrar aderência e tamanho proporcional da documentação.
+2. Aplicar o [guia documental](../rules.md#documentação-e-aderência): revisar sistema, PRD/requisitos, HLD/desenho e ADRs; registrar aderência e tamanho proporcional da documentação.
 3. Definir critérios de aceite e caminho de evidência com `verification-planning`; usar `worktrees` somente se necessário e possível.
 4. Resolver decisões arquiteturais com `gerar-adr` e pesquisas com `deep-research` quando esse for o pedido. Não criar documentos por catálogo.
 5. Implementar com TDD e `criar-migration` quando houver persistência alterada. Um cenário de planilha segue o ADR-004; testes internos continuam complementares.
@@ -51,6 +51,6 @@ Migrações usam Flyway sem Undo pago: mudanças versionadas, recuperação por 
 
 ## Descoberta e instalação
 
-O catálogo e os caminhos explícitos permitem leitura por agentes mesmo antes de a ferramenta atualizar sua descoberta automática; novas skills podem exigir a próxima sessão/turno para aparecer na interface. O ai-memory é uma ferramenta distinta, instalada e validada na P04. A captura automática exige confiança manual nos hooks e reinício do Codex; veja [guia da memória](../memoria.md).
+O catálogo e os caminhos explícitos permitem leitura por agentes mesmo antes de a ferramenta atualizar sua descoberta automática; novas skills podem exigir a próxima sessão/turno para aparecer na interface. O ai-memory é uma ferramenta distinta, instalada e validada na P04. A captura automática exige confiança manual nos hooks e reinício do Codex; veja [guia da memória](../rules.md#memória-e-retomada).
 
-O [guia documental](../documentacao.md) e o [playbook único](../playbook-desenvolvimento.md) orientam escolha proporcional de documentos e diagnóstico.
+O [guia documental](../rules.md#documentação-e-aderência) e o [playbook único](../playbook-desenvolvimento.md) orientam escolha proporcional de documentos e diagnóstico.

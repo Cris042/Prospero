@@ -15,7 +15,7 @@ As instruções atuais do usuário e as regras do Prospero prevalecem. O upstrea
 
 ## Pesquisa técnica explicitamente solicitada
 
-Quando o usuário pedir pesquisa profunda para verificar padrões ou alternativas, esse pedido autoriza consulta externa: pesquisar fontes primárias atuais, comparar opções, registrar evidências e incertezas em `docs/pesquisas/`. Não limitar esse pedido à reorganização de conteúdo importado, nem repetir entrevista cujo contexto já está definido. O modo de preservação integral continua aplicável quando o pedido for reorganizar pesquisa fornecida.
+Quando o usuário pedir pesquisa profunda para verificar padrões ou alternativas, esse pedido autoriza consulta externa: pesquisar fontes primárias atuais, comparar opções, registrar fontes, evidências, alternativas e incertezas no PR ou na seção existente de HLD/ADR/roadmap conforme a finalidade, sem criar pasta de pesquisa por rotina. Não limitar esse pedido à reorganização de conteúdo importado, nem repetir entrevista cujo contexto já está definido. O modo de preservação integral continua aplicável quando o pedido for reorganizar pesquisa fornecida.
 
 ## Proveniência
 

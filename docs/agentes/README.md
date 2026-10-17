@@ -8,6 +8,6 @@ A definição Markdown é canônica e portátil. O adaptador Codex declara esfor
 
 Se o runtime não expuser papéis nomeados, delegar a um agente separado medium, fornecendo o caminho do perfil e fontes mínimas. Exemplo de tarefa: “Leia docs/agentes/c4-diagram-generator.md; proponha C2 do estado implementado usando docs/hlds/HLD-001-arquitetura-prospero.md, ADR-001 e docker-compose.yml; devolva texto, fontes e lacunas, sem gravar.”
 
-O orquestrador escreve as propostas revisadas. Revisão, testes e segurança mantêm agentes próprios conforme [regras](../rules.md). O perfil não substitui PRD/HLD/ADR nem autoriza implementação, merge ou renderização. Evidência de configuração e exercício ficam em [P07-testes](../evidencias/P07-testes.md).
+O orquestrador escreve as propostas revisadas. Revisão, testes e segurança mantêm agentes próprios conforme [regras](../rules.md). O perfil não substitui PRD/HLD/ADR nem autoriza implementação, merge ou renderização. Evidência de configuração e exercício ficam em [P07-testes — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P07-testes.md).
 
 Compatibilidade verificada: Codex CLI 0.163.0, configuração reconhecida por `app-server --strict-config` e `config/read`. Esta API da sessão não expõe `agent_type`: o exercício usou delegação com o perfil canônico. A leitura da configuração não comprova spawn especializado nem aplicação de sandbox por papel. Consulte as evidências antes de atualizar a versão/formato.
