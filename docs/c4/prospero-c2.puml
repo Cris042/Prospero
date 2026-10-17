@@ -1,0 +1,43 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam backgroundColor white
+title C2 — Próspero: fundação configurada no repositório
+actor "Usuário local" as u <<Pessoa>>
+rectangle "Próspero — Docker Compose local" {
+ rectangle "Frontend\nNginx + arquivos Angular\nAngular executa no navegador" as w <<Container>>
+ rectangle "Front office\nQuarkus / Java 26" as fo <<Container>>
+ rectangle "Middle office\nQuarkus / Java 26" as mo <<Container>>
+ rectangle "Matching engine\nQuarkus / Java 26" as me <<Container>>
+ rectangle "Back office\nQuarkus / Java 26" as bo <<Container>>
+ database "PostgreSQL FO\nprospero_fo" as df <<Container>>
+ database "PostgreSQL MO\nprospero_mo" as dm <<Container>>
+ database "PostgreSQL ME\nprospero_me" as de <<Container>>
+ database "PostgreSQL BO\nprospero_bo" as db <<Container>>
+ queue "Kafka KRaft\nBroker/controller único; RF1" as k <<Container>>
+ database "Redis\nSem projeção de cotações implementada" as re <<Container>>
+
+}
+u --> w : HTTP
+w --> fo : Proxy HTTP
+w --> mo : Proxy HTTP
+w --> me : Proxy HTTP
+w --> bo : Proxy HTTP
+fo --> df : JDBC / Flyway / saúde
+mo --> dm : JDBC / Flyway / saúde
+me --> de : JDBC / Flyway / saúde
+bo --> db : JDBC / Flyway / saúde
+fo --> k : Prontidão
+mo --> k : Prontidão
+me --> k : Prontidão
+bo --> k : Prontidão
+legend bottom
+Notação C4 local. Container = unidade de aplicação ou armazenamento.
+Setas representam configuração técnica, não fluxo de negociação.
+Quatro bancos independentes; migrações sem tabelas financeiras.
+Redis sem consumidor financeiro; SAGA, outbox e livro planejados.
+Telemetria em recorte C2 próprio: prospero-telemetria-c2.
+Não comprova processos em execução nem metas medidas.
+endlegend
+@enduml

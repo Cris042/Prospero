@@ -1,0 +1,26 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam backgroundColor white
+title C3 — Front office: identidade técnica implementada
+rectangle "Nginx do frontend" as n <<Container externo ao recorte>>
+rectangle "Front office — Quarkus / Java 26" {
+ component "SistemaResource\nsistema.rest\nGET /api/v1/sistema" as r <<Componente REST>>
+ component "ConsultarSistemaActor\nsistema.actor" as a <<Componente de aplicação>>
+ artifact "SistemaResponseDTO\nsistema.dto\nservico, versao, etapa" as d <<Contrato>>
+}
+n --> r : Proxy HTTP /servicos/front-office/*
+r --> a : consultar()
+a ..> d : Cria identidade com etapa FUNDAÇÃO
+r ..> d : Resposta JSON / HTTP 200\nCache-Control: no-store
+note bottom of a
+Nome e versão injetados via ConfigProperty.
+Este caso de uso não consulta banco ou Kafka.
+end note
+legend bottom
+Notação C4 com estereótipos locais. DTO é contrato, não componente executável.
+Linha contínua: chamada. Linha tracejada: uso do contrato.
+Identidade não comprova prontidão de negociação.
+endlegend
+@enduml

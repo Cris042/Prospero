@@ -23,7 +23,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | OpenTelemetry SDK / Collector | 1.62.0 / 0.162.0 | Extensão Quarkus / Collector contrib |
 | Micrometer / Prometheus | 1.17.1 / v3.15.0 | Métricas |
 | Loki / Grafana / Jaeger | 3.7.8 / 13.2.4 / 2.22.0 | Logs, dashboards e traces |
-| ai-memory | 3.1.0 | CLI e container separado; [guia](memoria.md) |
+| ai-memory | 3.1.0 | CLI e container separado; [guia](rules.md#memória-e-retomada) |
 | Gitleaks / Trivy | 8.30.1 / 0.76.0 | CI; imagens fixadas por digest |
 
 ## Pendências
@@ -32,7 +32,7 @@ Leitor XLSX será escolhido na P03. DDD, SAGA e Object Calisthenics são decisõ
 
 ## Ambiente observado
 
-Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam container. Node local 24.16.0. CI requer Compose compatível com `!override` e runner dedicado; consulte [CI](ci.md).
+Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam container. Node local 24.16.0. CI requer Compose compatível com `!override` e runner dedicado; consulte [CI](rules.md#ci-e-runner).
 
 ## Override de segurança
 

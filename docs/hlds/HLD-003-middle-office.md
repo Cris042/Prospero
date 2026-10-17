@@ -20,6 +20,12 @@ Organização por funcionalidade sob `br.prospero.mo`: REST → Actor; Actor coo
 
 `src/main/resources/db/migration/V1__identificar_schema.sql` só identifica o schema. Flyway mantém histórico, sem tabelas financeiras. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Processo pode iniciar sem outro MS Java, mas depende de sua infraestrutura para ficar pronto; não confundir autonomia com conclusão de negócio sem participantes.
 
+## Proveniência e limites de reuso
+
+A P05 adapta conceitos/casos do [MinervaFinancas no commit 34fc98a](https://github.com/Cris042/MinervaFinancas/tree/34fc98a6ac47f2ffc2bf23f055a3fd9ac15c7530), sem licença explícita encontrada: implementação autoral, sem copiar/redistribuir arquivos; atribuição não substitui licença. O núcleo técnico MO valida também no construtor, limita precisão/escala antes da expansão decimal, preserva zeros finais sem perda e rejeita fração não representável/overflow, sem arredondamento. Não adota as escalas financeiras 2/2/8 do doador, biblioteca compartilhada ou nova dependência.
+
+Saldo de caixa não equivale a reserva intradiária; transação monolítica e serialização SQLite não comprovam concorrência PostgreSQL nem coordenação entre nossos bancos. O doador não fornece SAGA/outbox/reservas adequadas ao fluxo. Short/PnL e calendário dependem das RF07/RF08, conforme HLD-005; P05 não conclui RF03/RF04.
+
 ## Fluxo futuro e dados
 
 Comando recebido por evento → validar parâmetros e limites → transação local verifica/atualiza recurso e registra reserva com confirmação recuperável → publica resultado. Nenhuma leitura síncrona de conta/posição em banco alheio. Fonte, atualização e ordenação da posição usada no risco precisam de contrato por evento.
@@ -32,7 +38,7 @@ Definir atomicidade entre reserva e evento de confirmação, deduplicação e co
 
 Reservas de Market/Stop/Stop Limit/short, proteção de posição/exposição e limite por ordem são pendentes. Timeout não libera automaticamente recursos quando execução ainda pode ocorrer. Separar disponível/reservado/liquidado; efeitos BO chegam por eventos idempotentes.
 
-Pendentes também lote/tick, túnel ±10% para ordem sem limite, referência ausente/defasada e calendário de negociação. Testar limites, concorrência, reentrega e compensação; núcleo decimal tem evidência [P05](../evidencias/P05-testes.md). [Roadmap MO](../../middle-office/ROADMAP.md); RNF01/RNF05/RNF06 e operação RNF07/RNF08.
+Pendentes também lote/tick, túnel ±10% para ordem sem limite, referência ausente/defasada e calendário de negociação. Testar limites, concorrência, reentrega e compensação; núcleo decimal tem evidência [P05 — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P05-testes.md). [Roadmap MO](../../middle-office/ROADMAP.md); RNF01/RNF05/RNF06 e operação RNF07/RNF08.
 
 ## Modelo de dados de referência
 

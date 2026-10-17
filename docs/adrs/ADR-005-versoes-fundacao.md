@@ -18,4 +18,4 @@ Manter Angular 18 conservaria a versão histórica, mas exigiria uma cadeia anti
 
 ## Validação e revisão
 
-Os quatro serviços compilaram e passaram testes com Java 26; Angular passou build, testes e navegação. Consulte [evidências P02](../evidencias/P02-testes.md). Reavaliar ao mudar Java/Quarkus/Angular, ao surgir incompatibilidade ou vulnerabilidade. Não equivale à aprovação de metas de negócio ou desempenho.
+Os quatro serviços compilaram e passaram testes com Java 26; Angular passou build, testes e navegação. Consulte [evidências P02 — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Reavaliar ao mudar Java/Quarkus/Angular, ao surgir incompatibilidade ou vulnerabilidade. Não equivale à aprovação de metas de negócio ou desempenho.

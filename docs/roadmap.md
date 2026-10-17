@@ -35,38 +35,47 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ### P04 — Skills, memória e CI
 
-- Dependências: P01 e P02; [refinamento](refinamentos/P04-skills-ci.md).
+- Dependências: P01 e P02; refinamento e evidências preservados no PR #2/histórico Git.
 - Entrega: 14 skills adaptadas, proveniência, memória local persistente e workflows de revisão, testes e segurança com comentários em pt-BR.
 - Aceite: revisão independente medium por especialidade, sem segredos publicados; CI executável em runner isolado e gratuito. A ativação exige provisionar esse runner; a máquina compartilhada com Horus não será registrada.
-- Estado: implementação integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); ativação pendente. Checks locais não equivalem a execução no GitHub. Ver [guia CI](ci.md).
+- Estado: implementação integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); ativação pendente. Checks locais não equivalem a execução no GitHub. Ver [guia CI](rules.md#ci-e-runner).
 
 ### P05 — Núcleo decimal exato no middle office
 
-- Dependência: P02; [refinamento](refinamentos/P05-P07-reuso-c4.md).
+- Dependência: P02; refinamento preservado no PR #3/histórico Git.
 - Estado: concluída — [PR #3](https://github.com/mclovin137/Prospero/pull/3) integrado em 2026-10-17.
-- Entrega: representação técnica escalada, conversão exata com política de sinal explícita e testes de limites; [análise e proveniência](pesquisas/reuso-minerva-financas.md).
+- Entrega: representação técnica escalada autoral, conversão exata com sinal explícito e testes de limites. Proveniência e limites de reuso no [HLD do MO](hlds/HLD-003-middle-office.md).
 - Aceite: sem arredondamento silencioso, overflow e expoentes extremos recusados, domínio puro e build MO independente. Sem nova API; dispensa XLSX conforme ADR-004.
 - Limite: tipos financeiros, escalas de moeda/tick, risco, reservas e cálculo de posições permanecem nas RF03–RF08.
 
 ### P06 — API de carga progressiva e observabilidade
 
 - Dependências: P02; cenários financeiros dependem de P03 e RFs correspondentes.
-- Estado: planejada. [Escopo e critérios](planos/P06-carga-observabilidade.md); refinar antes de implementar.
+- Estado: planejada; refinar antes de implementar. Escopo ativo consolidado abaixo, sem controlador/gerador novo implementado.
 - Entrega: controle local de execuções por API, rampas limitadas, cancelamento, gerador isolado e dashboards Grafana com fontes reais.
 - Aceite: carga oferecida versus atingida, erros/timeouts/descartes e latência reproduzíveis; recursos do gerador e sistema separados; filas/eventos observáveis quando implementados; limites e isolamento preservados.
 - Definir: localização do controlador, ferramenta geradora, orçamento, proteção das APIs e coletores. Não cria automaticamente um quinto serviço de negócio.
 - Replicação/consenso: N/A na topologia atual; quatro bancos independentes não são réplicas. Topologia replicada exige decisão futura e orçamento local.
 
+- API `/api/v1`, DTOs/OpenAPI para iniciar, consultar e cancelar execução; `202`/Location é candidato conforme ADR-003, não conclusão. Estados candidatos: aguardando, executando, concluída, cancelada e falha. Definir contrato e localização do controle antes do código.
+- Uma execução ativa global, separada do processamento financeiro; estágios com teto de duração, VUs, RPS e concorrência. Limitar requisições, conexões, filas, tamanho de resposta e retenção. Cancelamento manual/automático e término seguro do gerador se o controlador falhar.
+- Alvos por identificador de serviço/rota permitida, sem URL, porta, comando, redirecionamento ou header arbitrário; proteger chamadas indevidas do navegador mesmo em loopback. Preparação/tráfego/limpeza só por APIs e restritos à execução, sem acesso direto a bancos/Kafka ou apagar volumes.
+- Distinguir chegada aberta (RPS) de usuários fechados (VUs); contar oferecidas/agendadas, iniciadas, concluídas, em voo, erros HTTP, timeouts, não iniciadas e descartadas, com janela e conservação das contagens. Separar transporte de resultado de negócio e espera no agendador/saturação do gerador, sem esconder atrasos.
+- Registrar hardware, aquecimento, duração, relógio, amostras, denominadores/tratamento de erros em p50/p95/p99/máximo. VUs não comprovam usuários autenticados. Preflight de RAM/CPU/disco inclui gerador/telemetria; abortar sem orçamento, sem interromper Horus nem duplicar stack para obter números.
+- Provisionar painéis técnicos de carga/HTTP, CPU/memória/GC/disco/rede/descritores/pools, filas/lag/idade outbox, logs/traces e defasagem de projeções quando existentes. Definir coletores reais antes; dado ausente não é zero. Labels limitadas a serviço/rota/método/status/fase; IDs de usuário/execução só em correlação sanitizada, com retenção limitada.
+- Etapa A: baseline técnico dos endpoints existentes, sem alegar capacidade financeira. Etapa B: cenários de negócio após RFs/P03. Dashboards técnicos complementam os quatro financeiros da V01; fontes de métricas e ferramentas ainda dependem de definição.
+
+
 ### P07 — Agente de diagramas C4
 
-- Dependência: P01; [refinamento](refinamentos/P05-P07-reuso-c4.md).
+- Dependência: P01; refinamento preservado no PR #4/histórico Git.
 - Estado: concluída — [PR #4](https://github.com/mclovin137/Prospero/pull/4) integrado em 2026-10-17 após P05.
 - Entrega: perfil portátil e adaptador de agente quando comprovadamente suportado; fontes do Próspero, esforço medium, modelo herdado, proposta sem escrita/execução.
 - Aceite: exercício real com fonte suficiente e lacunas/conflitos; não inventar arquitetura implementada nem exigir FDD ou serviços pagos.
 
 ### P08 — Documentação proporcional e playbook
 
-- Dependências: P01 e P07; [refinamento](refinamentos/P08-fluxo-documental.md).
+- Dependências: P01 e P07; refinamento preservado no PR #5/histórico Git.
 - Estado: concluída — [PR #5](https://github.com/mclovin137/Prospero/pull/5) integrado em 2026-10-17 após P07, incluindo a correção do índice em docs/README.md.
 - Entrega: guia PRD/HLD/ADR, PRD e cinco HLDs (ecossistema + quatro MS), substituição dos dois documentos anteriores, índice em docs/README.md, skills gerar-prd/gerar-hld e playbook único a partir da análise das cinco referências Minerva.
 - Aceite: revisão de aderência com evidências, requisitos preservados, documentos sem duplicação, links/hashes e exercícios independentes das skills; sem mudanças de runtime ou requisitos financeiros.
@@ -91,7 +100,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### RF03 — Validação da ordem
 
 - Dependências: RF02.
-- Entrega: validação de lote, tick, Stop Limit com limite e túnel de ±10% do preço de referência.
+- Entrega: validação de lote, tick, Stop Limit com limite e túnel de ±10% do último preço; tratar referência inicial/defasada conforme definição da RF03.
 - Definir: escalas, arredondamento/overflow, referência antes do primeiro negócio e para cotação defasada; túnel para ordens sem preço limite.
 - Aceite/testes: limites e valores imediatamente fora deles, entradas inválidas e erro síncrono/estado de rejeição assíncrona coerentes; `.xlsx` e testes puros.
 - RNF: RNF01.
@@ -115,7 +124,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### RF06 — Formação e atualização do mercado
 
 - Dependências: RF05.
-- Entrega: último preço, bid/ask e VWAP por negócio, projeção Redis e atualização da interface. Alterações de ofertas sem negócio também atualizam profundidade/bid/ask.
+- Entrega: último preço, bid/ask e VWAP do dia por negócio, projeção Redis e atualização da interface. Alterações de ofertas sem negócio também atualizam profundidade/bid/ask.
 - Definir: sessão do VWAP, atualização/expiração de cotação e bootstrap da projeção sem consulta a banco alheio.
 - Aceite/testes: negócio, inserção e cancelamento alteram seus indicadores corretos; reentrega não soma volume duas vezes; dados ausentes/defasados são distinguíveis; planilha com espera limitada.
 - RNFs: RNF01, RNF06, RNF07.
@@ -166,7 +175,15 @@ Dependências: P06 e RF01–RF10. Entregar cenários completos, carga reproduzí
 | RNF07 — Observabilidade | Trace por ordem, logs com `traceId`, métricas e quatro dashboards provisionados | P02, RF06, RF09 |
 | RNF08 — Ambiente local | Compose reproduzível para todos os componentes, volumes e instruções sem serviços pagos | P02, P03 |
 
+A V01 também entregará alertas locais orientados às metas e sintomas de negócio, com condições, janela e teste de disparo/recuperação documentados; ferramenta e limiares serão definidos com as medições, sem criar novo serviço por antecipação. GIF do fluxo e roteiro de demonstração de cinco minutos só entram no README quando houver negociação executável.
+
 Os quatro dashboards cobrirão fluxo de ordens, risco/reservas, matching/mercado e back office/liquidação. Falha de uma meta deve gerar evidência e ajuste, não mudança silenciosa do requisito. Compensações, falhas de consumidor e reinícios serão exercitados por harness de infraestrutura; planilhas continuarão usando apenas APIs.
+
+## Manutenção documental em revisão
+
+[PR #6](https://github.com/mclovin137/Prospero/pull/6), **aguardando revisão/merge**: comparação do PDF, C4, mapa no README e playbook com 60 temas/exemplos; busca por palavras com full-text PostgreSQL. A pedido do usuário, guias CI/memória/documentação foram incorporados em rules e pastas auxiliares removidas após preservar P06 e reuso nos documentos vigentes. Sem funcionalidade nova, mudança de estado das RFs ou merge autorizado.
+
+Rodada complementar prévia: brief comum de redução documental sem perder RF/RNF, contratos, segurança e operação; cinco agentes medium separados (arquitetura, QA, segurança, operação e viabilidade) recomendaram seguir com ressalvas. Critérios: migrar conteúdo ativo antes de excluir, manter histórico fixado, atualizar skills/hashes/links e conferir os 60 exemplos. Relatos/execuções finais ficam no PR e síntese na memória, sem outro arquivo de relatório. Documentação histórica, capturas e pareceres continuam no [Git antes da consolidação](https://github.com/mclovin137/Prospero/tree/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs).
 
 ## Aceite comum às tarefas técnicas
 

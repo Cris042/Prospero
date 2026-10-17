@@ -24,7 +24,7 @@ Organização por funcionalidade sob `br.prospero.bo`: REST → Actor; Actor coo
 
 ID determinístico de negócio permite deduplicação atômica com inserção, lançamentos e atualização de posição. Uma inserção ignorada por conflito não pode repetir efeitos. IDs e ordenação precisam preservar os dois lados/contas; o modelo antigo só tem IDs das ordens e não define como BO recebe contas, lacuna anterior à migração.
 
-Negócios e razão têm histórico append-only; correções exigem estratégia explícita, sem alterar silenciosamente negócio executado. Posição é projeção reconstruível: quantidade com sinal, aumento altera preço médio, redução realiza resultado e virada abre lado novo. Arredondamento e limites ainda precisam de decisão; o cálculo do Minerva não cobre esse contrato ([análise](../pesquisas/reuso-minerva-financas.md)).
+Negócios e razão têm histórico append-only; correções exigem estratégia explícita, sem alterar silenciosamente negócio executado. Posição é projeção reconstruível: quantidade com sinal, aumento altera preço médio, redução realiza resultado e virada abre lado novo. Arredondamento e limites ainda precisam de decisão; o cálculo do Minerva não cobre short/virada nem o contrato de resultado realizado; a [proveniência e restrição de cópia](HLD-003-middle-office.md#proveniência-e-limites-de-reuso) continuam aplicáveis. Fluxo acumulado de compras/vendas não equivale a PnL realizado. Calendário só de dias da semana não resolve feriados/D+2; não importar sua regra como decisão local.
 
 ## Liquidação, recuperação e pendências
 

@@ -5,7 +5,7 @@ description: Criar ou atualizar o desenho macro de serviços, integrações e fl
 
 # Gerar HLD do Próspero
 
-Use para novo serviço/módulo relevante, integração ou alteração de fluxo/atributo arquitetural. Comece pelo [guia documental](../../../docs/documentacao.md), regras, roadmap, PRD ou requisitos existentes, HLD/ADRs relacionados e memória do projeto, confrontando com manifests e código.
+Use para novo serviço/módulo relevante, integração ou alteração de fluxo/atributo arquitetural. Comece pelo [guia documental](../../../docs/rules.md#documentação-e-aderência), regras, roadmap, PRD ou requisitos existentes, HLD/ADRs relacionados e memória do projeto, confrontando com manifests e código.
 
 Reaproveite contexto fornecido e decisões aceitas; pergunte apenas sobre bloqueios materiais. Não reconfirme a stack escolhida. Se houver alternativa arquitetural nova, registrar como proposta e encaminhar a ADR/usuário conforme impacto; hipótese não vira decisão.
 

@@ -10,7 +10,7 @@ Esta adaptação substitui os gatilhos por épico e as dispensas do [upstream](U
 ## Fontes obrigatórias
 
 1. Ler [rules](../../../docs/rules.md), [roadmap](../../../docs/roadmap.md), tarefa do componente quando houver, [inventário](../../../docs/libs.md) e ADRs aplicáveis.
-2. Aplicar o [guia documental](../../../docs/documentacao.md): revisar sistema, PRD/requisitos, HLD/desenho e ADRs, comparar com implementação e registrar aderência, divergências e necessidade proporcional de documentos antes do código.
+2. Aplicar o [guia documental](../../../docs/rules.md#documentação-e-aderência): revisar sistema, PRD/requisitos, HLD/desenho e ADRs, comparar com implementação e registrar aderência, divergências e necessidade proporcional de documentos antes do código.
 3. Consultar ai-memory no escopo Prospero e recuperar decisões, handoff e tentativas relevantes. Confrontar o resultado com arquivos atuais. A memória não altera requisitos nem prevalece sobre ADRs e regras.
 4. Registrar indisponibilidade real da memória e tentar recuperar a conexão; usar fontes documentais para trabalho independente. Não criar `continuidade.md`, não inventar consulta e não declarar a tarefa refinada com memória sem tê-la consultado.
 
@@ -30,7 +30,7 @@ São cinco perspectivas independentes; não exigir execução simultânea. Respe
 
 Cada parecer informa `SEGUIR`, `SEGUIR COM RESSALVAS` ou `REFORMULAR`, evidências, critérios e lacunas. Consolidar concordâncias e divergências, com no máximo uma tréplica por ponto. Aplicar regras/ADRs para resolver o que já tem contrato; decisões novas de negócio/escopo ou mudanças arquiteturais materiais voltam ao usuário e a ADR quando pertinente. Não repetir perguntas já respondidas.
 
-Registrar o refinamento em `docs/refinamentos/<ID>-<slug>.md`, com o brief, agentes efetivos, posições, divergências, decisões, critérios de aceite, plano de testes, dependências e próxima ação. Salvar síntese e referência desse documento no ai-memory. Vincular o registro à tarefa do roadmap.
+Registrar brief, agentes efetivos, posições, divergências, decisões, critérios de aceite, plano de testes e próxima ação na seção existente da tarefa no roadmap ou no corpo do PR. Salvar síntese/referência no ai-memory. Não criar arquivo/pasta de refinamento por rotina; documentação mínima conforme rules e instrução atual do usuário.
 
 Somente iniciar a implementação dependente após resolver lacunas bloqueantes. Registrar o que ainda pode avançar de forma independente. Refinamento não aprova código, PR, merge ou release. Não exigir PRD/FDD/HLD por ritual nem Obsidian/personas do Minerva. Usar ferramentas de agentes realmente disponíveis; sem agentes, declarar limitação em vez de simular consenso.
 
