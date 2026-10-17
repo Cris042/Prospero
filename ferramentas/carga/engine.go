@@ -29,6 +29,7 @@ func (s *Server) execute(ctx context.Context, r *run, target string) {
 	offset := time.Duration(0)
 	offers := 0
 	running := true
+	ceiling := false
 	for stageIndex, stage := range p.Estagios {
 		if !running {
 			break
@@ -40,6 +41,7 @@ func (s *Server) execute(ctx context.Context, r *run, target string) {
 			tick := time.Duration(index * int64(time.Second) / int64(stage.RPS))
 			if offers >= p.MaxChamadas {
 				running = false
+				ceiling = true
 				break
 			}
 			due := start.Add(offset + tick)
@@ -134,7 +136,7 @@ func (s *Server) execute(ctx context.Context, r *run, target string) {
 		r.Estado = "CONCLUIDA"
 	}
 	r.Fim = &now
-	if offers >= p.MaxChamadas {
+	if ceiling {
 		r.Motivo = "TETO_CHAMADAS"
 	} else if ctx.Err() != nil {
 		r.Motivo = "CANCELAMENTO"

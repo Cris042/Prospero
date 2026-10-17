@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -38,14 +39,26 @@ type Server struct {
 	lastStart   time.Time
 	adminWindow time.Time
 	adminCalls  int
+	anonWindow  time.Time
+	anonCalls   int
 	totals      map[string]*Counts
 	hist        map[string][]int64
 	maxDelay    int64
 }
 
+const (
+	adminLimit    = 100
+	maxControlTTL = 900
+)
+
 func NewServer(cfg Config) (*Server, error) {
 	if len(cfg.TokenKey) < 32 || len(cfg.PreflightKey) < 32 || hmac.Equal(cfg.TokenKey, cfg.PreflightKey) || len(cfg.Hosts) == 0 {
 		return nil, errConfig
+	}
+	for _, h := range cfg.Hosts {
+		if strings.TrimSpace(h) == "" {
+			return nil, errConfig
+		}
 	}
 	if cfg.Cooldown == 0 {
 		cfg.Cooldown = time.Second
@@ -77,6 +90,18 @@ func (s *Server) Close() {
 	}
 }
 func (s *Server) Handler() http.Handler { return http.HandlerFunc(s.handle) }
+
+// limited aplica janela fixa de um segundo com teto de chamadas administrativas.
+func (s *Server) limited(window *time.Time, calls *int, now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if now.Sub(*window) >= time.Second {
+		*window = now
+		*calls = 0
+	}
+	*calls++
+	return *calls > adminLimit
+}
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -91,29 +116,26 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	s.mu.Lock()
-	if now.Sub(s.adminWindow) >= time.Second {
-		s.adminWindow = now
-		s.adminCalls = 0
+	// Autenticação precede o limite administrativo: chamadas anônimas usam outro orçamento
+	// e não bloqueiam o operador legítimo.
+	auth := r.Header.Get("Authorization")
+	c, e := parseJWT(strings.TrimPrefix(auth, "Bearer "), s.cfg.TokenKey, "prospero-local", "prospero-carga", now)
+	if e == nil && (c.Iat == 0 || c.Exp-c.Iat > maxControlTTL) {
+		e = errConfig
 	}
-	s.adminCalls++
-	limited := s.adminCalls > 100
-	s.mu.Unlock()
-	if limited {
+	if !strings.HasPrefix(auth, "Bearer ") || e != nil {
+		if s.limited(&s.anonWindow, &s.anonCalls, now) {
+			w.Header().Set("Retry-After", "1")
+			problem(w, 429, "LIMITE_ADMINISTRATIVO")
+			return
+		}
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		problem(w, 401, "AUTENTICACAO_INVALIDA")
+		return
+	}
+	if s.limited(&s.adminWindow, &s.adminCalls, now) {
 		w.Header().Set("Retry-After", "1")
 		problem(w, 429, "LIMITE_ADMINISTRATIVO")
-		return
-	}
-	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, "Bearer ") {
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		problem(w, 401, "AUTENTICACAO_INVALIDA")
-		return
-	}
-	c, e := parseJWT(strings.TrimPrefix(auth, "Bearer "), s.cfg.TokenKey, "prospero-local", "prospero-carga", now)
-	if e != nil {
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		problem(w, 401, "AUTENTICACAO_INVALIDA")
 		return
 	}
 	scope := false
@@ -263,7 +285,7 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	v := &run{Report: Report{ID: identifier(), Instancia: s.Instance, Estado: "AGUARDANDO", Plano: req.Plano, Inicio: now.UTC(), Ambiente: map[string]any{"go": "1.27.2", "memoriaDisponivelMiB": a.MemoriaDisponivelMiB, "discoLivreMiB": a.DiscoLivreMiB, "cpusHost": a.CPUs, "preflightEm": time.Unix(a.Iat, 0).UTC(), "fonte": "operador-host-assinado", "recursosProcesso": "controle+gerador"}, Populacao: "nearest-rank; chamadas finalizadas de ofertas programadas apos aquecimento, incluindo erros; duracao HTTP sem atraso de agendamento"}, cancel: cancel, done: make(chan struct{})}
+	v := &run{Report: Report{ID: identifier(), Instancia: s.Instance, Estado: "AGUARDANDO", Plano: req.Plano, Inicio: now.UTC(), Ambiente: map[string]any{"go": runtime.Version(), "memoriaDisponivelMiB": a.MemoriaDisponivelMiB, "discoLivreMiB": a.DiscoLivreMiB, "cpusHost": a.CPUs, "preflightEm": time.Unix(a.Iat, 0).UTC(), "fonte": "operador-host-assinado", "recursosProcesso": "controle+gerador"}, Populacao: "nearest-rank; chamadas finalizadas de ofertas programadas apos aquecimento, incluindo erros; duracao HTTP sem atraso de agendamento"}, cancel: cancel, done: make(chan struct{})}
 	if req.Plano.Modo == "ABERTO" {
 		total := 0
 		for _, st := range req.Plano.Estagios {

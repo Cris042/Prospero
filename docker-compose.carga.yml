@@ -35,7 +35,7 @@ services:
       - carga_controle
       - carga_preflight
     restart: 'no'
-    stop_grace_period: 5s
+    stop_grace_period: 8s
     logging:
       driver: json-file
       options:
