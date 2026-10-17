@@ -227,7 +227,7 @@ Rodada complementar prévia: brief comum de redução documental sem perder RF/R
 
 [PR #8](https://github.com/mclovin137/Prospero/pull/8), **integrado em 2026-10-17 por autorização explícita do usuário** (merge 9dcdad0): ajuste editorial solicitado para concentrar o README no Próspero, removendo seção de referência externa. Conteúdo técnico, diagramas e registros específicos de proveniência preservados; verificações documentais e três pareceres independentes sem achados.
 
-Consolidação autorizada em 2026-10-17: PRs #9–#12 integrados, incluindo o conteúdo do #13. Todas as branches locais e remotas foram conferidas por ancestralidade; a `master` local acompanha a `main` remota. Nova QA da composição: runner 49/49, Angular 5/5, build, formatação, exemplo XLSX 4 cenários/8 passos e verificadores documentais/estrutura aprovados. Revisão e segurança independentes sem bloqueios; E2E, Maven e scanners não reexecutados nesta consolidação. Checks GitHub continuam ausentes, com ativação da CI dependente de runner dedicado. P06 e RFs permanecem planejadas.
+Consolidação autorizada em 2026-10-17: PRs #9–#12 integrados, incluindo o conteúdo do #13. Todas as branches locais e remotas foram conferidas por ancestralidade; a `master` local acompanha a `main` remota. Nova QA da composição: runner 49/49, Angular 5/5, build, formatação, exemplo XLSX 4 cenários/8 passos e verificadores documentais/estrutura aprovados. Revisão e segurança independentes sem bloqueios; E2E, Maven e scanners não reexecutados nesta consolidação. Checks GitHub do PR de consolidação foram criados e estão em fila, sem execução comprovada; a CI depende de runner dedicado. P06 e RFs permanecem planejadas.
 
 ## Aceite comum às tarefas técnicas
 
