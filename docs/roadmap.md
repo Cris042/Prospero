@@ -179,11 +179,13 @@ A V01 também entregará alertas locais orientados às metas e sintomas de negó
 
 Os quatro dashboards cobrirão fluxo de ordens, risco/reservas, matching/mercado e back office/liquidação. Falha de uma meta deve gerar evidência e ajuste, não mudança silenciosa do requisito. Compensações, falhas de consumidor e reinícios serão exercitados por harness de infraestrutura; planilhas continuarão usando apenas APIs.
 
-## Manutenção documental em revisão
+## Manutenção documental
 
-[PR #6](https://github.com/mclovin137/Prospero/pull/6), **aguardando revisão/merge**: comparação do PDF, C4, mapa no README e playbook com 60 temas/exemplos; busca por palavras com full-text PostgreSQL. A pedido do usuário, guias CI/memória/documentação foram incorporados em rules e pastas auxiliares removidas após preservar P06 e reuso nos documentos vigentes. Sem funcionalidade nova, mudança de estado das RFs ou merge autorizado.
+[PR #6](https://github.com/mclovin137/Prospero/pull/6), **integrado em 2026-10-17** (merge 091480a): comparação do PDF, C4, mapa no README e playbook com 60 temas/exemplos; busca por palavras com full-text PostgreSQL. A pedido do usuário, guias CI/memória/documentação foram incorporados em rules e pastas auxiliares removidas após preservar P06 e reuso nos documentos vigentes. Sem funcionalidade nova nem mudança de estado das RFs.
 
 Rodada complementar prévia: brief comum de redução documental sem perder RF/RNF, contratos, segurança e operação; cinco agentes medium separados (arquitetura, QA, segurança, operação e viabilidade) recomendaram seguir com ressalvas. Critérios: migrar conteúdo ativo antes de excluir, manter histórico fixado, atualizar skills/hashes/links e conferir os 60 exemplos. Relatos/execuções finais ficam no PR e síntese na memória, sem outro arquivo de relatório. Documentação histórica, capturas e pareceres continuam no [Git antes da consolidação](https://github.com/mclovin137/Prospero/tree/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs).
+
+[PR #7](https://github.com/mclovin137/Prospero/pull/7), **aguardando revisão/merge** — revisão visual do README: quatro recortes substituem C1/C2/C3/mapa antigos — serviços/bancos, Kafka/recuperação, SAGA/consistência e observabilidade. Nenhum tópico/grupo/consumer financeiro ou garantia de resiliência foi implementado. Fontes/estado conferidos e cinco perspectivas medium consultadas previamente (perfil C4/arquitetura, QA, segurança, operação e viabilidade), com ressalvas sobre atual/planejado, atomicidade local, limites de nó único e métricas futuras. Quatro fontes renderizadas e inspecionadas; revisão, QA e segurança independentes medium sem pendências. Comandos, resultados e limites registrados no PR, sem execução de falhas reais. Complemento solicitado: escopo/exclusões e explicações técnicas/de domínio no README, com dois modelos didáticos autorais inspirados nas capturas do usuário; seis pares de diagramas no total. Reuso, políticas de reserva e estratégia de testes preservam suas pendências, sem adotar a stack ou contratos das referências.
 
 ## Aceite comum às tarefas técnicas
 

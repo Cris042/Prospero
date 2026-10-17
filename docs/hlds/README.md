@@ -12,4 +12,4 @@ A arquitetura vigente se organiza em um desenho transversal e quatro contextos i
 
 [Guia documental](../rules.md#documentação-e-aderência), [playbook](../playbook-desenvolvimento.md). Cada evolução altera somente os documentos necessários; não criar outro HLD sem necessidade concreta.
 
-Visualizações: [C4 de contexto, containers atuais e componentes técnicos](../c4/README.md). As substituições da proposta original constam nos ADRs.
+Visualizações: [Serviços/bancos, Kafka, SAGA e observabilidade](../c4/README.md). As substituições da proposta original constam nos ADRs.

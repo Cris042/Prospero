@@ -1,0 +1,21 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam backgroundColor white
+title Formação de preço — compra Market didática de 0,10
+rectangle "1. Antes\n\nÚltimo negócio: 100,00\n\nVendas disponíveis (asks)\n|= Preço |= Quantidade |\n| 100,00 | 0,05 |\n| 100,10 | 0,03 |\n| 100,30 | 0,04 |" as antes #DBEAFE
+rectangle "2. Entrada\n\nCompra Market: 0,10\n\nPremissa deste exemplo:\nrisco validado e\nreserva confirmada.\n\nNão define fórmula\nde reserva Market." as entrada #FEF3C7
+rectangle "3. Negócios\n\nConsome os menores asks.\nPreço de cada oferta passiva.\n\n|= Quantidade |= Preço |= Falta comprar |\n| 0,05 | 100,00 | 0,05 |\n| 0,03 | 100,10 | 0,02 |\n| 0,02 | 100,30 | 0,00 |\n\nQuantidade total: 0,10\nValor executado: 10,009" as fills #EDE9FE
+rectangle "4. Depois\n\nVendas disponíveis\n|= Preço |= Quantidade |\n| 100,30 | 0,02 |\n\nÚltimo negócio: 100,30\nVariação ante 100,00: +0,3%\n\nMédia desta execução:\n10,009 / 0,10 = 100,09\n\nSem custos." as depois #DCFCE7
+antes --> entrada
+entrada --> fills
+fills --> depois
+legend bottom
+Cenário autoral fictício, sem teste executado e sem aprovar lote, tick ou escalas do produto.
+Somente asks são mostrados: não calcular spread ou profundidade bid a partir deste recorte.
+Último preço é o negócio mais recente; média da compra não é VWAP do dia nem posição do investidor.
+Variação contra a referência didática inicial, não definição de variação diária do simulador.
+Quantidade consumida vem da liquidez disponível, não de um preço fixado por quem compra.
+endlegend
+@enduml

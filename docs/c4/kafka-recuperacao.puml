@@ -1,0 +1,54 @@
+@startuml
+hide footbox
+skinparam shadowing false
+skinparam backgroundColor white
+title Kafka — configuração e simulação ilustrativa de falhas
+participant "FO / outbox\nPlanejado" as fo
+queue "Kafka" as k
+participant "Matching engine\nConsumidor planejado" as me
+participant "Back office\nConsumidor planejado" as bo
+database "PostgreSQL BO\nEfeitos planejados" as db
+note over fo,db #DDEEFF
+CONFIGURADO: Kafka 4.1.0; um nó broker + controller KRaft.
+Clientes PLAINTEXT kafka:9092; controller :9093, sem porta Kafka no host.
+Auto-create=false; RF dos tópicos internos=1; volume kafka-dados.
+Quatro serviços configuram bootstrap + saúde, sem consumidores financeiros definidos.
+end note
+note over fo,db #FFF2CC
+DESTINO: comandos por ativo; eventos para negócios, posições e cotações.
+Quatro nomes candidatos e chaves estão na tabela do README, não são contratos.
+Grupos, partições, retenção, envelopes, retries e mensagens inválidas: a definir.
+end note
+group CENÁRIO A — Kafka indisponível (futuro, não executado)
+ fo -> fo : Persistir ordem + intenção na transação local
+ fo ->x k : Publicação não disponível
+ note over fo,k : Preservar intenção pendente; sem declarar execução ou perder comando.
+ fo ->> k : Após retorno, retomar publicação recuperável
+ note over fo,k : Repetição possível; identidade estável + deduplicação nos efeitos.
+end
+group CENÁRIO B — BO cai entre commit e confirmação de consumo
+ k ->> bo : Entregar evento de negócio
+ bo -> db : Deduplicação + negócio + razão + posição, atomicamente
+ db --> bo : Commit local
+ note over bo,db #FFDDDD : Queda antes de confirmar posição de consumo.
+ k ->> bo : Reentregar após retomada
+ bo -> db : Reconhecer evento já persistido; não repetir efeitos
+ bo -->> k : Confirmar consumo após estado local seguro
+ note over k,db : Requer log retido, offsets coerentes e deduplicação implementada/testada.
+end
+group CENÁRIO C — publicação abortada após alterar livro
+ k ->> me : Comando autorizado
+ me -> me : Alterar livro em memória
+ me ->x k : Publicação abortada
+ note over k,me #FFDDDD
+Abort Kafka não reverte memória.
+Retomada deve alinhar livro, snapshot, log e offsets;
+algoritmo de recuperação ainda precisa ser definido e testado.
+end note
+end
+legend bottom
+Todos os cenários de negócio são planejados e ilustrativos, sem teste de falha executado.
+Broker único não tem failover redundante; volume não é backup ou garantia contra perda.
+Transação Kafka não abrange PostgreSQL ou efeitos externos; sem exactly-once global.
+endlegend
+@enduml

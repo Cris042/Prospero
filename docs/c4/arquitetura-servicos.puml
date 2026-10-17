@@ -1,0 +1,45 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam backgroundColor white
+title Próspero — microsserviços e seus bancos
+actor "Usuário local" as u
+rectangle "Docker Compose local — fundação configurada" {
+ rectangle "Frontend\nNginx serve Angular;\nAngular executa no navegador" as ui <<Container>>
+ rectangle "Front office\nQuarkus / Java 26" as fo <<Container>>
+ rectangle "Middle office\nQuarkus / Java 26" as mo <<Container>>
+ rectangle "Matching engine\nQuarkus / Java 26" as me <<Container>>
+ rectangle "Back office\nQuarkus / Java 26" as bo <<Container>>
+ database "PostgreSQL FO\nprospero_fo" as df <<Container>>
+ database "PostgreSQL MO\nprospero_mo" as dm <<Container>>
+ database "PostgreSQL ME\nprospero_me" as de <<Container>>
+ database "PostgreSQL BO\nprospero_bo" as db <<Container>>
+ queue "Kafka KRaft\nUm broker/controller" as k <<Container>>
+ database "Redis configurado\nCotações: uso futuro" as r <<Container>>
+}
+u --> ui : HTTP local
+ui --> fo : Proxy HTTP técnico
+ui --> mo : Proxy HTTP técnico
+ui --> me : Proxy HTTP técnico
+ui --> bo : Proxy HTTP técnico
+fo --> df : JDBC / Flyway / saúde
+mo --> dm : JDBC / Flyway / saúde
+me --> de : JDBC / Flyway / saúde
+bo --> db : JDBC / Flyway / saúde
+fo --> k : Bootstrap / saúde
+mo --> k : Bootstrap / saúde
+me --> k : Bootstrap / saúde
+bo --> k : Bootstrap / saúde
+note bottom of me #FFF2CC
+PLANEJADO: livro em memória + log Kafka + snapshots.
+Banco ME: suporte a definir, sem tabela do livro no caminho crítico.
+end note
+legend bottom
+Container = unidade de aplicação ou armazenamento; notação estrutural C4 local.
+Setas: configuração técnica atual, não negociação implementada.
+Quatro bancos independentes, sem tabelas financeiras ou acesso cruzado.
+Destino: FO recebe/orquestra; MO valida/reserva; ME executa; BO contabiliza/liquida.
+Entrada de negócio futura pelo FO; telemetria em diagrama próprio.
+endlegend
+@enduml

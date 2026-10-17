@@ -1,0 +1,44 @@
+@startuml
+!pragma layout smetana
+top to bottom direction
+skinparam shadowing false
+skinparam backgroundColor white
+title Domínio — responsabilidades planejadas por contexto
+rectangle "Ativo\nIdentidade e referência local;\ntick, lote e escalas a definir" as ativo #E5E7EB
+package "Front office — negociação" #DBEAFE {
+ rectangle "Ordem\nIntenção, conta, ativo,\nquantidade, tipo e trajetória" as ordem
+ rectangle "SAGA da ordem\nPróximos passos e\nresultados conhecidos" as saga
+ ordem -- saga : coordenação local
+}
+package "Middle office — risco" #FEF3C7 {
+ rectangle "Conta de risco / reserva\nProteger recursos e limites;\ncorrelação com a ordem" as reserva
+}
+package "Matching engine — mercado" #EDE9FE {
+ rectangle "Livro / OrderBook\nOfertas por ativo;\npreço-tempo; memória" as livro
+ rectangle "Execução\nEncontro entre ordens;\nquantidade e preço passivo" as execucao
+ livro --> execucao : matching
+}
+package "Back office — pós-negociação" #DCFCE7 {
+ rectangle "Negócio / Trade\nRegistro da execução;\nordens e participantes" as negocio
+ rectangle "Posição\nConta + ativo; quantidade,\npreço médio e PnL" as posicao
+ rectangle "Razão / liquidação\nPartidas dobradas;\ncaixa, custódia e D+2" as razao
+ negocio --> posicao : efeito local idempotente
+ negocio --> razao : efeito local idempotente
+}
+ativo .. ordem : identidade
+ativo .. livro : identidade
+ativo .. posicao : identidade
+saga ..> reserva : mensagens / IDs\nvalidar e reservar
+reserva ..> saga : confirmação / rejeição\nvia Kafka
+saga ..> livro : comando autorizado\napós reserva confirmada
+execucao ..> negocio : evento de execução\nvia Kafka
+execucao ..> saga : resultado correlacionado\nvia Kafka
+legend bottom
+Modelo conceitual planejado, não classes, tabelas ou contratos implementados.
+Linhas contínuas: associações locais; tracejadas: referência ou comunicação indicada.
+Entre contextos: IDs/eventos, sem FK, entidade compartilhada ou banco alheio.
+Ativo é referência local, não novo serviço ou tabela central compartilhada.
+Negócio, razão e posição são persistidos atomicamente no BO; risco pertence ao MO.
+Livro não é tabela; fórmula de reserva Market e participantes nos eventos ainda serão refinados.
+endlegend
+@enduml

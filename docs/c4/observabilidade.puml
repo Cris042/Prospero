@@ -1,0 +1,40 @@
+@startuml
+!pragma layout smetana
+top to bottom direction
+skinparam shadowing false
+skinparam backgroundColor white
+title Observabilidade — rotas configuradas e indicadores previstos
+rectangle "Quatro aplicações independentes\nFO / MO / ME / BO\n\nQuarkus: logs + traces OTLP;\nendpoint /q/metrics" as ms <<4 Containers>>
+rectangle "OpenTelemetry Collector\nOTLP gRPC :4317 / HTTP :4318\nmemory_limiter: 96 MiB\nbatch: 2s / 256 itens" as o <<Container>>
+rectangle "Jaeger\nTraces em memória" as j <<Container>>
+rectangle "Loki\nLogs em volume" as l <<Container>>
+rectangle "Prometheus\nScrape: 15s / quatro alvos\nRetenção: 3 dias / volume" as p <<Container>>
+rectangle "Grafana\nFontes provisionadas:\nPrometheus, Loki e Jaeger" as g <<Container>>
+ms --> o : Logs / traces OTLP :4317
+o --> j : Traces OTLP :4317
+o --> l : Logs OTLP HTTP :3100/otlp
+p --> ms : Coleta HTTP /q/metrics
+g --> p : Consulta métricas
+g --> j : Consulta traces
+g --> l : Consulta logs
+note bottom of p #DDEEFF
+CONFIGURADO: painel up{job="prospero"}, por serviço.
+Mede sucesso da coleta, não prontidão financeira.
+Métricas vão direto ao Prometheus;
+Collector não possui pipeline de métricas.
+end note
+note bottom of g #FFF2CC
+PLANEJADO — P06 / RFs / V01
+HTTP/JVM e recursos: detalhar séries, coletores e painéis.
+Kafka/SAGA: lag, outbox, pendências, rejeições, reservas.
+Matching: processamento e fluxo boleta até negócio.
+BO: idempotência, conciliação e liquidação.
+Trace de ordem nos quatro serviços; quatro dashboards de negócio.
+end note
+legend bottom
+Configuração em arquivo não comprova sinais recebidos agora nem métricas financeiras.
+Métricas detalhadas de host/container/DB/Kafka exigem fontes/coletores a definir.
+Dados ausentes não são zero; IDs de ordem/conta ficam fora de labels de métricas.
+Traces Jaeger se perdem ao reiniciar; correlação detalhada em logs/traces, sem segredos.
+endlegend
+@enduml
