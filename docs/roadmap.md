@@ -170,6 +170,10 @@ A V01 também entregará alertas locais orientados às metas e sintomas de negó
 
 Os quatro dashboards cobrirão fluxo de ordens, risco/reservas, matching/mercado e back office/liquidação. Falha de uma meta deve gerar evidência e ajuste, não mudança silenciosa do requisito. Compensações, falhas de consumidor e reinícios serão exercitados por harness de infraestrutura; planilhas continuarão usando apenas APIs.
 
+## Manutenção documental em revisão
+
+Comparação com o PDF de planejamento, diagramas C4/estrutura no README e ampliação do playbook com 60 tópicos de arquitetura, segurança e SQL: [PR #6](https://github.com/mclovin137/Prospero/pull/6), **aguardando revisão/merge**. Registros de [aderência](evidencias/arquitetura-pdf-aderencia.md) e [validação](evidencias/arquitetura-pdf-validacao.md). Solicitação documental direta, sem nova entrega funcional ou mudança de estado das RFs. Orientação de consultas sem LIKE/ILIKE registrada nas regras; nenhuma infraestrutura adicional adotada.
+
 ## Aceite comum às tarefas técnicas
 
 Toda tarefa deve atualizar contratos, regras afetadas, inventário, roadmap e memória; executar testes proporcionais e a planilha quando elegível pelo ADR-004; documentar motivos, trade-offs, limitações e resultados no PR. Não substituir dependências futuras por comportamento de sucesso fictício. Evidências visuais entram quando houver alteração de interface.
