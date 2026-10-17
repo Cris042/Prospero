@@ -29,7 +29,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | Gitleaks / Trivy | 8.30.1 / 0.76.0 | CI; imagens fixadas por digest |
 | Go | 1.27.2 | Módulo `ferramentas/carga`; API e executor técnicos com biblioteca padrão, sem módulos runtime externos |
 | Imagem builder Go | 1.27.2-bookworm | Dockerfile e CI; digest `sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61`; runtime `scratch`, binário estático sem shell |
-| govulncheck | 1.1.4 | Scanner oficial de desenvolvimento/CI, instalado por versão e verificado pelo Go checksum database; fora do módulo runtime |
+| govulncheck | 1.8.0 | Scanner oficial de desenvolvimento/CI, instalado por versão e verificado pelo Go checksum database; fora do módulo runtime |
 
 ## Pendências
 
@@ -41,7 +41,7 @@ Go 1.27.2 e `net/http` com executor nativo restrito foram adotados conforme [ADR
 
 Experimento descartável com Go 1.27.2, Huma 2.39.1/humago e Vegeta 12.12.0: contratos válidos/negativos, sanitização e OpenAPI; streaming contínuo demonstrou que `MaxBody` limita retenção, mas mantém drenagem, e `Stop` não abortou imediatamente a leitura. Executor nativo usa leitura limitada e contexto cancelável; a decisão e os limites de interpretação ficam no ADR. Essas dependências pertencem somente ao experimento fora do repositório.
 
-Builder oficial fixado por digest consultado no registry Docker Hub; CI usa a mesma imagem com GCC para `go test -race`, `gofmt` e `go vet`. A imagem final `scratch` contém somente o binário Go estático, usuário 65532 e healthcheck implementado pelo próprio binário. Não há dependência Debian no runtime. O scanner [govulncheck 1.1.4](https://github.com/golang/vuln/releases/tag/v1.1.4) é instalado temporariamente com versão fixada e consulta a [base oficial](https://go.dev/doc/security/vuln/); falha de rede/instalação/scan reprova o check. Sem `latest` e sem interpretar uma etapa não executada como aprovação.
+Builder oficial fixado por digest consultado no registry Docker Hub; CI usa a mesma imagem com GCC para `go test -race`, `gofmt` e `go vet`. A imagem final `scratch` contém somente o binário Go estático, usuário 65532 e healthcheck implementado pelo próprio binário. Não há dependência Debian no runtime. O scanner [govulncheck 1.8.0](https://github.com/golang/vuln/releases/tag/v1.8.0) (1.1.4 entrava em pânico no SSA do stdlib Go 1.27) é instalado temporariamente com versão fixada e consulta a [base oficial](https://go.dev/doc/security/vuln/); falha de rede/instalação/scan reprova o check. Sem `latest` e sem interpretar uma etapa não executada como aprovação.
 
 ## Ambiente observado
 

@@ -46,5 +46,5 @@ docker run --rm --user "$(id -u):$(id -g)" --memory=1g --cpus=2 --pids-limit=128
   --read-only --tmpfs /tmp:rw,exec,size=805306368 \
   -e GOCACHE=/tmp/go-build -e GOPATH=/tmp/go -e GOBIN=/tmp/bin -e GOTOOLCHAIN=local \
   -v "$PWD/ferramentas/carga:/src:ro" -w /src \
-  golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 sh -ec 'go install golang.org/x/vuln/cmd/govulncheck@v1.1.4; /tmp/bin/govulncheck ./...'
+  golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 sh -ec 'go install golang.org/x/vuln/cmd/govulncheck@v1.8.0; /tmp/bin/govulncheck ./...'
 printf '%s\n' 'Segurança: inventário, fronteiras, dependências e segredos verificados.'
