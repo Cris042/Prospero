@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { resolve } from 'node:path';
 
 const servicos = [
   { id: 'front-office', nome: 'Front office' },
@@ -78,7 +77,7 @@ test('consulta os quatro serviços reais e atualiza sem erros ou transbordamento
     true,
   );
   await page.screenshot({
-    path: resolve('..', 'docs', 'evidencias', `P02-${testInfo.project.name}.png`),
+    path: testInfo.outputPath('fundacao.png'),
     fullPage: true,
   });
 });
