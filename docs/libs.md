@@ -38,7 +38,7 @@ Go foi escolhido pelo usuário para a API técnica P06 ([ADR-006](adrs/ADR-006-a
 
 ## Ambiente observado
 
-Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam container. Node local 24.16.0. CI requer Compose compatível com `!override` e runner dedicado; consulte [CI](rules.md#ci-e-runner).
+Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam container. Node local 24.16.0. CI usa runner hospedado `ubuntu-24.04` gratuito com Compose compatível com `!override`; consulte [CI](rules.md#ci-e-runner).
 
 ## Override de segurança
 

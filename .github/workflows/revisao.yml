@@ -1,4 +1,4 @@
-# Actions fixadas por commit; runner dedicado ao Próspero.
+# Actions fixadas por commit; runner hospedado gratuito do GitHub (repositório público), VM efêmera por job.
 name: Próspero — Revisão de código
 'on':
   pull_request: {}
@@ -14,11 +14,7 @@ concurrency:
 jobs:
   prospero-revisao:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on:
-    - self-hosted
-    - linux
-    - x64
-    - prospero
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       CI: 'true'
@@ -29,6 +25,11 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.sha || github.sha }}
         persist-credentials: false
+    - name: Preparar Node 24
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: '24'
+        package-manager-cache: false
     - name: Revisão de código — checks determinísticos
       run: bash scripts/ci-revisao.sh
     - name: Registrar escopo e resultado
@@ -38,11 +39,7 @@ jobs:
   comentar-revisao:
     needs: prospero-revisao
     if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on:
-    - self-hosted
-    - linux
-    - x64
-    - prospero
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read

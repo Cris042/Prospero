@@ -4,6 +4,9 @@ for value in "${GITHUB_RUN_ID:-}" "${GITHUB_RUN_ATTEMPT:-}"; do
   case "$value" in ''|*[!0-9]*) echo 'Identidade numérica de execução ausente.' >&2; exit 2;; esac
 done
 python3 scripts/ci-preflight.py
+# Registra disco e uso Docker para diagnosticar falta de espaço no runner efêmero.
+df -h / "${RUNNER_TEMP:-/tmp}" || true
+docker system df || true
 export PROSPERO_CI_TAG="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 project="prospero-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml)
@@ -43,5 +46,8 @@ COMPOSE_PARALLEL_LIMIT=1 "${compose[@]}" --progress plain build
 python3 scripts/verificar-ambiente.py --projeto "$project"
 "${compose[@]}" run --rm --no-deps -T runner-planilhas
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
-(cd frontend && npm exec playwright install chromium && npm run test:e2e)
+# Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
+playwright_deps=()
+[ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
+(cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium && npm run test:e2e)
 printf '%s\n' 'Testes independentes, aplicação empacotada e observabilidade validados.'

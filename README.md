@@ -408,4 +408,4 @@ docker compose start
 - Roadmaps: [FO](front-office/ROADMAP.md), [MO](middle-office/ROADMAP.md), [matching](matching-engine/ROADMAP.md), [BO](back-office/ROADMAP.md) e [Angular](frontend/ROADMAP.md).
 - [HLD do ecossistema e dos microsserviços](docs/hlds/README.md); [API de carga Go](docs/hlds/HLD-006-api-carga.md) e [ADR de GC](docs/adrs/ADR-007-coletor-gc.md).
 
-Cada tarefa exige PR com alterações, motivos, trade-offs e validação. Repositório: [mclovin137/Prospero](https://github.com/mclovin137/Prospero). Veja [CI e runner dedicado](docs/rules.md#ci-e-runner); resumos locais não equivalem a PR aberto.
+Cada tarefa exige PR com alterações, motivos, trade-offs e validação. Repositório: [mclovin137/Prospero](https://github.com/mclovin137/Prospero). Veja [CI e runner](docs/rules.md#ci-e-runner); resumos locais não equivalem a PR aberto.
