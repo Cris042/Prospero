@@ -1,0 +1,54 @@
+# Processado pelo envsubst da imagem nginx; somente FO_TOKEN_LEITURA é substituído.
+  server {
+    listen 8080;
+    root /usr/share/nginx/html;
+    index index.html;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy same-origin always;
+    location = /healthz { access_log off; default_type text/plain; return 200 'ok'; }
+    # RF01: somente leitura recebe o token do proxy; preparação sintética nunca passa pelo navegador.
+    location ^~ /servicos/front-office/api/v1/preparacoes-mercado {
+      default_type application/json;
+      return 403 '{"erro":"Preparação indisponível pelo navegador"}';
+    }
+    location ^~ /servicos/front-office/api/v1/ativos {
+      limit_except GET { deny all; }
+      set $backend front-office:8080;
+      rewrite ^/servicos/front-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+      proxy_set_header Authorization "Bearer ${FO_TOKEN_LEITURA}";
+    }
+    location /servicos/front-office/ {
+      set $backend front-office:8080;
+      rewrite ^/servicos/front-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+      proxy_set_header Authorization "";
+    }
+    location /servicos/middle-office/ {
+      set $backend middle-office:8080;
+      rewrite ^/servicos/middle-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+    }
+    location /servicos/matching-engine/ {
+      set $backend matching-engine:8080;
+      rewrite ^/servicos/matching-engine/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+    }
+    location /servicos/back-office/ {
+      set $backend back-office:8080;
+      rewrite ^/servicos/back-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+    }
+    location /servicos/ { default_type application/json; return 404 '{"erro":"Serviço desconhecido"}'; }
+    location / { try_files $uri $uri/ /index.html; }
+  }

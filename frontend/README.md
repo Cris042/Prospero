@@ -12,7 +12,7 @@ npm run build
 npm start
 ```
 
-Node 24.16.0; Angular 22.2.3 e TypeScript 6.0. O dev server usa `proxy.conf.json` para as APIs em localhost:8081–8084. No container, o build estático é servido por Nginx em 8080 e publicado em localhost:4200, com proxy por DNS Docker e mesma origem.
+Node 24.16.0; Angular 22.2.3 e TypeScript 6.0. O dev server usa `proxy.conf.mjs` para as APIs em localhost:8081–8084 e injeta o token de leitura da RF01 (`FO_TOKEN_LEITURA` do ambiente ou do `.env`); a preparação de mercado é bloqueada pelo proxy. No container, o build estático é servido por Nginx em 8080 e publicado em localhost:4200, com proxy por DNS Docker e mesma origem.
 
 Consulte o [roadmap Angular](ROADMAP.md), o [README geral](../README.md) e os [contratos de API](../docs/adrs/ADR-003-contratos-api.md). O runner de planilhas da P03 é uma CLI em container, descrita abaixo.
 
@@ -55,5 +55,7 @@ docker compose run --rm --no-deps -T runner-planilhas
 Para workbook/configuração privados, montar arquivos somente leitura e passar caminhos internos, por exemplo `docker compose run --rm --no-deps -T -v /caminho/cenario.xlsx:/entrada/cenario.xlsx:ro -v /caminho/config.json:/entrada/config.json:ro runner-planilhas /entrada/cenario.xlsx --config /entrada/config.json`. Não versionar configuração com credenciais. Redirecionar stdout para relatório privado, se desejado; o runner não grava arquivos. Container: 384 MiB, 1 CPU, 64 PIDs, usuário node, filesystem somente leitura e tmpfs 16 MiB, sem portas ou volumes padrão.
 
 Resumo legível de `runner/exemplos/fundacao.xlsx`: quatro cenários independentes, um por serviço. Carga faz GET de identidade e captura `/servico`; Passos consulta de novo e compara a captura, versão `0.1.0-SNAPSHOT`, status 200 e `Cache-Control: no-store`. Não cria dados financeiros. O harness dos testes comprova carga POST com IDs novos, encadeamento e polling; as RFs entregarão os workbooks financeiros. `node runner/exemplos/gerar.mjs` regenera o binário a partir desse esquema (datas/metadados ZIP podem mudar).
+
+`runner/exemplos/mercado.xlsx` (RF01, gerado por `gerar-mercado.mjs`) tem quatro cenários, cada um no namespace `${cenario}`: níveis/agregação/corte em cinco/indicadores, vazio e unilateral com nova revisão, rejeições sem escrita parcial e isolamento entre namespaces. Exige token de preparação na configuração: `python3 scripts/mercado.py config-runner /caminho/runner.json --origem http://127.0.0.1:8081` e então `npm run runner -- runner/exemplos/mercado.xlsx --config /caminho/runner.json`. Uma falha interrompe o cenário antes da limpeza; o namespace é único por execução e pode ser removido com `DELETE /api/v1/preparacoes-mercado/{uuid}`.
 
 O charset final do caminho é conservador: letras/números ASCII e `_ / ? = & . ~ -`; percentuais são recusados também após interpolação. Capturas com `/`, espaços, `%` ou caracteres que exigem encoding falham antes da chamada dependente. Essa restrição evita decodificação dupla; IDs UUID/ASCII funcionam. JSON e headers preservam o valor original. Limite de heap do worker não cobre toda a memória nativa; o teto do container complementa os limites de arquivo, ZIP e prazo.
