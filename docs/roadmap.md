@@ -117,6 +117,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ### RF04 — Risco, reservas e SAGA
 
+- Avaliação adicional: write skew e proteção da invariante agregada no HLD-003; linha materializada/atualização condicional, guardião em protocolo de leitura/bloqueio ou serializable são alternativas a validar. Lock isolado não renova snapshot antigo; teste futuro com duas conexões PostgreSQL reais, sem alegar concorrência comprovada no perfil técnico atual.
 - Avaliação documental solicitada em 2026-10-17: políticas alteráveis sem deploy; [ADR-008](adrs/ADR-008-politicas-risco.md) compara parâmetros versionados/CEL Java/DSL restrita, e HLD-003/README explicam aplicação proposta. Sem compilador, dependência, migração, reserva ou API de risco implementada; RF04 segue dependente da RF03. [PR #12](https://github.com/mclovin137/Prospero/pull/12) documental em draft, empilhado no PR #10; sem merge.
 - Refinamento: brief de expressões puras, aritmética exata, precedência/curto-circuito, versão imutável, limites, ativação e reserva atômicas; memória confrontada com código P05/PRD/ADRs/HLD003. Cinco agentes medium independentes (`p03_arquitetura`, `p03_qa`, `p03_seguranca`, `rf01_operacao`, `rf01_viabilidade`) recomendaram seguir com ressalvas: parâmetros primeiro quando bastam, DSL como proposta, nenhum desempenho presumido e nenhuma substituição da proteção transacional. DSL é alternativa nova à orientação de evitar engine genérica, sem revogá-la por hipótese.
 - Dependências: RF03.
@@ -127,6 +128,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ### RF05 — Matching e ciclo de execução
 
+- Medição antes da otimização: protocolo JMH do núcleo e async-profiler/carga integrada no HLD-004. Ferramentas/versões e estruturas permanecem candidatas; alocação/serialização não são gargalos medidos. Preservar replay/correção e orçamento; nenhum benchmark executado nesta avaliação.
 - Dependências: RF04.
 - Entrega: algoritmo puro e adaptador Kafka com escritor único por ativo; preço-tempo, FIFO, preço passivo, parciais, IOC/FOK, stops, Stop Limit e OCO. Integrar execuções e reservas ao fluxo real.
 - Definir: desempates, gatilhos/igualdade, cascatas, liquidez insuficiente, dimensionamento OCO após parciais, snapshots/offsets e recuperação após publicação abortada.
@@ -151,6 +153,10 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ### RF08 — Razão, histórico e liquidação D+2
 
+- Avaliação transversal solicitada em 2026-10-17: cinco temas em agentes distintos — `parecer_jobs_liquidacao`, `parecer_write_skew`, `parecer_matching_medicao`, `parecer_mensagens_senhas` e `parecer_historico_lotes`. Brief comum: jobs/efeito incerto; invariante concorrente; medir antes de otimizar; HMAC/mTLS/Argon2; histórico frio e SQL por conjuntos. Além do tema individual, emitiram perspectivas medium de arquitetura, QA, operação, segurança e viabilidade. Todos seguir com ressalvas; memória confrontada com PRD/ADRs/HLDs/código antes das alterações. Detalhes e fontes nos HLDs existentes/README, sem pasta de pesquisa. [PR #13](https://github.com/mclovin137/Prospero/pull/13) documental em draft, base PR #12; revisão, QA e segurança finais independentes sem achados pendentes, sem merge.
+- HLD-005 detalha proposta de jobs persistentes, claim e revisão de processando abandonado como desconhecido, sem reexecutar automaticamente; efeito local/conclusão/outbox atômicos. Notas de corretagem são lacuna de produto, sem geração/envio adotados. Calendário, transições, posse e evidências de reconciliação continuam anteriores ao código.
+- Histórico: preservar verdade de negócio, arquivo verificável/restaurável e leitura sob demanda; mídia/partições/retenção não escolhidas sem volume e orçamento. Relatórios por conjuntos em sumários/projeções; não atualizar negócios/razão originais. Não remover dados necessários a pendências, deduplicação ou replay. Testes de corte, retomada, integridade, acesso e restauração são futuros.
+- Segurança transversal: HLD-001 compara HMAC de evento versus TLS mútuo cliente–broker/ACLs e Argon2id condicional a senhas locais. São mecanismos candidatos, sem desvio MO → BO, mudança do Kafka PLAINTEXT ou autenticação implementada. Adoção material exige decisão/ADR e contratos antes do código.
 - Dependências: RF07.
 - Entrega: negócio, lançamentos e posição persistidos atomicamente no BO, razão em partidas dobradas, histórico e liquidação simulada; integração dos efeitos de caixa/custódia ao risco por eventos.
 - Definir: calendário/feriados, estados de liquidação, falhas, distinção entre saldos disponível/reservado/liquidado e correções append-only. Estabelecer controle de tempo reproduzível por API no perfil local de testes.

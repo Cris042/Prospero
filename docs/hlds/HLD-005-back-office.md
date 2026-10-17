@@ -34,6 +34,43 @@ Resolver conflito conceitual entre append-only e `lancamento.estado`; estados de
 
 Testes futuros: long/short, aumento/redução/zeragem/virada, idempotência, transação negócio/razão/posição, conservação de caixa/custódia, D+2 sem aguardar dias reais, falha/reinício e conciliação. [Roadmap BO](../../back-office/ROADMAP.md); RNF01/RNF05/RNF06 e observabilidade/operação RNF07/RNF08.
 
+## Jobs recuperáveis de liquidação — avaliação para RF08
+
+**Parecer: válido com ressalvas, desenho futuro.** Modelar a unidade de liquidação como job persistente identificado, com estados candidatos `PENDENTE`, `PROCESSANDO`, `CONCLUIDO` e `DESCONHECIDO`. O estado operacional do job é separado dos negócios/lançamentos append-only. Não há scheduler, tabela ou worker implementado. Calendário D+2, unidade do job e transições autorizadas precisam ser definidos antes da migração.
+
+| Situação | Tratamento proposto |
+| --- | --- |
+| Pendente e elegível | Adquirir por mudança condicional atômica; conferir que exatamente um worker venceu e confirmar o claim antes de iniciar o efeito |
+| Processando com proprietário ativo | Não tomar o trabalho de outra execução; propriedade/geração e validade são verificadas conforme contrato |
+| Processando abandonado após queda/perda de autorização | Encaminhar para revisão/reconciliação como desconhecido; nunca retornar a pendente ou liquidar novamente automaticamente |
+| Efeito comprovadamente concluído | Reconhecer conclusão pela evidência durável, sem executar de novo |
+| Resultado ainda incerto | Manter desconhecido com motivo/auditoria; nova tentativa exige decisão explícita e exclusão do worker anterior |
+| Concluído | Reentrega/varredura não repete efeito |
+
+Claim impede disputa inicial, mas não prova execução. Uma lease expirada não prova que o worker morreu nem que nada aconteceu. Se adotada geração de propriedade, o destino do efeito precisa verificá-la: conferência transacional local pode impedir commit do worker antigo, enquanto token guardado apenas no BO não impede sozinho um envio externo. Transações de aquisição são curtas. `FOR UPDATE SKIP LOCKED` é alternativa para disputar lotes de fila, não mecanismo suficiente de posse após commit ou prova de integridade do conjunto. [SELECT/filas PostgreSQL 16](https://www.postgresql.org/docs/16/sql-select.html#SQL-FOR-UPDATE-SHARE).
+
+Na liquidação simulada local, marcador único da operação, lançamentos, projeções pertinentes, conclusão e outbox devem confirmar/reverter na mesma transação BO. Resposta de commit perdida exige consultar evidência persistida; não repetir com nova identidade. Essa atomicidade não abrange Kafka, banco alheio ou envio externo. O relay da outbox continua com reentrega/deduplicação do ADR-002; não confundir sua recuperação com autorização para refazer um efeito de job desconhecido. [Transações PostgreSQL](https://www.postgresql.org/docs/16/tutorial-transactions.html), [outbox e janela de duplicação](https://microservices.io/patterns/data/transactional-outbox.html).
+
+**[DOC-GAP] Notas de corretagem:** não constam dos requisitos atuais. A menção do usuário é proposta de geração/disponibilização a detalhar; não adota taxas, tributação ou envio externo. Definir conteúdo, identidade/versão, privacidade, correção e canal. Um envio hipotético tem janela “destinatário recebeu, BO caiu antes de registrar”: claim/outbox não eliminam a incerteza. Sem recibo/consulta confiável ou contrato de idempotência do destinatário, manter revisão e não reenviar automaticamente. Não contratar provedor nem enviar mensagens reais nesta avaliação.
+
+Critérios futuros: dois workers disputando; queda antes/depois do claim, durante efeito e após commit antes da resposta; worker antigo retomando; revisão sem duplicar caixa/custódia/lançamento; reentrega; relógio/calendário controlados por API; autorização/auditoria da reconciliação. Sem execução desses cenários nesta entrega. RF08 fechará identidade/unidade, abandono, propriedade, evidências, transições e limites de lote.
+
+## Histórico frio e fechamento por conjuntos — avaliação para RF08
+
+**Parecer: válido com correções.** Preservar negócios/razão originais e histórico de ordens encerradas; retirar da área quente somente depois de arquivo verificado/restaurável e política explícita. FO mantém suas ordens/SAGA e BO seus negócios/razão; leitura histórica não autoriza acessar outro banco. Não há volume financeiro, partições, arquivo frio ou consulta histórica implementados para dimensionar uma solução.
+
+Partições por tempo são opção após medição. `DETACH PARTITION` conserva uma tabela independente, mas não cria backup, não libera por si espaço total e a consulta ao pai deixa de incluí-la. PK/UNIQUE particionada exige compatibilidade com chave de partição: preservar unicidade/deduplicação global antes de mudar o modelo. Arquivo local privado em volume persistente é candidato sem custo externo; outro container no mesmo disco não cria proteção contra perda desse disco. [Particionamento PostgreSQL 16](https://www.postgresql.org/docs/16/ddl-partitioning.html).
+
+Antes de retirar cópia quente: verificar jobs/SAGAs/reservas pendentes, horizonte de reentrega/replay/deduplicação, dependências locais e saldo inicial necessário à reconstrução. Exigir manifesto de período/esquema/versão/contagem/hash, validação de restauração, checkpoints e recuperação da falha entre exportar, verificar e retirar. Checksum detecta alteração, mas sua origem e armazenamento também precisam de proteção. `COPY` é candidato de exportação, não pacote completo de DDL/restauração; caminhos/comandos nunca vêm livres da API. Sem prazo legal inventado para este simulador. [COPY](https://www.postgresql.org/docs/16/sql-copy.html).
+
+Consulta sob demanda precisa de autorização por conta/período, paginação/ordenação/volume limitados e estado explícito de recuperação/indisponibilidade; nunca retornar vazio para esconder dado arquivado. Restauração temporária e leitor de arquivo são alternativas pendentes, não duas implementações exigidas. Ameaça, retenção, criptografia e gestão de chaves serão definidas antes de escolher mídia/formato. Arquivamento não substitui backup/restauração.
+
+Relatórios usam `SELECT`/agregações ou `INSERT … SELECT`/upsert em sumários próprios. **Não usar UPDATE para reescrever negócio/lançamento original.** `UPDATE` por conjuntos cabe em projeções/estado operacional mutáveis aprovados; correção contábil permanece novo registro vinculado à origem. Definir semântica do conjunto vazio por métrica; em `UPDATE … FROM`, cada alvo deve corresponder a uma única linha agregada. [Agregações](https://www.postgresql.org/docs/16/functions-aggregate.html), [UPDATE](https://www.postgresql.org/docs/16/sql-update.html).
+
+Lotes: período/cursor estável, SQL parametrizado, limites de tempo/linhas, checkpoint e retomada idempotente. Recalcular/substituir resumo ou controlar contribuição única, sem somar novamente após crash. Fixar corte, calendário/fuso e correlação UTC, eventos tardios e versão de fechamento. `MAX(id)` não comprova ordem de commit. Coordenação limitada entre lotes pode permanecer na aplicação; evitar carregar tudo e atualizar linha a linha. Isso não proíbe loops legítimos do matching/domínio.
+
+Medir planos, WAL, locks, versões antigas/autovacuum e efeito sobre tráfego. `EXPLAIN ANALYZE` executa a consulta, inclusive escrita: usá-lo somente em laboratório controlado. [EXPLAIN](https://www.postgresql.org/docs/16/using-explain.html), [MVCC/manutenção](https://www.postgresql.org/docs/16/routine-vacuuming.html). Testes futuros: conciliação antes/depois do arquivo, restauração/versionamento, corrupção/ausência, acesso entre contas, corte/eventos tardios, falhas em cada etapa, deduplicação após mover dados e retomada do fechamento sem duplicar totais. Nada disso foi executado nesta avaliação.
+
 ## Modelo de dados de referência
 
 Dicionário migrado da proposta histórica. **Planejado e incompleto**, não schema aprovado nem tabelas existentes. Tipos bigint não definem escala financeira; ausência de marcação não decide nulabilidade/índice/constraint. Referências a IDs externos não criam FK entre bancos. `ativo` representa referência local a distribuir por contrato, sem tabela compartilhada. Refinar antes de migrações.

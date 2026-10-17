@@ -47,6 +47,26 @@ Livro em memória e replay/snapshots são destino do ME; Redis será projeção 
 
 Ambiente de estudo, sem dados/operações financeiras reais. Portas publicadas em loopback, configuração sensível local fora do Git e permissões/bancos separados. Não tratar loopback como proteção suficiente para futuras APIs de controle ou negócio. Autenticação/autorização de atores é pendência anterior aos respectivos fluxos; não afirmar RBAC já implementado. Preservar DTOs, limites de entradas e logs sem credenciais. APIs futuras de carga precisam allowlist e limites contra abuso/SSRF.
 
+### Eventos autenticados e senhas — avaliação de mecanismos
+
+**Parecer: válido com ressalvas, mecanismos candidatos.** Kafka atual usa PLAINTEXT em broker único; não há TLS/ACL de negócio, HMAC ou cadastro/senhas de usuários implementados. “Middle para back” não altera a sequência lógica MO → ME → BO: MO fornece risco, ME produz execuções, BO contabiliza. Proteger contratos dos produtores legítimos, sem criar atalho HTTP ou permitir que MO invente execução.
+
+| Mecanismo | Proteção e limite |
+| --- | --- |
+| HMAC em envelope de evento | Autenticidade/integridade do conteúdo com segredo compartilhado; não cifra, não comprova correção financeira nem não repúdio, e o verificador com a chave também consegue produzir MAC |
+| TLS mútuo no Kafka + ACLs | Confidencialidade/integridade do canal e identidade cliente–broker com permissão mínima de tópico/grupo; broker termina conexões e armazena o registro, portanto não equivale a autenticação criptográfica do registro de ponta a ponta |
+| Argon2id para senha local futura | Hash adaptativo de senha com salt exclusivo; só se identidade local for adotada. Não é substituto de HMAC/TLS nem tratamento automático de senhas de banco/chaves |
+
+HMAC e mTLS resolvem ameaças distintas e podem ser complementares. Antes da adoção material, registrar ADR com ameaça, alternativa, algoritmo/versão, chaves/certificados e operação no orçamento local. Fontes: [HMAC/RFC2104](https://www.rfc-editor.org/rfc/rfc2104), [segurança Kafka](https://kafka.apache.org/41/security/security-overview/).
+
+Para HMAC, definir bytes autenticados preservados ou serialização canônica, envelope limitado com ID/schema/origem/destino/contexto/correlação/keyId autenticados, algoritmo permitido fixado pela política e verificação em tempo constante. Outbox preserva ocorrência/proveniência; reentrega e rotação não criam novo efeito. Distribuir/rotacionar/revogar chaves fora do Git/imagem/log; manter verificabilidade necessária ao replay. MAC válido não impede replay: deduplicar atomicamente com os efeitos. Não rejeitar backlog legítimo por janela temporal arbitrária; política de recuperação precisa ser explícita. Evento inválido não produz efeito financeiro; destino operacional e diagnóstico limitado serão definidos no contrato.
+
+Para TLS, avaliar autenticação de cliente obrigatória (`ssl.client.auth=required`), validação de hostname/SAN e CA, certificados por identidade, renovação e ACLs mínimas de publicação/consumo. `requested` não obriga certificado. Não desabilitar validação para facilitar ambiente local e não chamar canais TLS ao broker de assinatura do conteúdo persistido. [TLS Kafka4.1](https://kafka.apache.org/41/security/encryption-and-authentication-using-ssl/), [ACLs](https://kafka.apache.org/41/security/authorization-and-acls/).
+
+Para Argon2id, somente após decidir autenticação local: biblioteca mantida/versionada, salt aleatório por senha, parâmetros/versão junto do hash, verificação e atualização de custo. Medir memória/tempo no container real e limitar tentativas/concorrência. Perfis da RFC variam muito; não copiar valores incompatíveis com 384 MiB/1 CPU. A referência mínima OWASP consultada é 19 MiB, duas iterações e paralelismo1, ponto de avaliação sem adoção automática. Nenhuma senha/hash vai para log; não usar criptografia reversível para armazenar senha. [RFC9106](https://www.rfc-editor.org/rfc/rfc9106), [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
+
+Critérios futuros: adulteração de payload/envelope/origem/schema/keyId, chave errada/rotação/replay; certificado ausente/expirado/CA ou hostname incorretos e ACL negada; senhas iguais com salts distintos, senha incorreta, atualização de custo e saturação limitada. São testes propostos, sem execução ou configuração criptográfica nesta entrega.
+
 ## Observabilidade e desempenho
 
 Diferentemente da centralização dos três sinais no Collector proposta no PDF (§14), a configuração vigente usa coleta direta de métricas pelo Prometheus. Prometheus coleta métricas das quatro aplicações; OTel envia traces/logs para Jaeger/Loki; Grafana integra fontes. O painel atual é técnico. Traces Jaeger usam memória e não persistem após reinício; demais componentes persistentes usam volumes conforme Compose. Métricas de host/container/DB/Kafka detalhadas ainda exigem coletores e não podem aparecer como zero por ausência de fonte.
