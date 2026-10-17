@@ -25,12 +25,6 @@ A ordem nasce no front office, passa por validação e risco no middle office, e
 | Integração | Eventos internos e APIs locais; sem FIX ou UMDF. |
 | Precisão | Sem double financeiro; lote, tick, escalas e arredondamento precisam de definição antes dos cálculos de produto. |
 
-### Base e reaproveitamento do MinervaFinancas
-
-O [MinervaFinancas](https://github.com/Cris042/MinervaFinancas/tree/34fc98a6ac47f2ffc2bf23f055a3fd9ac15c7530) é referência de conceitos e casos de teste: representação decimal exata e organização por funcionalidade. A P05 do Próspero entrega **conversão decimal técnica autoral** no MO; não copiou os arquivos do doador nem adotou suas escalas 2/2/8 como regras financeiras. O cálculo de posição do doador não cobre o contrato de short/virada/PnL exigido aqui, e seu calendário não resolve feriados/D+2. A licença explícita não foi encontrada no snapshot; atribuição não autoriza cópia.
-
-A organização vigente é REST → Actor, com domínio/Helpers puros e repositórios JPA separados, conforme [ADR-001](docs/adrs/ADR-001-arquitetura-backend.md), usando Java 26/Quarkus. Livro, matching, tipos de ordem, risco/reservas e fluxo distribuído serão construídos neste projeto, sem anunciar um núcleo financeiro já portado. Limites e proveniência: [HLD do MO](docs/hlds/HLD-003-middle-office.md#proveniência-e-limites-de-reuso).
-
 ## Conceitos de mercado na prática
 
 | Conceito | Significado no simulador |
