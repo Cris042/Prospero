@@ -1,0 +1,66 @@
+@startuml
+hide footbox
+skinparam shadowing false
+skinparam backgroundColor white
+title SAGA — orquestração planejada, falhas e consistência
+actor "Investidor" as u
+participant "FO\nOrquestrador" as fo
+participant "MO\nRisco / reserva" as mo
+participant "ME\nLivro / execução" as me
+participant "BO\nNegócio / razão / posição" as bo
+note over fo,bo #FFF2CC
+PLANEJADO: estado persistido, outbox e consumidores idempotentes.
+Todas as mensagens entre serviços passam pelo Kafka; setas são lógicas, não HTTP.
+Cada contexto usa transação/banco próprio; sem commit global entre quatro bancos.
+end note
+u -> fo : Submeter ordem
+fo -> fo : Transação local: ordem + estado\n+ intenção de publicação
+fo ->> mo : Solicitar validação e reserva
+mo -> mo : Validar / proteger\nlimites concorrentes
+alt Rejeição conhecida antes da reserva
+ mo -->> fo : Informar rejeição;\nnenhum recurso reservado
+ fo -> fo : Persistir resultado / trajetória
+else Reserva confirmada
+ mo -> mo : Reserva + confirmação recuperável\nem transação local
+ mo -->> fo : Confirmação da reserva
+ fo ->> me : Autorizar matching somente com reserva
+ me -> me : Sequência por ativo;\nprioridade preço-tempo
+ alt Negócio efetivado
+  me -->> fo : Resultado da execução
+  me ->> bo : Evento de negócio
+  bo -> bo : Deduplicação + negócio\n+ razão + posição, atomicamente
+  note over fo,bo #DDEEFF
+Se BO cair, retomar/idempotência até contabilizar.
+Recuperar para frente, sem apagar execução efetivada.
+Não liberar recurso já consumido; parciais exigem contrato de ajuste.
+end note
+ else Encerramento definitivo com saldo elegível conhecido
+  me -->> fo : Resultado efetivo / parte\nnão consumida confirmados
+  fo ->> mo : Solicitar liberação apenas da parte elegível
+  mo -> mo : Compensação idempotente local
+  mo -->> fo : Confirmar compensação
+ else Timeout, queda ou resultado desconhecido
+  fo -> fo : Persistir pendência;\nreconciliar resultado efetivo
+  note over fo,me #FFDDDD
+Timeout sozinho NÃO autoriza liberar reserva.
+Resolver corrida execução/cancelamento e recuperar resultado;
+só então compensar parte elegível ou recuperar para frente.
+end note
+ end
+else Confirmação do risco perdida / resultado desconhecido
+ fo -> fo : Persistir pendência; reconciliar reserva por ordem
+ note over fo,mo #FFDDDD
+MO pode ter reservado sem FO receber confirmação.
+Não admitir ao matching, duplicar reserva ou liberar recurso por suposição.
+Retomar com identidade estável e resultado efetivo conhecido.
+end note
+end
+u -> fo : Consultar trajetória
+fo --> u : Estado conhecido ou pendência explícita
+legend bottom
+Simulação conceitual, sem fluxo financeiro implementado ou falha runtime executada.
+Setas duplas: mensagens lógicas via Kafka; simples: HTTP do usuário ou operação local.
+Consistência eventual entre contextos; invariantes e atomicidade protegidas localmente.
+Transições, contratos de parciais, confirmação, prazos e recuperação ainda serão refinados.
+endlegend
+@enduml

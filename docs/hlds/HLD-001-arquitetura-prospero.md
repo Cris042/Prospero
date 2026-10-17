@@ -10,37 +10,11 @@ A P05 adiciona apenas conversão decimal técnica pura no MO, sem endpoint/regra
 
 ## Arquitetura
 
-O [catálogo C4](../c4/README.md) separa contexto de produto planejado, containers da fundação configurada e componentes reais. O [índice de ADRs](../adrs/README.md) registra as substituições frente à proposta original.
+O [catálogo de diagramas](../c4/README.md) reúne serviços/bancos, Kafka/recuperação, SAGA/consistência e observabilidade. As figuras e o [README](../../README.md) distinguem configuração técnica, destino financeiro e cenários ilustrativos, sem ensaio runtime nesta revisão. O [índice de ADRs](../adrs/README.md) registra as substituições frente à proposta original.
 
-```mermaid
-flowchart LR
-    UI[Angular] -->|API REST / WebSocket| FO[Front office]
-    FO <--> K[Kafka]
-    MO[Middle office] <--> K
-    ME[Matching engine] <--> K
-    BO[Back office] <--> K
-    FO --- DBFO[(PostgreSQL FO)]
-    MO --- DBMO[(PostgreSQL MO)]
-    ME --- DBME[(PostgreSQL ME: suporte)]
-    BO --- DBBO[(PostgreSQL BO)]
-    ME --- L[Livro em memória + log Kafka + snapshots]
-    FO --- R[(Redis: projeção de cotações)]
-    FO -. telemetria .-> O[OpenTelemetry Collector]
-    MO -. telemetria .-> O
-    ME -. telemetria .-> O
-    BO -. telemetria .-> O
-    O --> J[Jaeger: traces]
-    O --> LK[Loki: logs]
-    P[Prometheus] -. coleta métricas .-> FO
-    P -. coleta métricas .-> MO
-    P -. coleta métricas .-> ME
-    P -. coleta métricas .-> BO
-    G[Grafana] --> P
-    G --> J
-    G --> LK
-```
+![Serviços e bancos da fundação configurada](../c4/arquitetura-servicos.svg)
 
-O diagrama mostra o destino arquitetural; fluxo financeiro e WebSocket ainda não existem. Na fundação, o Nginx do frontend encaminha consultas técnicas aos quatro serviços. A aplicação de negócio usará o FO como entrada, sem transformar o Angular em orquestrador da negociação.
+A figura estrutural representa a fundação: Nginx encaminha consultas técnicas aos quatro serviços. Negociação futura usará FO como entrada, sem Angular orquestrar SAGA. [Kafka](../c4/kafka-recuperacao.svg) e [SAGA](../c4/saga-consistencia.svg) mostram recuperação planejada, ainda não implementada/testada financeiramente; [observabilidade](../c4/observabilidade.svg) separa sinais técnicos atuais de indicadores futuros.
 
 | Componente | Responsabilidade |
 | --- | --- |

@@ -6,33 +6,66 @@ Simulador local de mercado financeiro com cinco ações fictícias, livro de ofe
 
 A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais. **Negociação, risco e liquidação ainda não foram implementados.** Estado e PRs de entrega estão no [roadmap](docs/roadmap.md).
 
-## Arquitetura e estrutura
+## Arquitetura dos microsserviços e bancos
 
-O C1 mostra o **produto planejado**. Formador de mercado e liquidação são simulados; não há conexão com bolsa ou câmara reais.
+Cada microsserviço tem build, credenciais, migrações e PostgreSQL próprios. As linhas do desenho representam a **fundação configurada**: proxy técnico do frontend, acesso ao próprio banco e saúde do Kafka. O livro de ofertas e as tabelas financeiras ainda não existem.
 
-![C4 C1: contexto planejado do Próspero](docs/c4/prospero-c1.svg)
+![Arquitetura dos quatro microsserviços e bancos independentes](docs/c4/arquitetura-servicos.svg)
 
-O C2 mostra a **fundação configurada**: o frontend consulta as quatro APIs técnicas, cada serviço possui PostgreSQL próprio e Kafka é verificado para prontidão. Redis ainda não serve cotações; as setas não representam negociação implementada.
+No desenho de negócio **planejado**, FO recebe ordens e orquestra a SAGA; MO valida e reserva recursos; ME executa por prioridade preço-tempo; BO registra negócios, razão, posições e D+2. A colaboração ocorre por Kafka, sem HTTP ou acesso a banco entre microsserviços. O livro do ME ficará em memória, com log e snapshots; seu PostgreSQL será de suporte, sem consulta por ordem.
 
-![C4 C2: containers da fundação atual](docs/c4/prospero-c2.svg)
+## Kafka, tópicos, consumidores e falhas
 
-O [catálogo C4](docs/c4/README.md) inclui fontes editáveis, limites, o [C2 de telemetria](docs/c4/prospero-telemetria-c2.svg) e o C3 da identidade técnica. O [HLD do ecossistema](docs/hlds/HLD-001-arquitetura-prospero.md) mostra o fluxo financeiro de destino: FO coordena a SAGA, MO valida/reserva, ME executa e BO contabiliza/liquida, por eventos Kafka.
+**Configuração atual:** Kafka 4.1.0, um nó KRaft com papéis broker/controller. Clientes usam `kafka:9092` e o controller usa `9093`, ambos PLAINTEXT na rede local; Kafka não publica porta no host. A criação automática de tópicos está desativada. Os fatores de replicação dos tópicos internos e o mínimo de réplicas da transação estão em 1; dados ficam no volume `kafka-dados`. Nó único e volume não fornecem failover ou backup.
 
-O mapa abaixo localiza as principais partes do repositório; as linhas indicam organização de pastas, sem dependência de código entre serviços.
+Os quatro serviços configuram bootstrap e verificação de saúde. **Não há provisionamento de tópicos nem grupos/produtores/consumidores financeiros no código.** Estes nomes vêm do catálogo histórico do HLD e são candidatos, não contratos aprovados:
 
-```mermaid
-flowchart TB
-    R["Próspero / raiz"] --> FO["front-office/ — entrada e SAGA planejadas"]
-    R --> MO["middle-office/ — risco e reservas planejados"]
-    R --> ME["matching-engine/ — livro e matching planejados"]
-    R --> BO["back-office/ — razão e D+2 planejados"]
-    R --> UI["frontend/ — Angular; runner XLSX na P03"]
-    R --> INF["infra/ — telemetria e memória local"]
-    R --> S["scripts/ — operação e verificações"]
-    R --> D["docs/ — PRD, HLDs, ADRs, regras e playbook"]
-```
+| Tópico candidato | Chave sugerida | Objetivo de destino |
+| --- | --- | --- |
+| `ordens.comandos` | Ativo | Sequenciar comandos autorizados para matching. |
+| `mercado.negocios` | Ativo | Distribuir execuções para registro e outros efeitos de negócio. |
+| `posicoes.eventos` | Conta | Distribuir mudanças de posição; passagem de ordem por ativo para conta a definir. |
+| `mercado.precos` | A definir | Alimentar projeções de cotações; assinantes e chave ainda a definir. |
 
-As [decisões frente à proposta original](docs/adrs/README.md) explicam as substituições aceitas; PRD/HLDs preservam os requisitos e o desenho vigentes.
+A organização pretendida separa responsabilidades: FO recebe resultados e acompanha a SAGA; MO trata validação/reserva e liberação; ME processa comandos com um escritor por ativo; BO registra execuções e calcula posições. IDs de grupos, partições, assinaturas, schemas, retenção, commits de offsets, concorrência, retries e tratamento de mensagens inválidas serão definidos antes da implementação. O grupo deve preservar um proprietário por partição/livro; não há ordem global entre tópicos.
+
+![Kafka configurado e cenários ilustrativos de recuperação](docs/c4/kafka-recuperacao.svg)
+
+A figura **simula conceitualmente** três falhas, sem executar interrupções: publicação indisponível mantém intenção recuperável; queda do BO após commit exige reentrega sem repetir efeitos; publicação abortada no ME exige alinhar memória, log, snapshot e offsets. A retomada depende de dados retidos e mecanismos ainda a implementar/testar. Transação Kafka não reverte o livro em memória nem abrange PostgreSQL. Fontes: [Compose](docker-compose.yml), [configuração dos serviços](front-office/src/main/resources/application.properties), [HLD](docs/hlds/HLD-001-arquitetura-prospero.md) e [limites de entrega do Kafka](https://kafka.apache.org/41/design/design/).
+
+## SAGA e consistência em caso de erro
+
+A SAGA será **orquestrada pelo FO**, com estado e próximos passos persistidos. O desenho usa transações locais, outbox para publicação recuperável e deduplicação atômica com os efeitos. Essas responsabilidades estão decididas no ADR-002; os componentes, estados e contratos ainda não estão implementados. As setas entre serviços abaixo representam mensagens lógicas via Kafka.
+
+![SAGA planejada com rejeição, compensação e reconciliação](docs/c4/saga-consistencia.svg)
+
+A consistência pretendida depende destas invariantes e dos testes de falha correspondentes:
+
+- Matching só admite ordem com reserva confirmada; concorrência não pode reservar o mesmo recurso duas vezes.
+- Rejeição conhecida antes da reserva encerra sem liberar algo que não foi reservado. Encerramento definitivo permite compensar apenas a parte elegível, de forma idempotente.
+- Timeout ou queda com resultado desconhecido mantém pendência e exige reconciliação; **não libera reserva automaticamente**.
+- Negócio já efetivado se recupera para frente até contabilizar; não é apagado para compensar uma falha posterior. Parciais e corridas de cancelamento exigem contratos próprios.
+- Reentrega não duplica reserva, negócio, lançamento ou posição. Atomicidade é local e consistência entre contextos é eventual, sem commit global nem exactly-once geral.
+
+Isso descreve como a consistência deverá ser construída e verificada, não uma garantia já comprovada. Fontes: [ADR-002](docs/adrs/ADR-002-padroes-dominio.md) e [HLDs dos serviços](docs/hlds/README.md).
+
+## Observabilidade e indicadores
+
+Os serviços enviam logs/traces por OTLP ao Collector; ele encaminha traces ao Jaeger e logs ao Loki. Prometheus coleta **diretamente** `/q/metrics` das quatro aplicações a cada 15 segundos; o Collector não possui pipeline de métricas. Grafana consulta as três fontes. A retenção Prometheus é de três dias; Jaeger usa memória e perde traces no reinício.
+
+![Configuração de observabilidade e métricas atuais e planejadas](docs/c4/observabilidade.svg)
+
+| Área | Indicadores a acompanhar | Estado |
+| --- | --- | --- |
+| Coleta técnica | `up{job="prospero"}` por serviço | Consulta do dashboard atual; sucesso de scrape não comprova prontidão financeira. |
+| HTTP/JVM e recursos | Vazão, erros, latência, heap/GC, CPU, memória, disco/rede e pools | Endpoint técnico configurado; inventariar séries, coletores necessários e painéis na P06. |
+| Kafka e publicação | Lag, idade do backlog/outbox, falhas e reentregas | Planejado; depende dos consumidores/publicadores e fontes de métricas. |
+| SAGA e risco | Ordens pendentes/rejeitadas, tempo por etapa, reservas e compensações | Planejado nas RFs; controlar duplicação e recursos sem resolução. |
+| Matching | Tempo de processamento e boleta até negócio; sequência/replay | Planejado; RNF04 exige p99 boleta→negócio < 50 ms e matching < 1 ms/ordem em cenário documentado. |
+| Back office | Duplicações evitadas, conciliação de caixa/custódia, razão e liquidações pendentes | Planejado; medir invariantes e recuperação nas RF07/RF08. |
+| Mercado e trajetória | Idade/ausência da cotação e trace da ordem nos quatro serviços | Planejado; quatro dashboards de negócio e alertas na V01. |
+
+Ausência de série aparece como ausente, não zero. IDs de conta/ordem/execução ficam na correlação sanitizada de logs/traces, sem labels de alta cardinalidade nem segredos. Metas futuras exigem medições; configuração não comprova desempenho. Fontes: [Collector](infra/otel/collector.yaml), [Prometheus](infra/prometheus/prometheus.yml), [dashboard atual](infra/grafana/dashboards/fundacao.json) e [roadmap](docs/roadmap.md). Fontes editáveis e critérios das figuras: [catálogo de diagramas](docs/c4/README.md).
 
 ## Subir o ambiente
 
