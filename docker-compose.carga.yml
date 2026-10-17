@@ -1,0 +1,48 @@
+# Opt-in: docker compose -f docker-compose.yml -f docker-compose.carga.yml --profile carga ...
+services:
+  api-carga:
+    image: prospero/api-carga:0.1.0
+    build:
+      context: ./ferramentas/carga
+    profiles:
+      - carga
+    user: '65532:65532'
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 32
+    tmpfs:
+      - /tmp:size=8388608,mode=1777,noexec,nosuid,nodev
+    ports:
+      - '127.0.0.1:8090:8080'
+    # A porta de métricas não é publicada no host.
+    expose:
+      - '9091'
+    networks:
+      - web
+      - telemetria
+    environment:
+      CARGA_TOKEN_KEY_FILE: /run/secrets/carga_controle
+      CARGA_PREFLIGHT_KEY_FILE: /run/secrets/carga_preflight
+      CARGA_HOSTS: '127.0.0.1:8090,localhost:8090,api-carga:8080'
+      GOMEMLIMIT: 256MiB
+      GOMAXPROCS: '1'
+    secrets:
+      - carga_controle
+      - carga_preflight
+    restart: 'no'
+    stop_grace_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+secrets:
+  carga_controle:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/controle.key
+  carga_preflight:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/preflight.key

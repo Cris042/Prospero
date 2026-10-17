@@ -1,15 +1,15 @@
 # ADR-006 — Linguagem e isolamento da API de carga
 
 - Data: 2026-10-17
-- Estado: **Aceita para a linguagem Go**; desenho, framework e motor em avaliação, implementação planejada
+- Estado: **Aceita para a linguagem Go**; decisão técnica stdlib/executor restrito registrada, etapa A em validação
 - Decisor: usuário; aceite explícito de Go em 2026-10-17
 - Origem: P06 e pedido do usuário para avaliar Go ou Rust
 
 ## Contexto e escopo
 
-A P06 precisa iniciar, consultar e cancelar execuções locais, limitar o tráfego e apresentar carga oferecida/atingida, erros, descartes, latência e recursos do gerador separadamente do sistema. O usuário pediu avaliar Go ou Rust para essa API e depois autorizou explicitamente adotar Go. Hoje não há controlador ou gerador implementado; os quatro serviços financeiros continuam Java/Quarkus e a P03 entrega apenas o runner XLSX.
+A P06 precisa iniciar, consultar e cancelar execuções locais, limitar o tráfego e apresentar carga oferecida/atingida, erros, descartes, latência e recursos do gerador separadamente do sistema. O usuário pediu avaliar Go ou Rust para essa API e depois autorizou explicitamente adotar Go. A etapa A do controlador/gerador está em validação; os quatro serviços financeiros continuam Java/Quarkus e a P03 entrega o runner XLSX.
 
-Propõe-se uma ferramenta técnica em container Compose opt-in, fora dos processos medidos, sem banco financeiro, acesso a Kafka/Redis, dependência de implementação dos quatro serviços ou socket Docker. Não cria um quinto contexto de negócio. A API continua sujeita ao ADR-003 e aos cenários por HTTP/XLSX do ADR-004. O diretório, contrato exato, versão do toolchain, framework e motor serão fixados antes do código dependente. A pesquisa e o desenho macro estão no [HLD-006](../hlds/HLD-006-api-carga.md).
+Propõe-se uma ferramenta técnica em container Compose opt-in, fora dos processos medidos, sem banco financeiro, acesso a Kafka/Redis, dependência de implementação dos quatro serviços ou socket Docker. Não cria um quinto contexto de negócio. A API continua sujeita ao ADR-003 e aos cenários por HTTP/XLSX do ADR-004. O diretório, contrato, toolchain e escolha do motor estão registrados na seção de implementação, após experimento anterior ao código dependente. A pesquisa e o desenho macro estão no [HLD-006](../hlds/HLD-006-api-carga.md).
 
 A escolha da linguagem do controlador é separada da escolha do gerador. Esta análise não altera requisitos financeiros, não reduz o aceite da P06 e não comprova RNF04/RNF07.
 
@@ -30,7 +30,7 @@ Go não está no PATH do host observado; Rust/Cargo 1.96.0 estão disponíveis. 
 
 ## Decisão de linguagem e avaliação do motor
 
-**Go adotado como linguagem da API técnica**, por aceite explícito do usuário: “pode adotar GO”. A recomendação anterior considerou simplicidade de manutenção e cobertura da biblioteca padrão, sem alegar superioridade de desempenho. A implementação permanece planejada; a aprovação da linguagem não representa adoção automática de frameworks ou motores.
+**Go adotado como linguagem da API técnica**, por aceite explícito do usuário: “pode adotar GO”. A recomendação anterior considerou simplicidade de manutenção e cobertura da biblioteca padrão, sem alegar superioridade de desempenho. A aprovação da linguagem é distinta da escolha técnica de framework/motor registrada ao final; a etapa A está em implementação/validação autorizada.
 
 O motor permanece uma decisão separada:
 
@@ -70,3 +70,11 @@ Revisitar após experimento equivalente revelar saturação do gerador, necessid
 - 2026-10-17: proposta após cinco perspectivas independentes medium e rodada complementar Go/Rust solicitada pelo usuário.
 - 2026-10-17: usuário autoriza “pode adotar GO” e solicita pesquisa de frameworks/técnicas, HLD e atualização do README. **Go aceito**, sem reconfirmar a escolha; framework/motor e orçamento continuam em avaliação técnica.
 - Pesquisa/documentação não executaram build, benchmark ou código P06; fontes, alternativas e desenho estão no HLD-006.
+
+### Escolha técnica da etapa A — 2026-10-17
+
+Após autorização de implementar P06, cinco pareceres medium independentes recomendaram seguir com ressalvas. Experimento temporário Go 1.27.2 comparou Huma 2.39.1/humago e `net/http`, Vegeta 12.12.0 e leitura nativa limitada contra o mesmo servidor descartável. Huma forneceu OpenAPI automático e validação, mas seus erros padrão refletiram o objeto sentinela; exige transformação; no experimento o transformer sanitizado eliminou a reflexão, sem indicar falha inerente no framework. Ambos os decoders aceitam nomes duplicados por padrão, exigindo validação explícita. Vegeta com `MaxBody=4096` reteve 4096 bytes mas o alvo continuou escrevendo até o timeout; `Stop` não provou aborto em voo. A leitura nativa limitada retornou após 4097 bytes e o contexto interrompeu a leitura ativa. Bytes aceitos por Write no servidor não são captura de tráfego de rede. Detalhes finais e limites serão registrados no PR.
+
+Escolha do implementador: **biblioteca padrão `net/http` e executor nativo restrito**, sem módulos runtime externos. A API pequena manterá OpenAPI explícito e teste de aderência; parsing estrito rejeita duplicatas/campos desconhecidos e erros omitem entradas. Evita adaptar o ciclo de vida/contagens do motor reutilizado, preservando responsabilidade local por calendário, transporte e estatística. Não é declaração de maior desempenho. Go **1.27.2**, arquivo oficial linux-amd64 SHA-256 `ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5`, verificado antes do uso. Imagem builder/runtime fixadas na implementação.
+
+Contrato, limites combinados, atestado host assinado vinculado ao plano/instância, retenção e populações estão na seção de implementação do HLD-006. A entrega técnica não altera PRD nem dá por concluída a etapa financeira ou as fontes de observabilidade ainda indisponíveis. A escolha técnica integra a implementação autorizada; o aceite de Go pelo usuário permanece distinto da decisão do motor.

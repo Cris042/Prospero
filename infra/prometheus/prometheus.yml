@@ -21,3 +21,10 @@ scrape_configs:
     - back-office:8080
     labels:
       servico: back-office
+# Ferramenta opt-in: target ausente/falha de scrape não significa consumo zero.
+- job_name: prospero-carga
+  scrape_interval: 2s
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - api-carga:9091
