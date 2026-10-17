@@ -43,7 +43,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### P05 — Núcleo decimal exato no middle office
 
 - Dependência: P02; [refinamento](refinamentos/P05-P07-reuso-c4.md).
-- Estado: em andamento, branch `task/p05-reuso-decimal`.
+- Estado: aguardando revisão/merge — [PR #3](https://github.com/mclovin137/Prospero/pull/3), branch `task/p05-reuso-decimal`.
 - Entrega: representação técnica escalada, conversão exata com política de sinal explícita e testes de limites; [análise e proveniência](pesquisas/reuso-minerva-financas.md).
 - Aceite: sem arredondamento silencioso, overflow e expoentes extremos recusados, domínio puro e build MO independente. Sem nova API; dispensa XLSX conforme ADR-004.
 - Limite: tipos financeiros, escalas de moeda/tick, risco, reservas e cálculo de posições permanecem nas RF03–RF08.
