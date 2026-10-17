@@ -11,7 +11,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
 | MO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
-| MO00A | P05 | Conversão decimal exata técnica e limites, sem regras financeiras antecipadas. | Aguardando revisão/merge — PR #3 |
+| MO00A | P05 | Conversão decimal exata técnica e limites, sem regras financeiras antecipadas. | Concluída — PR #3 integrado |
 | MO01 | RF03 | Validar lote, tick, túnel e preços de referência. | Planejada |
 | MO02 | RF04 | Reservar recursos e proteger limites contra concorrência. | Planejada |
 | MO03 | RF05 | Consumir execuções e ajustar o consumo das reservas. | Planejada |

@@ -6,7 +6,7 @@ Data: 2026-10-17. Desenho baseado no [PRD-001](../prds/PRD-001-simulador-prosper
 
 Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. As APIs iniciais expõem identidade e saúde técnica; negociação, SAGA, reservas, livro, posições, liquidação e WebSocket permanecem planejados.
 
-A P05 adiciona apenas conversão decimal técnica pura no MO, sem endpoint/regra financeira, em PR próprio ainda não integrado ao main na abertura desta documentação. Consultar roadmap/PR antes de assumir sua disponibilidade em outra branch.
+A P05 adiciona apenas conversão decimal técnica pura no MO, sem endpoint/regra financeira, integrada ao main pelo PR #3 em 2026-10-17. Isso não implementa validação financeira, risco ou reservas.
 
 ## Arquitetura
 
@@ -96,7 +96,7 @@ Decisões: [ADR-001 backend/fronteiras](../adrs/ADR-001-arquitetura-backend.md),
 
 ## Verificação e rastreabilidade
 
-Fundação: P02 e suas [evidências](../evidencias/P02-testes.md). Invariantes de precisão técnica: P05 em PR próprio. Produto financeiro: RF01–RF10/P03 ainda planejados; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
+Fundação: P02 e suas [evidências](../evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF10/P03 ainda planejados; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
 
 ## HLDs dos contextos
 

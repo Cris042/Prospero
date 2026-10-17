@@ -6,7 +6,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 Contexto de risco: validação RF03, reservas/limites RF04, consumo/liberação RF05/RF10 e efeitos de liquidação RF08. A fundação tem identidade e infraestrutura; regras financeiras, reserva e consumidores Kafka ainda não estão implementados.
 
-Nesta branch, P05 entrega somente `decimal/dominio/ValorEscalado`, `RegraDeSinal` e `decimal/helper/ConversaoDecimalExata`: núcleo técnico exato, não um tipo financeiro com escala/tick aprovado. P05 está no PR #3 aguardando merge; sua disponibilidade depende da branch. RF03 continua planejada.
+A P05 entrega somente `decimal/dominio/ValorEscalado`, `RegraDeSinal` e `decimal/helper/ConversaoDecimalExata`: núcleo técnico exato, não um tipo financeiro com escala/tick aprovado. P05 foi integrada ao main pelo PR #3 em 2026-10-17. RF03 continua planejada.
 
 ## Stack e organização
 

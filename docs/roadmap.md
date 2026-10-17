@@ -6,7 +6,7 @@ Uma tarefa principal por requisito funcional RF01–RF10. P01–P03 preparam a e
 
 Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concluída**. Concluída exige validação, revisão e merge; um resumo local não substitui um PR. Datas e estimativas do roteiro original de 12 semanas não são compromisso deste roadmap.
 
-**Estado atual:** P01 e P02 concluídas: [PR #1](https://github.com/mclovin137/Prospero/pull/1) integrado em 2026-10-16 por autorização explícita do usuário, após validação e revisão locais. A implementação da P04 foi integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); sua ativação e validação da CI no GitHub continuam pendentes de runner dedicado. P03 e RF01–RF10 permanecem planejadas. Repositório publicado como público por autorização do usuário; nenhum release foi solicitado.
+**Estado atual:** P01 e P02 concluídas: [PR #1](https://github.com/mclovin137/Prospero/pull/1) integrado em 2026-10-16 por autorização explícita do usuário, após validação e revisão locais. A implementação da P04 foi integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); sua ativação e validação da CI no GitHub continuam pendentes de runner dedicado. P05, P07 e P08 concluídas: PRs #3, #4 e #5 integrados em 2026-10-17 por autorização explícita do usuário, após conferência independente das evidências locais. P03, P06 e RF01–RF10 permanecem planejadas. Repositório publicado como público por autorização do usuário; nenhum release foi solicitado.
 
 ## Fundação
 
@@ -43,7 +43,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### P05 — Núcleo decimal exato no middle office
 
 - Dependência: P02; [refinamento](refinamentos/P05-P07-reuso-c4.md).
-- Estado: aguardando revisão/merge — [PR #3](https://github.com/mclovin137/Prospero/pull/3), branch `task/p05-reuso-decimal`.
+- Estado: concluída — [PR #3](https://github.com/mclovin137/Prospero/pull/3) integrado em 2026-10-17.
 - Entrega: representação técnica escalada, conversão exata com política de sinal explícita e testes de limites; [análise e proveniência](pesquisas/reuso-minerva-financas.md).
 - Aceite: sem arredondamento silencioso, overflow e expoentes extremos recusados, domínio puro e build MO independente. Sem nova API; dispensa XLSX conforme ADR-004.
 - Limite: tipos financeiros, escalas de moeda/tick, risco, reservas e cálculo de posições permanecem nas RF03–RF08.
@@ -60,14 +60,14 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 ### P07 — Agente de diagramas C4
 
 - Dependência: P01; [refinamento](refinamentos/P05-P07-reuso-c4.md).
-- Estado: aguardando revisão/merge — [PR #4](https://github.com/mclovin137/Prospero/pull/4), branch `task/p07-agente-c4`, empilhado sobre P05.
+- Estado: concluída — [PR #4](https://github.com/mclovin137/Prospero/pull/4) integrado em 2026-10-17 após P05.
 - Entrega: perfil portátil e adaptador de agente quando comprovadamente suportado; fontes do Próspero, esforço medium, modelo herdado, proposta sem escrita/execução.
 - Aceite: exercício real com fonte suficiente e lacunas/conflitos; não inventar arquitetura implementada nem exigir FDD ou serviços pagos.
 
 ### P08 — Documentação proporcional e playbook
 
 - Dependências: P01 e P07; [refinamento](refinamentos/P08-fluxo-documental.md).
-- Estado: aguardando revisão/merge — [PR #5](https://github.com/mclovin137/Prospero/pull/5), branch `task/p08-fluxo-documental`, empilhado sobre P07.
+- Estado: concluída — [PR #5](https://github.com/mclovin137/Prospero/pull/5) integrado em 2026-10-17 após P07, incluindo a correção do índice em docs/README.md.
 - Entrega: guia PRD/HLD/ADR, PRD e cinco HLDs (ecossistema + quatro MS), substituição dos dois documentos anteriores, índice em docs/README.md, skills gerar-prd/gerar-hld e playbook único a partir da análise das cinco referências Minerva.
 - Aceite: revisão de aderência com evidências, requisitos preservados, documentos sem duplicação, links/hashes e exercícios independentes das skills; sem mudanças de runtime ou requisitos financeiros.
 - Dispensa XLSX: documentação sem endpoint novo, ADR-004.
