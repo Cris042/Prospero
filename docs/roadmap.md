@@ -40,6 +40,30 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 - Aceite: revisão independente medium por especialidade, sem segredos publicados; CI executável em runner isolado e gratuito. A ativação exige provisionar esse runner; a máquina compartilhada com Horus não será registrada.
 - Estado: implementação integrada pelo [PR #2](https://github.com/mclovin137/Prospero/pull/2); ativação pendente. Checks locais não equivalem a execução no GitHub. Ver [guia CI](ci.md).
 
+### P05 — Núcleo decimal exato no middle office
+
+- Dependência: P02; [refinamento](refinamentos/P05-P07-reuso-c4.md).
+- Estado: em andamento, branch `task/p05-reuso-decimal`.
+- Entrega: representação técnica escalada, conversão exata com política de sinal explícita e testes de limites; [análise e proveniência](pesquisas/reuso-minerva-financas.md).
+- Aceite: sem arredondamento silencioso, overflow e expoentes extremos recusados, domínio puro e build MO independente. Sem nova API; dispensa XLSX conforme ADR-004.
+- Limite: tipos financeiros, escalas de moeda/tick, risco, reservas e cálculo de posições permanecem nas RF03–RF08.
+
+### P06 — API de carga progressiva e observabilidade
+
+- Dependências: P02; cenários financeiros dependem de P03 e RFs correspondentes.
+- Estado: planejada. [Escopo e critérios](planos/P06-carga-observabilidade.md); refinar antes de implementar.
+- Entrega: controle local de execuções por API, rampas limitadas, cancelamento, gerador isolado e dashboards Grafana com fontes reais.
+- Aceite: carga oferecida versus atingida, erros/timeouts/descartes e latência reproduzíveis; recursos do gerador e sistema separados; filas/eventos observáveis quando implementados; limites e isolamento preservados.
+- Definir: localização do controlador, ferramenta geradora, orçamento, proteção das APIs e coletores. Não cria automaticamente um quinto serviço de negócio.
+- Replicação/consenso: N/A na topologia atual; quatro bancos independentes não são réplicas. Topologia replicada exige decisão futura e orçamento local.
+
+### P07 — Agente de diagramas C4
+
+- Dependência: P01; [refinamento](refinamentos/P05-P07-reuso-c4.md).
+- Estado: planejada; PR próprio.
+- Entrega: perfil portátil e adaptador de agente quando comprovadamente suportado; fontes do Próspero, esforço medium, modelo herdado, proposta sem escrita/execução.
+- Aceite: exercício real com fonte suficiente e lacunas/conflitos; não inventar arquitetura implementada nem exigir FDD ou serviços pagos.
+
 ## Tarefas por requisito funcional
 
 ### RF01 — Consulta de ativos e livro
@@ -121,7 +145,7 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ## V01 — Validação integrada dos requisitos não funcionais
 
-Dependências: RF01–RF10. Entregar cenários completos, carga reproduzível, documentação de execução local e roteiro de demonstração. Registrar hardware, limites dos containers, carga, aquecimento, volume de amostras e pontos medidos. Separar processamento da espera por contraparte de uma ordem Limit.
+Dependências: P06 e RF01–RF10. Entregar cenários completos, carga reproduzível, documentação de execução local e roteiro de demonstração. Registrar hardware, limites dos containers, carga, aquecimento, volume de amostras e pontos medidos. Separar processamento da espera por contraparte de uma ordem Limit.
 
 | Requisito | Evidência exigida | Tarefas que o constroem |
 | --- | --- | --- |
