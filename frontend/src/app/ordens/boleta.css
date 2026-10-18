@@ -136,3 +136,11 @@ thead th {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+@media (max-width: 560px) {
+  /* Alvos de toque de pelo menos 44 px no celular. */
+  button,
+  select,
+  input {
+    min-height: 44px;
+  }
+}

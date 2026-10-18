@@ -60,6 +60,47 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
   await expect(page.getByRole('status')).toContainText('Stop Loss: Venda 100 ALFA3');
 });
 
+test('envia Market e Stop Limit e repete com a mesma chave após falha de rede', async ({
+  page,
+}) => {
+  const chaves: string[] = [];
+  page.on('request', (pedido) => {
+    if (pedido.method() === 'POST' && pedido.url().endsWith('/api/v1/ordens')) {
+      chaves.push(pedido.headers()['x-idempotency-key']);
+    }
+  });
+  await page.goto('/');
+  const boleta = page.getByRole('form', { name: 'Ordem simples' });
+  await boleta.getByLabel('Tipo').selectOption('MARKET');
+  await expect(boleta.getByLabel('Validade').locator('option')).toHaveText([
+    'IOC (executa ou cancela)',
+    'FOK (tudo ou nada)',
+  ]);
+  await expect(boleta.getByLabel('Preço limite (R$)')).toHaveCount(0);
+  await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  await expect(page.getByRole('status')).toContainText('Mercado');
+
+  await boleta.getByLabel('Tipo').selectOption('STOP_LIMIT');
+  await expect(boleta.getByLabel('Validade').locator('option')).toHaveText(['Dia']);
+  await boleta.getByLabel('Preço limite (R$)').fill('9,45');
+  await boleta.getByLabel('Preço de disparo (R$)').fill('9,50');
+  let falhou = false;
+  await page.route('**/servicos/front-office/api/v1/ordens', (rota) => {
+    if (rota.request().method() === 'POST' && !falhou) {
+      falhou = true;
+      return rota.abort('connectionreset');
+    }
+    return rota.fallback();
+  });
+  await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  await expect(page.getByRole('alert')).toContainText('o reenvio não duplica a ordem');
+  await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  await expect(page.getByRole('status')).toContainText('Stop Limit');
+  expect(chaves).toHaveLength(3);
+  expect(chaves[2]).toBe(chaves[1]);
+  expect(chaves[1]).not.toBe(chaves[0]);
+});
+
 test('proxy recusa escrita de origem externa, método indevido e Host externo', async ({
   request,
 }) => {

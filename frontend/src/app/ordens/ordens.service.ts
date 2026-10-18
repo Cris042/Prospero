@@ -78,8 +78,26 @@ const MENSAGENS: Record<string, string> = {
   CORPO_INVALIDO: 'Preencha todos os campos obrigatórios.',
 };
 
+/** Aceita vírgula decimal (pt-BR) convertendo para o decimal textual da API. */
+export function normalizarPreco(texto: string): string {
+  return texto.trim().replace(',', '.');
+}
+
 /** Traduz Problem Details em mensagem; distingue erro de rede (repetível com a mesma chave). */
 export function mensagemErro(erro: unknown): { texto: string; repetivel: boolean } {
+  if (erro instanceof HttpErrorResponse && (erro.status === 401 || erro.status === 403)) {
+    return {
+      texto:
+        'Credencial da conta demo inválida ou expirada. Rode python3 scripts/preparar-ambiente.py e recrie o frontend.',
+      repetivel: false,
+    };
+  }
+  if (erro instanceof HttpErrorResponse && erro.status === 429 && !erro.error?.codigo) {
+    return {
+      texto: 'Muitos envios em sequência. Aguarde um instante e tente de novo.',
+      repetivel: true,
+    };
+  }
   if (erro instanceof HttpErrorResponse && erro.status > 0 && erro.status < 500) {
     const codigo = (erro.error as { codigo?: string } | null)?.codigo;
     return {

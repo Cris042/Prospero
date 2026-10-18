@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   inject,
   OnInit,
@@ -8,13 +9,14 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { finalize, map, Observable } from 'rxjs';
+import { catchError, EMPTY, finalize, map, Observable, Subject, switchMap } from 'rxjs';
 import { formatarDecimal } from '../mercado/mercado.service';
 import {
   exigeGatilho,
   exigeLimite,
   Lado,
   mensagemErro,
+  normalizarPreco,
   Ordem,
   OrdensService,
   Tipo,
@@ -35,6 +37,7 @@ const ROTULOS: Record<string, string> = {
   VENDA: 'Venda',
   TAKE_PROFIT: 'Take Profit',
   STOP_LOSS: 'Stop Loss',
+  RECEBIDA: 'Recebida',
 };
 
 @Component({
@@ -48,8 +51,12 @@ export class Boleta implements OnInit {
   private readonly ordens = inject(OrdensService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(NonNullableFormBuilder);
-  /** Chave reaproveitada só quando o envio anterior falhou por comunicação. */
-  private chavePendente: string | null = null;
+  /**
+   * Chave reaproveitada só quando o envio anterior falhou por comunicação e o pedido é idêntico;
+   * qualquer alteração, inclusive durante o envio, gera chave nova.
+   */
+  private pendente: { chave: string; assinatura: string } | null = null;
+  private readonly recarregar = new Subject<void>();
 
   readonly tickers = TICKERS;
   readonly tipos: readonly Tipo[] = ['LIMIT', 'MARKET', 'STOP', 'STOP_LIMIT'];
@@ -84,7 +91,7 @@ export class Boleta implements OnInit {
 
   readonly tipoAtual = signal<Tipo>('LIMIT');
   readonly tipoStopAtual = signal<'STOP' | 'STOP_LIMIT'>('STOP');
-  validades = () => VALIDADES[this.tipoAtual()];
+  readonly validades = computed(() => VALIDADES[this.tipoAtual()]);
   readonly exigeLimite = exigeLimite;
   readonly exigeGatilho = exigeGatilho;
 
@@ -100,18 +107,30 @@ export class Boleta implements OnInit {
     this.oco.controls.tipoStop.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tipo) => this.tipoStopAtual.set(tipo));
-    this.simples.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.novoPedido());
-    this.oco.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.novoPedido());
+    // switchMap: uma consulta antiga nunca sobrescreve a lista mais nova.
+    this.recarregar
+      .pipe(
+        switchMap(() =>
+          this.ordens.listar().pipe(
+            catchError(() => {
+              this.erroLista.set(true);
+              return EMPTY;
+            }),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((pagina) => {
+        this.erroLista.set(false);
+        this.lista.set(pagina.ordens);
+      });
     this.atualizarLista();
   }
 
   alternar(modo: 'SIMPLES' | 'OCO'): void {
     this.modo.set(modo);
-    this.novoPedido();
+    this.erro.set(null);
+    this.registro.set(null);
   }
 
   enviar(): void {
@@ -119,7 +138,15 @@ export class Boleta implements OnInit {
     this.enviando.set(true);
     this.erro.set(null);
     this.registro.set(null);
-    const chave = (this.chavePendente ??= crypto.randomUUID());
+    const assinatura = JSON.stringify([
+      this.modo(),
+      this.simples.getRawValue(),
+      this.oco.getRawValue(),
+    ]);
+    if (this.pendente?.assinatura !== assinatura) {
+      this.pendente = { chave: crypto.randomUUID(), assinatura };
+    }
+    const chave = this.pendente.chave;
     const envio: Observable<readonly Ordem[]> =
       this.modo() === 'SIMPLES' ? this.enviarSimples(chave) : this.enviarOco(chave);
     envio
@@ -129,34 +156,20 @@ export class Boleta implements OnInit {
       )
       .subscribe({
         next: (ordens) => {
-          this.chavePendente = null;
+          this.pendente = null;
           this.registro.set(ordens);
           this.atualizarLista();
         },
         error: (falha) => {
           const { texto, repetivel } = mensagemErro(falha);
-          if (!repetivel) this.chavePendente = null;
+          if (!repetivel) this.pendente = null;
           this.erro.set(texto);
         },
       });
   }
 
   atualizarLista(): void {
-    this.ordens
-      .listar()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (pagina) => {
-          this.erroLista.set(false);
-          this.lista.set(pagina.ordens);
-        },
-        error: () => this.erroLista.set(true),
-      });
-  }
-
-  private novoPedido(): void {
-    // Dados alterados: um novo envio não é repetição do anterior.
-    if (!this.enviando()) this.chavePendente = null;
+    this.recarregar.next();
   }
 
   private enviarSimples(chave: string): Observable<readonly Ordem[]> {
@@ -169,8 +182,8 @@ export class Boleta implements OnInit {
           tipo: v.tipo,
           validade: v.validade,
           quantidade: Number(v.quantidade),
-          precoLimite: exigeLimite(v.tipo) ? v.precoLimite.trim() : null,
-          precoGatilho: exigeGatilho(v.tipo) ? v.precoGatilho.trim() : null,
+          precoLimite: exigeLimite(v.tipo) ? normalizarPreco(v.precoLimite) : null,
+          precoGatilho: exigeGatilho(v.tipo) ? normalizarPreco(v.precoGatilho) : null,
         },
         chave,
       )
@@ -186,11 +199,11 @@ export class Boleta implements OnInit {
           lado: v.lado,
           quantidade: Number(v.quantidade),
           validade: 'DIA',
-          takeProfit: { precoLimite: v.alvo.trim() },
+          takeProfit: { precoLimite: normalizarPreco(v.alvo) },
           stopLoss: {
             tipo: v.tipoStop,
-            precoGatilho: v.gatilho.trim(),
-            precoLimite: v.tipoStop === 'STOP_LIMIT' ? v.limiteStop.trim() : null,
+            precoGatilho: normalizarPreco(v.gatilho),
+            precoLimite: v.tipoStop === 'STOP_LIMIT' ? normalizarPreco(v.limiteStop) : null,
           },
         },
         chave,

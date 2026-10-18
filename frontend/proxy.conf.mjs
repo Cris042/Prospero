@@ -15,6 +15,7 @@ function tokenDoAmbiente(nome) {
 
 const token = tokenDoAmbiente('FO_TOKEN_LEITURA');
 const tokenOrdens = tokenDoAmbiente('FO_TOKEN_ORDENS');
+const ROTA_ORDENS = /^\/servicos\/front-office\/api\/v1\/ordens(-oco)?(\/[0-9a-f-]{36})?(\?.*)?$/;
 const ORIGEM_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/;
 
 // Espelha o Nginx (ADR-010): GET/POST apenas; POST exige Origin local; Host local contra DNS rebinding.

@@ -2,8 +2,8 @@
   <p class="sobretitulo">CONTA DEMO · CONTA-001</p>
   <h2 id="boleta-titulo">Boleta</h2>
   <p class="aviso">
-    Esta etapa apenas <strong>registra</strong> a ordem. Validação de preço, reserva de saldo e
-    execução ainda não estão implementadas.
+    Esta etapa apenas <strong>registra</strong> a ordem: confere formato, tipo e validade. Tick,
+    lote, túnel de preço, reserva de saldo e execução ainda não estão implementados.
   </p>
 
   <div class="modos" role="group" aria-label="Tipo de envio">
@@ -55,13 +55,13 @@
       @if (exigeLimite(tipoAtual())) {
         <label
           >Preço limite (R$)
-          <input formControlName="precoLimite" inputmode="decimal" placeholder="10.25" required />
+          <input formControlName="precoLimite" inputmode="decimal" placeholder="10,25" required />
         </label>
       }
       @if (exigeGatilho(tipoAtual())) {
         <label
           >Preço de disparo (R$)
-          <input formControlName="precoGatilho" inputmode="decimal" placeholder="9.80" required />
+          <input formControlName="precoGatilho" inputmode="decimal" placeholder="9,80" required />
         </label>
       }
       <button type="submit" class="primario" [disabled]="enviando()">
@@ -91,7 +91,7 @@
       </label>
       <label
         >Alvo — Take Profit (R$)
-        <input formControlName="alvo" inputmode="decimal" placeholder="11.00" required />
+        <input formControlName="alvo" inputmode="decimal" placeholder="11,00" required />
       </label>
       <label
         >Stop Loss
@@ -102,12 +102,12 @@
       </label>
       <label
         >Preço de disparo (R$)
-        <input formControlName="gatilho" inputmode="decimal" placeholder="9.50" required />
+        <input formControlName="gatilho" inputmode="decimal" placeholder="9,50" required />
       </label>
       @if (tipoStopAtual() === 'STOP_LIMIT') {
         <label
           >Limite do Stop (R$)
-          <input formControlName="limiteStop" inputmode="decimal" placeholder="9.45" required />
+          <input formControlName="limiteStop" inputmode="decimal" placeholder="9,45" required />
         </label>
       }
       <p class="dica">Validade: Dia (sessão de São Paulo).</p>
@@ -122,7 +122,10 @@
   }
   @if (registro(); as ordens) {
     <div class="sucesso" role="status">
-      <strong>Ordem registrada — estado Recebida.</strong>
+      <strong
+        >{{ ordens.length > 1 ? 'Ordens registradas' : 'Ordem registrada' }} — estado
+        Recebida.</strong
+      >
       @for (o of ordens; track o.id) {
         <span
           >{{ o.papelOco ? rotulo(o.papelOco) + ': ' : '' }}{{ rotulo(o.lado) }} {{ o.quantidade }}
@@ -166,7 +169,7 @@
             <td>{{ o.quantidade }}</td>
             <td>{{ decimal(o.precoLimite) }}</td>
             <td>{{ decimal(o.precoGatilho) }}</td>
-            <td>Recebida</td>
+            <td>{{ rotulo(o.estado) }}</td>
           </tr>
         } @empty {
           <tr>

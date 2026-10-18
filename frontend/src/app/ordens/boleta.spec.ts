@@ -1,8 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { of, Subject, throwError } from 'rxjs';
+import { of, Subject, TimeoutError } from 'rxjs';
 import { Boleta } from './boleta';
-import { mensagemErro, Ordem, OrdensService, PedidoOrdem } from './ordens.service';
+import { mensagemErro, Ordem, OrdensService, PedidoOco, PedidoOrdem } from './ordens.service';
 
 const ORDEM: Ordem = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -22,9 +22,11 @@ const ORDEM: Ordem = {
 
 describe('Boleta', () => {
   let envios: { pedido: PedidoOrdem; chave: string; resposta: Subject<Ordem> }[];
+  let ocos: { pedido: PedidoOco; chave: string }[];
 
   beforeEach(async () => {
     envios = [];
+    ocos = [];
     await TestBed.configureTestingModule({
       imports: [Boleta],
       providers: [
@@ -36,6 +38,10 @@ describe('Boleta', () => {
               const resposta = new Subject<Ordem>();
               envios.push({ pedido, chave, resposta });
               return resposta;
+            },
+            enviarOco: (pedido: PedidoOco, chave: string) => {
+              ocos.push({ pedido, chave });
+              return of({ grupoOco: 'g', ordens: [ORDEM, { ...ORDEM, id: 'outra' }] });
             },
           },
         },
@@ -104,6 +110,51 @@ describe('Boleta', () => {
       ),
     ).toEqual({ texto: expect.stringContaining('outros dados'), repetivel: false });
     expect(mensagemErro(new HttpErrorResponse({ status: 503 })).repetivel).toBe(true);
-    expect(mensagemErro(throwError(() => 'x')).repetivel).toBe(true);
+    expect(mensagemErro(new TimeoutError()).repetivel).toBe(true);
+    expect(mensagemErro(new HttpErrorResponse({ status: 401 })).texto).toContain(
+      'preparar-ambiente',
+    );
+    expect(mensagemErro(new HttpErrorResponse({ status: 429 }))).toEqual({
+      texto: expect.stringContaining('Aguarde'),
+      repetivel: true,
+    });
+  });
+
+  it('gera chave nova se os dados mudarem, mesmo após falha de comunicação', async () => {
+    const fixture = TestBed.createComponent(Boleta);
+    await fixture.whenStable();
+    const boleta = fixture.componentInstance;
+    boleta.simples.patchValue({ precoLimite: '10,25' });
+    boleta.enviar();
+    expect(envios[0].pedido.precoLimite).toBe('10.25');
+    boleta.simples.patchValue({ quantidade: 200 });
+    envios[0].resposta.error(new TimeoutError());
+    boleta.enviar();
+    expect(envios[1].chave).not.toBe(envios[0].chave);
+  });
+
+  it('monta o OCO com Stop Limit e mostra as duas pernas', async () => {
+    const fixture = TestBed.createComponent(Boleta);
+    await fixture.whenStable();
+    const boleta = fixture.componentInstance;
+    boleta.alternar('OCO');
+    boleta.oco.patchValue({
+      alvo: '11,00',
+      tipoStop: 'STOP_LIMIT',
+      gatilho: '9.50',
+      limiteStop: '9,45',
+    });
+    boleta.enviar();
+    expect(ocos[0].pedido).toEqual(
+      expect.objectContaining({
+        validade: 'DIA',
+        takeProfit: { precoLimite: '11.00' },
+        stopLoss: { tipo: 'STOP_LIMIT', precoGatilho: '9.50', precoLimite: '9.45' },
+      }),
+    );
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Ordens registradas — estado Recebida.',
+    );
   });
 });
