@@ -14,7 +14,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3,
 | UI01 | P03 | Runner CLI `.xlsx`, exemplos e relatório via API | Concluída — PR #9 integrado em 2026-10-17; 49 testes runner + exemplo real validados |
 | UI02 | RF01 | Lista dos cinco ativos, cotações e profundidade | Concluída — PR #17 integrado |
 | UI03 | RF02 | Boleta, tipos/validades e acompanhamento de submissão | Concluída — PR #19 integrado |
-| UI04 | RF03, RF04 | Exibir validações, rejeições, reservas e poder de compra | Planejada |
+| UI04 | RF03, RF04 | Exibir validações, rejeições, reservas e poder de compra | RF03 em revisão (recusas com faixa do túnel na boleta); reservas na RF04 |
 | UI05 | RF05, RF06 | Livro, parciais e atualizações de mercado | Planejada |
 | UI06 | RF07, RF08 | Posições, resultados, histórico e liquidação | Planejada |
 | UI07 | RF09 | WebSocket, reconexão e trajetória da ordem | Planejada |

@@ -118,7 +118,23 @@ describe('Boleta', () => {
           error: { codigo: 'PRECO_FORA_DO_TUNEL', detalhes: { minimo: '9.00', maximo: '11.00' } },
         }),
       ).texto,
-    ).toBe('Preço fora do túnel de ±10% do ativo. Faixa aceita: 9,00 a 11,00.');
+    ).toBe('Preço fora do túnel permitido para o ativo. Faixa aceita: 9,00 a 11,00.');
+    expect(
+      mensagemErro(
+        new HttpErrorResponse({
+          status: 422,
+          error: { codigo: 'QUANTIDADE_FORA_DO_LOTE', detalhes: { lote: '100' } },
+        }),
+      ).texto,
+    ).toBe('Quantidade deve ser múltipla do lote do ativo. Lote: 100.');
+    expect(
+      mensagemErro(
+        new HttpErrorResponse({
+          status: 422,
+          error: { codigo: 'PRECO_FORA_DO_TICK', detalhes: { tick: '0.05' } },
+        }),
+      ).texto,
+    ).toBe('Preço deve ser múltiplo do tick do ativo. Tick: 0,05.');
     expect(mensagemErro(new HttpErrorResponse({ status: 401 })).texto).toContain(
       'preparar-ambiente',
     );

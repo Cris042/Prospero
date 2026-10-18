@@ -47,7 +47,7 @@ As substituições frente à proposta de origem estão no [índice de ADRs](../a
 | --- | --- |
 | RF01 | Listar ativos e exibir último preço, variação, bid/ask, spread, volume, cinco níveis por lado e profundidade agregada. |
 | RF02 | Enviar compras/vendas Market, Limit, Stop e Stop Limit, validades Dia/IOC/FOK e proteção Stop Loss/Take Profit em OCO. |
-| RF03 | Rejeitar lote/tick inválidos, Stop Limit sem limite e preços fora do túnel de ±10% do último preço; a referência antes do primeiro negócio e com cotação defasada será definida na RF03. |
+| RF03 | Rejeitar lote/tick inválidos, Stop Limit sem limite e preços fora do túnel de ±10% do último preço; a referência antes do primeiro negócio e com cotação defasada está definida no ADR-011 (último negócio da sessão, senão preço de referência). |
 | RF04 | Verificar poder de compra, posição, exposição vendida e quantidade máxima; reservar recursos antes do matching. |
 | RF05 | Aplicar preço-tempo, preço da oferta passiva, parciais/totais, gatilhos de stops e cancelamento do saldo OCO. |
 | RF06 | Atualizar último preço, bid/ask e VWAP do dia por negócio; refletir também mudanças de ofertas sem execução. |

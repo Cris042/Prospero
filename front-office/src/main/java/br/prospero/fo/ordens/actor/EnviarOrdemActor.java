@@ -20,6 +20,7 @@ import br.prospero.fo.ordens.helper.PoliticaOrdem;
 import br.prospero.fo.ordens.helper.SessaoNegociacao;
 import br.prospero.fo.ordens.helper.ValidacaoPreco;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -38,6 +39,8 @@ import java.util.UUID;
  * Registra ordens com idempotência por (conta, chave). Ordem das verificações (ADR-011): estrutura, matriz, lote,
  * tick e coerências; depois a chave; por fim o túnel, só para envios novos. RECEBIDA não implica reserva ou execução.
  */
+// @Startup: percentual inválido impede a subida em vez de falhar no primeiro envio.
+@Startup
 @ApplicationScoped
 public class EnviarOrdemActor {
     private static final Logger LOG = Logger.getLogger(EnviarOrdemActor.class);

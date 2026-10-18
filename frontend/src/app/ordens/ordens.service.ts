@@ -77,7 +77,7 @@ const MENSAGENS: Record<string, string> = {
   PRECO_FORA_DO_TICK: 'Preço deve ser múltiplo do tick do ativo.',
   STOP_LIMIT_INCOERENTE:
     'No Stop Limit de venda o limite não pode passar do disparo; na compra, não pode ficar abaixo.',
-  PRECO_FORA_DO_TUNEL: 'Preço fora do túnel de ±10% do ativo.',
+  PRECO_FORA_DO_TUNEL: 'Preço fora do túnel permitido para o ativo.',
   IDEMPOTENCIA_CONFLITO: 'Este envio já foi usado com outros dados. Revise e envie de novo.',
   LIMITE_ORDENS: 'Limite de 1.000 ordens por sessão atingido.',
   JSON_INVALIDO: 'Dados da ordem em formato inválido.',

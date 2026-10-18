@@ -298,4 +298,24 @@ class OrdensResourceTest {
                 .when().post("/api/v1/ordens-oco").then().statusCode(422).body("codigo", equalTo("PRECO_FORA_DO_TUNEL"));
         given().auth().oauth2(t).when().get("/api/v1/ordens").then().body("ordens", hasSize(1));
     }
+
+    @Test
+    void precedenciaDasRegrasEChaveAntesDoTunel() {
+        String t = conta("CONTA-002");
+        // Lote antes de tick antes de túnel.
+        enviar(t, "prec-00001", ordem("OMEGA3", "COMPRA", "LIMIT", "DIA", 150, "60.03", null)).then().statusCode(422)
+                .body("codigo", equalTo("QUANTIDADE_FORA_DO_LOTE"));
+        enviar(t, "prec-00002", ordem("OMEGA3", "COMPRA", "LIMIT", "DIA", 100, "60.03", null)).then().statusCode(422)
+                .body("codigo", equalTo("PRECO_FORA_DO_TICK"));
+        enviar(t, "prec-00003", ordem("OMEGA3", "COMPRA", "LIMIT", "DIA", 100, "60.05", null)).then().statusCode(422)
+                .body("codigo", equalTo("PRECO_FORA_DO_TUNEL"));
+        // Chave já aceita: corpo que violaria o túnel recebe 409 (chave consultada antes do túnel).
+        enviar(t, "prec-00004", limit("10.00")).then().statusCode(202);
+        enviar(t, "prec-00004", limit("12.00")).then().statusCode(409).body("codigo", equalTo("IDEMPOTENCIA_CONFLITO"));
+        // Recusas não consomem a cota: com teto 1 já usado pela ordem acima, só novas aceitas contam.
+        repositorio.maximoSessao(2);
+        enviar(t, "prec-00005", limit("12.00")).then().statusCode(422);
+        enviar(t, "prec-00006", limit("10.10")).then().statusCode(202);
+        enviar(t, "prec-00007", limit("10.20")).then().statusCode(429);
+    }
 }
