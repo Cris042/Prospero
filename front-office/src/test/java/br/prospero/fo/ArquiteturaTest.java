@@ -33,4 +33,12 @@ class ArquiteturaTest {
     @ArchTest
     static final ArchRule dominioSemDoubleWrapper = noFields().that().areDeclaredInClassesThat()
             .resideInAPackage("..dominio..").should().haveRawType(Double.class).allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule ordensNaoDependemDeMercado = noClasses().that().resideInAPackage("br.prospero.fo.ordens..")
+            .should().dependOnClassesThat().resideInAPackage("br.prospero.fo.mercado..");
+
+    @ArchTest
+    static final ArchRule mercadoNaoDependeDeOrdens = noClasses().that().resideInAPackage("br.prospero.fo.mercado..")
+            .should().dependOnClassesThat().resideInAPackage("br.prospero.fo.ordens..");
 }

@@ -1,4 +1,4 @@
-package br.prospero.fo.mercado.rest;
+package br.prospero.fo.comum.rest;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;

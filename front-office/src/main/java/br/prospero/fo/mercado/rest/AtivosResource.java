@@ -3,7 +3,8 @@ package br.prospero.fo.mercado.rest;
 import br.prospero.fo.mercado.actor.ConsultarMercadoActor;
 import br.prospero.fo.mercado.dto.AtivoResponseDTO;
 import br.prospero.fo.mercado.dto.LivroResponseDTO;
-import br.prospero.fo.mercado.dto.ProblemaDTO;
+import br.prospero.fo.comum.dto.ProblemaDTO;
+import br.prospero.fo.comum.rest.Problemas;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -45,7 +46,7 @@ public class AtivosResource {
     @APIResponse(responseCode = "403", description = "Token sem escopo mercado:leitura.")
     public Response listar(@Parameter(description = "UUID do namespace sintético; ausente usa o principal.")
                            @QueryParam("namespace") String namespace) {
-        return Response.ok(actor.listar(Problemas.namespace(namespace, false))).header("Cache-Control", "no-store").build();
+        return Response.ok(actor.listar(ParametrosMercado.namespace(namespace, false))).header("Cache-Control", "no-store").build();
     }
 
     @GET
@@ -60,7 +61,7 @@ public class AtivosResource {
     @APIResponse(responseCode = "401", description = "Token ausente ou inválido.")
     @APIResponse(responseCode = "403", description = "Token sem escopo mercado:leitura.")
     public Response livro(@PathParam("ticker") String ticker, @QueryParam("namespace") String namespace) {
-        return Response.ok(actor.livro(Problemas.namespace(namespace, false), Problemas.ticker(ticker)))
+        return Response.ok(actor.livro(ParametrosMercado.namespace(namespace, false), ParametrosMercado.ticker(ticker)))
                 .header("Cache-Control", "no-store").build();
     }
 }

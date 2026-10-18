@@ -1,0 +1,152 @@
+package br.prospero.fo.ordens.jpa;
+
+import br.prospero.fo.comum.dominio.Categoria;
+import br.prospero.fo.comum.dominio.RegraNegocioException;
+import br.prospero.fo.ordens.dominio.EstadoOrdem;
+import br.prospero.fo.ordens.dominio.LadoOrdem;
+import br.prospero.fo.ordens.dominio.Ordem;
+import br.prospero.fo.ordens.dominio.PapelOco;
+import br.prospero.fo.ordens.dominio.RepositorioOrdens;
+import br.prospero.fo.ordens.dominio.ResultadoRegistro;
+import br.prospero.fo.ordens.dominio.TipoOrdem;
+import br.prospero.fo.ordens.dominio.Validade;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@ApplicationScoped
+public class RepositorioOrdensJpa implements RepositorioOrdens {
+    static final Duration RETENCAO_CHAVE = Duration.ofHours(24);
+    static final int MAX_ORDENS_SESSAO = 1000;
+    private static final int EXPURGO_LOTE = 100;
+    private final EntityManager em;
+
+    @Inject
+    public RepositorioOrdensJpa(EntityManager em) {
+        this.em = em;
+    }
+
+    @Override
+    @Transactional
+    public boolean contaExiste(String conta) {
+        return !em.createNativeQuery("SELECT 1 FROM conta WHERE id = :c").setParameter("c", conta).getResultList().isEmpty();
+    }
+
+    @Override
+    @Transactional
+    public boolean ativoExiste(String ticker) {
+        // Leitura própria da tabela de ativos do FO, sem depender do adaptador JPA de mercado.
+        return !em.createNativeQuery("SELECT 1 FROM ativo WHERE ticker = :t").setParameter("t", ticker).getResultList().isEmpty();
+    }
+
+    @Override
+    @Transactional
+    public ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> ordens) {
+        OffsetDateTime expirado = OffsetDateTime.ofInstant(agora.minus(RETENCAO_CHAVE), ZoneOffset.UTC);
+        em.createNativeQuery("""
+                        DELETE FROM idempotencia_envio WHERE ctid IN (
+                            SELECT ctid FROM idempotencia_envio WHERE criado_em < :expirado LIMIT :lote)""")
+                .setParameter("expirado", expirado).setParameter("lote", EXPURGO_LOTE).executeUpdate();
+        em.createNativeQuery("DELETE FROM idempotencia_envio WHERE conta = :c AND chave = :k AND criado_em < :expirado")
+                .setParameter("c", conta).setParameter("k", chave).setParameter("expirado", expirado).executeUpdate();
+        UUID referencia = ordens.getFirst().grupoEnvio();
+        // Envio concorrente com a mesma chave espera o commit do primeiro e cai no ramo de repetição.
+        boolean reservada = !em.createNativeQuery("""
+                        INSERT INTO idempotencia_envio (conta, chave, hash, referencia, criado_em)
+                        VALUES (:c, :k, :h, :r, :t) ON CONFLICT (conta, chave) DO NOTHING RETURNING referencia""")
+                .setParameter("c", conta).setParameter("k", chave).setParameter("h", hash).setParameter("r", referencia)
+                .setParameter("t", OffsetDateTime.ofInstant(agora, ZoneOffset.UTC)).getResultList().isEmpty();
+        if (!reservada) {
+            Object[] existente = (Object[]) em.createNativeQuery(
+                            "SELECT hash, referencia FROM idempotencia_envio WHERE conta = :c AND chave = :k")
+                    .setParameter("c", conta).setParameter("k", chave).getSingleResult();
+            if (!hash.equals(existente[0])) {
+                return new ResultadoRegistro.Conflito();
+            }
+            return new ResultadoRegistro.Repetido(porEnvio(conta, (UUID) existente[1]));
+        }
+        boolean dentroDoLimite = !em.createNativeQuery("""
+                        INSERT INTO limite_ordens (conta, data_sessao, quantidade) VALUES (:c, :d, :n)
+                        ON CONFLICT (conta, data_sessao) DO UPDATE SET quantidade = limite_ordens.quantidade + EXCLUDED.quantidade
+                        WHERE limite_ordens.quantidade + EXCLUDED.quantidade <= :max RETURNING quantidade""")
+                .setParameter("c", conta).setParameter("d", ordens.getFirst().dataSessao())
+                .setParameter("n", ordens.size()).setParameter("max", MAX_ORDENS_SESSAO).getResultList().isEmpty();
+        if (!dentroDoLimite) {
+            // Exceção desfaz também a reserva da chave.
+            throw new RegraNegocioException(Categoria.LIMITE_ATINGIDO, "LIMITE_ORDENS",
+                    "Limite de 1000 ordens por conta na sessão atingido.");
+        }
+        ordens.forEach(o -> em.persist(entidade(o)));
+        return new ResultadoRegistro.Novo(ordens);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Ordem> buscar(String conta, UUID id) {
+        return em.createQuery("from OrdemEntity where id = :id and conta = :c", OrdemEntity.class)
+                .setParameter("id", id).setParameter("c", conta).getResultStream().findFirst()
+                .map(RepositorioOrdensJpa::ordem);
+    }
+
+    @Override
+    @Transactional
+    public List<Ordem> buscarGrupoOco(String conta, UUID grupoOco) {
+        return em.createQuery("from OrdemEntity where grupoOco = :g and conta = :c order by papelOco desc", OrdemEntity.class)
+                .setParameter("g", grupoOco).setParameter("c", conta).getResultList().stream()
+                .map(RepositorioOrdensJpa::ordem).toList();
+    }
+
+    @Override
+    @Transactional
+    public List<Ordem> listar(String conta, Cursor cursor, int limite) {
+        String filtro = cursor == null ? "" : " and (recebidaEm < :t or (recebidaEm = :t and id < :id))";
+        var consulta = em.createQuery("from OrdemEntity where conta = :c" + filtro + " order by recebidaEm desc, id desc",
+                OrdemEntity.class).setParameter("c", conta).setMaxResults(limite);
+        if (cursor != null) {
+            consulta.setParameter("t", cursor.recebidaEm()).setParameter("id", cursor.id());
+        }
+        return consulta.getResultList().stream().map(RepositorioOrdensJpa::ordem).toList();
+    }
+
+    private List<Ordem> porEnvio(String conta, UUID grupoEnvio) {
+        return em.createQuery("from OrdemEntity where grupoEnvio = :g and conta = :c order by papelOco desc nulls first",
+                        OrdemEntity.class).setParameter("g", grupoEnvio).setParameter("c", conta).getResultList().stream()
+                .map(RepositorioOrdensJpa::ordem).toList();
+    }
+
+    private static OrdemEntity entidade(Ordem o) {
+        OrdemEntity e = new OrdemEntity();
+        e.id = o.id();
+        e.conta = o.conta();
+        e.ticker = o.ticker();
+        e.lado = o.lado().name();
+        e.tipo = o.tipo().name();
+        e.validade = o.validade().name();
+        e.quantidade = o.quantidade();
+        e.precoLimite = o.precoLimite();
+        e.precoGatilho = o.precoGatilho();
+        e.grupoOco = o.grupoOco();
+        e.papelOco = o.papelOco() == null ? null : o.papelOco().name();
+        e.grupoEnvio = o.grupoEnvio();
+        e.estado = o.estado().name();
+        e.dataSessao = o.dataSessao();
+        e.recebidaEm = o.recebidaEm();
+        return e;
+    }
+
+    private static Ordem ordem(OrdemEntity e) {
+        return new Ordem(e.id, e.conta, e.ticker, LadoOrdem.valueOf(e.lado), TipoOrdem.valueOf(e.tipo),
+                Validade.valueOf(e.validade), e.quantidade, e.precoLimite, e.precoGatilho, e.grupoOco,
+                e.papelOco == null ? null : PapelOco.valueOf(e.papelOco), e.grupoEnvio, EstadoOrdem.valueOf(e.estado),
+                e.dataSessao, e.recebidaEm);
+    }
+}

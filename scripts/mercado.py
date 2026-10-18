@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RF01: emite token curto de preparação/leitura e configuração do runner XLSX; sem exibir a chave."""
+"""RF01/RF02: emite tokens curtos (mercado e ordens por conta) e configuração do runner XLSX; sem exibir a chave."""
 import argparse
 import datetime
 import json
@@ -15,19 +15,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from importlib import import_module
 
 ambiente = import_module("preparar-ambiente")
-ESCOPOS = {"leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "mercado:preparacao"]}
+ESCOPOS = {"leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "mercado:preparacao"],
+           "ordens": ["mercado:leitura", "ordens:enviar", "ordens:leitura"]}
+CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003"}
 VALIDADE_MAXIMA = 3600
 
 
-def token(escopo, validade):
+def token(escopo, validade, conta=None):
     if escopo not in ESCOPOS or not 1 <= validade <= VALIDADE_MAXIMA:
         raise SystemExit("Escopo ou validade inválidos.")
+    if (escopo == "ordens") != (conta is not None) or (conta is not None and conta not in CONTAS):
+        raise SystemExit("Escopo ordens exige --conta CONTA-001..003; demais escopos não aceitam conta.")
     chave = ambiente.ler(ambiente.path).get("FO_JWT_CHAVE")
     if not chave or len(chave) < 32:
         raise SystemExit("FO_JWT_CHAVE ausente; execute python3 scripts/preparar-ambiente.py.")
     agora = int(time.time())
-    return ambiente.jwt({"iss": "prospero-local", "aud": "prospero-front-office", "iat": agora,
-                         "exp": agora + validade, "groups": ESCOPOS[escopo]}, chave)
+    claims = {"iss": "prospero-local", "aud": "prospero-front-office", "iat": agora,
+              "exp": agora + validade, "groups": ESCOPOS[escopo]}
+    if conta:
+        claims["sub"] = conta
+    return ambiente.jwt(claims, chave)
 
 
 DEMO = {
@@ -71,6 +78,7 @@ def main():
     t = sub.add_parser("token", help="Imprime token curto no stdout.")
     t.add_argument("--escopo", choices=sorted(ESCOPOS), default="leitura")
     t.add_argument("--validade", type=int, default=900)
+    t.add_argument("--conta", choices=sorted(CONTAS))
     c = sub.add_parser("config-runner", help="Grava configuração do runner com token de preparação.")
     c.add_argument("destino")
     c.add_argument("--origem", default="http://front-office:8080")
@@ -86,10 +94,13 @@ def main():
         preparar_demo(args.origem)
         return
     if args.comando == "token":
-        print(token(args.escopo, args.validade))
+        print(token(args.escopo, args.validade, args.conta))
         return
-    config = {"servicos": {"front-office": {"origem": args.origem, "headers": {
-        "Authorization": "Bearer " + token("preparacao", args.validade)}}}}
+    # ordens-a/ordens-b: mesma origem com contas distintas, para testar isolamento entre contas.
+    bearer = lambda valor: {"origem": args.origem, "headers": {"Authorization": "Bearer " + valor}}
+    config = {"servicos": {"front-office": bearer(token("preparacao", args.validade)),
+                           "ordens-a": bearer(token("ordens", args.validade, "CONTA-002")),
+                           "ordens-b": bearer(token("ordens", args.validade, "CONTA-003"))}}
     escrever_config(args.destino, json.dumps(config, indent=2) + "\n")
     print("Configuração do runner gravada; token não exibido.")
 

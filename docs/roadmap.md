@@ -126,15 +126,17 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ### RF02 — Envio e acompanhamento inicial de ordens
 
+- Estado: **em andamento** — RF02a (API, persistência, idempotência, OCO, XLSX) em PR na branch `feat/rf02a-ordens-api`; RF02c (boleta Angular, token de escrita no proxy, E2E) em seguida. RF01 concluída pelo [PR #17](https://github.com/mclovin137/Prospero/pull/17) (merge `a70b1cc`).
+- Refinamento (2026-10-17): brief comum; cinco pareceres medium em agentes separados — arquitetura, QA, segurança, operação e viabilidade — todos **SEGUIR COM RESSALVAS**. Memória `prospero/Prospero` consultada (sem registros de ordens). Consensos: só registro persistido (outbox na RF04), estado único `RECEBIDA`, `202` + `Location`, idempotência `(conta, chave)` com UNIQUE e hash, 409 para divergência (maioria; QA/arquitetura preferiam 422), `X-Idempotency-Key` pela restrição de cabeçalhos do runner, 404 para ordem alheia, divisão em PRs. Decisões do usuário: matriz recomendada, três contas sintéticas fixas via `sub`, token de escrita no proxy com proteções, chave de 24 h e 1000 ordens por conta/sessão. Registro no [ADR-010](adrs/ADR-010-ordens-contas-idempotencia.md).
 - Dependências: RF01.
 - Entrega: boleta Angular, APIs de envio/consulta e estado persistido no FO; tipos Market, Limit, Stop e Stop Limit; validades Dia/IOC/FOK e vínculos OCO representados no contrato.
-- Definir: combinações permitidas, estados, horários/fuso, idempotência de envio e significado de `201`/`202`.
+- Definido no ADR-010: combinações, estado inicial, sessão America/Sao_Paulo, idempotência e `202`.
 - Aceite/testes: DTOs, OpenAPI, IDs/correlação e consulta de estado, erros estruturais, cenário de submissão pela planilha. Entrega limitada ao aceite/registro; não anunciar execução ou reserva antes de RF04/RF05.
 
 ### RF03 — Validação da ordem
 
 - Dependências: RF02.
-- Entrega: validação de lote, tick, Stop Limit com limite e túnel de ±10% do último preço; tratar referência inicial/defasada conforme definição da RF03.
+- Entrega: validação de lote, tick e túnel de ±10% do último preço (a presença do limite no Stop Limit já é estrutural na RF02, ADR-010); tratar referência inicial/defasada conforme definição da RF03.
 - Definir: escalas, arredondamento/overflow, referência antes do primeiro negócio e para cotação defasada; túnel para ordens sem preço limite.
 - Aceite/testes: limites e valores imediatamente fora deles, entradas inválidas e erro síncrono/estado de rejeição assíncrona coerentes; `.xlsx` e testes puros.
 - RNF: RNF01.

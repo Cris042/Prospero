@@ -52,11 +52,13 @@ COMPOSE_PARALLEL_LIMIT=1 "${compose[@]}" --progress plain build
 "${compose[@]}" up -d --wait --wait-timeout 240
 python3 scripts/verificar-ambiente.py --projeto "$project"
 "${compose[@]}" run --rm --no-deps -T runner-planilhas
-# RF01: workbook com token curto de preparação em arquivo temporário fora do Git e da imagem.
+# RF01/RF02: workbooks com tokens curtos (preparação e contas de teste) em arquivo temporário fora do Git e da imagem.
 runner_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-runner.XXXXXX")"
 python3 scripts/mercado.py config-runner "$runner_cfg/runner.json"
 "${compose[@]}" run --rm --no-deps -T -v "$runner_cfg/runner.json:/config/runner.json:ro" \
   runner-planilhas runner/exemplos/mercado.xlsx --config /config/runner.json
+"${compose[@]}" run --rm --no-deps -T -v "$runner_cfg/runner.json:/config/runner.json:ro" \
+  runner-planilhas runner/exemplos/ordens.xlsx --config /config/runner.json
 python3 scripts/mercado.py preparar-demo --origem "http://$("${compose[@]}" port front-office 8080)"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
