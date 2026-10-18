@@ -16,6 +16,7 @@ import {
   map,
   Observable,
   Subject,
+  Subscription,
   switchMap,
   take,
   takeWhile,
@@ -77,6 +78,8 @@ export class Boleta implements OnInit {
    */
   private pendente: { chave: string; assinatura: string } | null = null;
   private readonly recarregar = new Subject<void>();
+  /** Acompanhamento do último envio; um novo envio ou troca de modo cancela o anterior. */
+  private acompanhamento: Subscription | null = null;
 
   readonly tickers = TICKERS;
   readonly tipos: readonly Tipo[] = ['LIMIT', 'MARKET', 'STOP', 'STOP_LIMIT'];
@@ -148,6 +151,7 @@ export class Boleta implements OnInit {
   }
 
   alternar(modo: 'SIMPLES' | 'OCO'): void {
+    this.acompanhamento?.unsubscribe();
     this.modo.set(modo);
     this.erro.set(null);
     this.registro.set(null);
@@ -155,6 +159,7 @@ export class Boleta implements OnInit {
 
   enviar(): void {
     if (this.enviando()) return;
+    this.acompanhamento?.unsubscribe();
     this.enviando.set(true);
     this.erro.set(null);
     this.registro.set(null);
@@ -205,7 +210,7 @@ export class Boleta implements OnInit {
    * envio estiverem RECEBIDA. Sem resposta, a ordem continua Recebida — não há liberação por timeout.
    */
   private acompanharRisco(ids: readonly string[]): void {
-    timer(500, 500)
+    this.acompanhamento = timer(500, 500)
       .pipe(
         take(20),
         switchMap(() => this.ordens.listar().pipe(catchError(() => EMPTY))),

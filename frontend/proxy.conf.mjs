@@ -33,9 +33,9 @@ function ordensPermitidas(req, res) {
   }
   return undefined;
 }
-const PREPARACAO = /preparacoes-mercado/i;
+const PREPARACAO = /preparacoes-(mercado|risco)/i;
 
-// Rota genérica do FO: bloqueia preparação mesmo codificada e descarta Authorization do cliente.
+// Rotas genéricas do FO e do MO: bloqueiam preparação mesmo codificada e descartam Authorization do cliente.
 function semPreparacao(req, res) {
   let caminho = req.url ?? '';
   try {
@@ -78,7 +78,11 @@ export default {
     pathRewrite: { '^/servicos/front-office': '' },
     bypass: semPreparacao,
   },
-  '/servicos/middle-office': { ...servico(8082), pathRewrite: { '^/servicos/middle-office': '' } },
+  '/servicos/middle-office': {
+    ...servico(8082),
+    pathRewrite: { '^/servicos/middle-office': '' },
+    bypass: semPreparacao,
+  },
   '/servicos/matching-engine': {
     ...servico(8083),
     pathRewrite: { '^/servicos/matching-engine': '' },

@@ -60,6 +60,26 @@ test('preparação não é alcançável pelo proxy do navegador', async ({ reque
   expect(resposta.status()).toBe(403);
 });
 
+test('preparação de carteiras do MO não é alcançável pelo proxy do navegador', async ({
+  request,
+}) => {
+  for (const caminho of [
+    '/servicos/middle-office/api/v1/preparacoes-risco/contas/CONTA-002',
+    '/servicos/middle-office/api/v1/preparacoes%2Drisco/contas/CONTA-002',
+  ]) {
+    const resposta = await request.put(caminho, {
+      data: { saldo: '1.00' },
+      headers: { Authorization: 'Bearer qualquer' },
+    });
+    expect(resposta.status()).toBe(403);
+  }
+  // O proxy não repassa o token do cliente: a carteira exige autenticação no MO.
+  const carteira = await request.get('/servicos/middle-office/api/v1/risco/carteira', {
+    headers: { Authorization: 'Bearer qualquer' },
+  });
+  expect(carteira.status()).toBe(401);
+});
+
 test('informa indisponibilidade do mercado e recupera', async ({ page }) => {
   const rota = '**/servicos/front-office/api/v1/ativos';
   await page.route(rota, (route) => route.fulfill({ status: 503, body: '{}' }));

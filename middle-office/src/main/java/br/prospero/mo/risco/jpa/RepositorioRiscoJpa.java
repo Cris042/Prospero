@@ -140,12 +140,15 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public void preparar(String conta, BigDecimal saldo, Map<String, Long> custodia) {
-        // Bloqueia primeiro a linha de controle: reservas concorrentes da conta esperam e reavaliam o novo saldo.
+        // Bloqueia as linhas de controle (caixa e todas as custódias, em ordem fixa) antes de apagar reservas: uma
+        // reserva concorrente ou já confirmou (e o DELETE seguinte a enxerga) ou espera e reavalia o novo saldo.
+        // O consumidor trava uma linha por vez e nunca espera pela conta, então não há ciclo de deadlock.
         em.createNativeQuery("UPDATE conta_risco SET total = :s, disponivel = :s, reservado = 0 WHERE conta = :c")
                 .setParameter("s", saldo).setParameter("c", conta).executeUpdate();
-        em.createNativeQuery("DELETE FROM reserva WHERE conta = :c").setParameter("c", conta).executeUpdate();
-        List<?> tickers = em.createNativeQuery("SELECT ticker FROM custodia_risco WHERE conta = :c ORDER BY ticker")
+        List<?> tickers = em.createNativeQuery(
+                        "SELECT ticker FROM custodia_risco WHERE conta = :c ORDER BY ticker FOR UPDATE")
                 .setParameter("c", conta).getResultList();
+        em.createNativeQuery("DELETE FROM reserva WHERE conta = :c").setParameter("c", conta).executeUpdate();
         for (Object ticker : tickers) {
             long quantidade = custodia.getOrDefault((String) ticker, 0L);
             em.createNativeQuery("""

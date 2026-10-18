@@ -151,6 +151,7 @@ def verificar_risco(origem, origem_mo):
     """SAGA FO→MO real (ADR-012), repetível: prepara CONTA-002 (R$ 1.000.000,00 e 1.000 ações/ativo); compras
     concorrentes que somadas excedem o saldo → uma RESERVADA e outra SALDO_INSUFICIENTE; venda sem custódia; quantidade
     máxima; Market e OCO; ao fim, a carteira do MO reflete exatamente as reservas."""
+    sem_pendencias(origem, "CONTA-002")
     preparar_carteira(origem_mo, "CONTA-002", "1000000.00", {t: 1000 for t in ATIVOS})
     tok = token("ordens", 120, "CONTA-002")
 
@@ -210,12 +211,43 @@ def verificar_risco(origem, origem_mo):
     print("Risco: reserva concorrente, custódia, quantidade máxima, Market, OCO e carteira do MO verificados.")
 
 
+RAIZ = Path(__file__).resolve().parent.parent
+
+
 def compose(projeto):
-    base = ["docker", "compose"]
-    return base + ["-p", projeto, "-f", "docker-compose.yml", "-f", "docker-compose.ci.yml"] if projeto else base
+    # --project-directory: o alvo é sempre este repositório, qualquer que seja o diretório de chamada.
+    base = ["docker", "compose", "--project-directory", str(RAIZ), "-f", str(RAIZ / "docker-compose.yml")]
+    if projeto:
+        return base + ["-p", projeto, "-f", str(RAIZ / "docker-compose.ci.yml")]
+    return base
+
+
+def sem_pendencias(origem, conta, prazo=30.0):
+    """Espera a conta não ter ordens recentes RECEBIDA (comandos em trânsito) antes de preparar a carteira. Ordens
+    com mais de 5 minutos são ignoradas: as anteriores à V5 do FO nunca tiveram comando e ficam RECEBIDA (ADR-012)."""
+    tok = token("ordens", 60, conta)
+    limite = time.monotonic() + prazo
+    corte = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)
+
+    def pendentes():
+        return [o for o in http("GET", f"{origem}/api/v1/ordens?limite=100", tok)["ordens"]
+                if o["estado"] == "RECEBIDA" and datetime.datetime.fromisoformat(o["recebidaEm"]) > corte]
+
+    while pendentes():
+        if time.monotonic() > limite:
+            raise SystemExit(f"{conta} ainda tem ordens aguardando o risco após {prazo:.0f} s.")
+        time.sleep(0.3)
 
 
 def verificar_concorrencia(origem_mo, projeto):
+    try:
+        _verificar_concorrencia(origem_mo, projeto)
+    finally:
+        # Linhas de controle alteradas por SQL direto voltam ao estado semeado, mesmo se a prova falhar.
+        preparar_carteira(origem_mo, "CONTA-003", "1000000.00", {t: 1000 for t in ATIVOS})
+
+
+def _verificar_concorrencia(origem_mo, projeto):
     """Prova SQL com duas conexões reais no PostgreSQL do MO (HLD-003): ler-e-depois-gravar concede 140 sobre 100;
     o UPDATE condicional usado pelo MO concede só uma reserva de 70 e a segunda reavalia após o commit da primeira."""
     psql = compose(projeto) + ["exec", "-T", "postgres-middle-office", "psql", "-X", "-U", "prospero_mo", "-d",
@@ -223,7 +255,8 @@ def verificar_concorrencia(origem_mo, projeto):
 
     class Sessao:
         def __init__(self):
-            self.p = subprocess.Popen(psql, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            # stderr separado: avisos do Compose não se misturam às linhas de resultado do psql.
+            self.p = subprocess.Popen(psql, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                       text=True, bufsize=1)
             self.linhas = queue.Queue()
             threading.Thread(target=lambda: [self.linhas.put(l.strip()) for l in self.p.stdout], daemon=True).start()
@@ -240,7 +273,7 @@ def verificar_concorrencia(origem_mo, projeto):
             self.p.wait(timeout=10)
 
     def unico(sql):
-        return subprocess.check_output(psql + ["-c", sql], text=True).strip()
+        return subprocess.check_output(psql + ["-c", sql], text=True, stderr=subprocess.DEVNULL).strip()
 
     conta = "CONTA-003"
     filtro = f"conta = '{conta}'"
@@ -259,7 +292,8 @@ def verificar_concorrencia(origem_mo, projeto):
         s.ler()
         s.ler()
         s.fechar()
-    if concedidas != 2:
+    perdida = unico(f"SELECT disponivel || '|' || reservado FROM conta_risco WHERE {filtro}")
+    if concedidas != 2 or perdida != "30.00|70.00":
         raise SystemExit("Concorrência SQL: anomalia de ler-e-depois-gravar não reproduzida.")
     # GREEN: UPDATE condicional (o mesmo de RepositorioRiscoJpa.reservarCaixa).
     preparar_carteira(origem_mo, conta, "100.00", {})
@@ -269,12 +303,15 @@ def verificar_concorrencia(origem_mo, projeto):
     a.enviar("BEGIN; " + reservar)
     if (a.ler(), a.ler()) != ("BEGIN", "UPDATE 1"):
         raise SystemExit("Concorrência SQL: primeira reserva não aplicada.")
-    b.enviar("BEGIN; SET LOCAL lock_timeout = '15s'; " + reservar)
+    b.enviar("BEGIN; SET LOCAL lock_timeout = '15s'; SELECT pg_backend_pid();")
     b.ler()
     b.ler()
+    pid_b = b.ler()
+    if not pid_b.isdigit():
+        raise SystemExit("Concorrência SQL: pid da segunda sessão inválido.")
+    b.enviar(reservar)
     limite = time.monotonic() + 10
-    while unico("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
-                "AND query LIKE 'UPDATE conta_risco%'") != "1":
+    while unico(f"SELECT wait_event_type FROM pg_stat_activity WHERE pid = {int(pid_b)}") != "Lock":
         if time.monotonic() > limite:
             raise SystemExit("Concorrência SQL: a segunda sessão não esperou o lock da linha de controle.")
         time.sleep(0.2)
@@ -286,7 +323,6 @@ def verificar_concorrencia(origem_mo, projeto):
     a.fechar()
     b.fechar()
     estado = unico(f"SELECT disponivel || '|' || reservado FROM conta_risco WHERE {filtro}")
-    preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS})
     if segunda != "UPDATE 0" or estado != "30.00|70.00":
         raise SystemExit(f"Concorrência SQL: esperado UPDATE 0 e 30.00|70.00, obtido {segunda} e {estado}.")
     print("Concorrência SQL: ler-e-depois-gravar concede 140 sobre 100; UPDATE condicional concede uma reserva de 70.")
@@ -297,6 +333,7 @@ def verificar_recuperacao(origem, origem_mo, projeto):
     não criam reserva nem travam o consumo (ADR-012)."""
     base = compose(projeto)
     conta = "CONTA-003"
+    sem_pendencias(origem, conta)
     preparar_carteira(origem_mo, conta, "1000.00", {})
     tok = token("ordens", 300, conta)
     ordem = {"ticker": "ALFA3", "lado": "COMPRA", "tipo": "LIMIT", "validade": "DIA", "quantidade": 10,
@@ -327,10 +364,21 @@ def verificar_recuperacao(origem, origem_mo, projeto):
     if (decidida["estado"], carteira(origem_mo, conta)["saldoReservado"]) != ("RESERVADA", "100.00"):
         raise SystemExit(f"Recuperação: esperado RESERVADA com 100.00 reservado, obtido {decidida}.")
     # Reentrega do mesmo comando (cópia da outbox do FO) e mensagem inválida, seguidas de uma ordem nova.
-    payload = subprocess.check_output(base + [
+    intencao = str(uuid.UUID(criada["id"]))
+    linhas = subprocess.check_output(base + [
         "exec", "-T", "postgres-front-office", "psql", "-X", "-A", "-t", "-U", "prospero_fo", "-d", "prospero_fo",
-        "-c", f"SELECT payload FROM outbox WHERE payload LIKE '%\"correlacao\":\"{criada['id']}\"%'"],
-        text=True).strip()
+        "-c", f"SELECT payload FROM outbox WHERE payload LIKE '%\"correlacao\":\"{intencao}\"%'"],
+        text=True, stderr=subprocess.DEVNULL).strip().splitlines()
+    if len(linhas) != 1 or not linhas[0].startswith("{"):
+        raise SystemExit("Recuperação: comando original não encontrado na outbox do FO para a reentrega.")
+    payload = linhas[0]
+
+    def mo_sql(sql):
+        return subprocess.check_output(base + ["exec", "-T", "postgres-middle-office", "psql", "-X", "-A", "-t", "-U",
+                                               "prospero_mo", "-d", "prospero_mo", "-c", sql], text=True,
+                                       stderr=subprocess.DEVNULL).strip()
+
+    rejeitados_antes = int(mo_sql("SELECT count(*) FROM evento_rejeitado"))
     mensagens = f"{conta}|{payload}\n{conta}|{{nao-e-json\n"
     subprocess.run(base + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-console-producer.sh", "--bootstrap-server",
                            "localhost:9092", "--topic", "risco.comandos.v1", "--property", "parse.key=true",
@@ -340,9 +388,12 @@ def verificar_recuperacao(origem, origem_mo, projeto):
                 {"X-Idempotency-Key": "recup-" + uuid.uuid4().hex[:16]})
     aguardar_decisao(origem, tok, f"/api/v1/ordens/{nova['id']}", 30)
     reservado = carteira(origem_mo, conta)["saldoReservado"]
+    decisoes = mo_sql(f"SELECT count(*) FROM decisao_risco WHERE intencao = '{intencao}'")
+    rejeitados = int(mo_sql("SELECT count(*) FROM evento_rejeitado")) - rejeitados_antes
     preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS})
-    if reservado != "150.00":
-        raise SystemExit(f"Recuperação: reentrega alterou a reserva (esperado 150.00, obtido {reservado}).")
+    if (reservado, decisoes, rejeitados) != ("150.00", "1", 1):
+        raise SystemExit(f"Recuperação: esperado 150.00 reservado, 1 decisão e 1 rejeitada; obtido {reservado}, "
+                         f"{decisoes} e {rejeitados}.")
     print("Recuperação: MO parado mantém RECEBIDA e decide uma vez; reentrega e mensagem inválida sem efeito.")
 
 
