@@ -55,7 +55,7 @@ python3 scripts/verificar-ambiente.py --projeto "$project"
 # RF01/RF02: workbooks com tokens curtos (preparação e contas de teste) em arquivo temporário fora do Git e da imagem.
 runner_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-runner.XXXXXX")"
 # workbook:perfil — cada planilha recebe só os tokens do seu perfil.
-for item in mercado:mercado ordens:ordens validacao:ordens; do
+for item in mercado:mercado ordens:ordens validacao:ordens risco:risco; do
   workbook="${item%%:*}" perfil="${item##*:}"
   python3 scripts/mercado.py config-runner "$runner_cfg/$workbook.json" --perfil "$perfil"
   "${compose[@]}" run --rm --no-deps -T -v "$runner_cfg/$workbook.json:/config/runner.json:ro" \
@@ -63,8 +63,11 @@ for item in mercado:mercado ordens:ordens validacao:ordens; do
 done
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
 python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"
-# RF04: SAGA FO→MO com carteiras semeadas; volumes novos a cada execução da CI.
-python3 scripts/mercado.py verificar-risco --origem "$fo_origem"
+mo_origem="http://$("${compose[@]}" port middle-office 8080)"
+# RF04: SAGA FO→MO, prova SQL com duas conexões e recuperação (MO parado, reentrega, mensagem inválida).
+python3 scripts/mercado.py verificar-risco --origem "$fo_origem" --origem-mo "$mo_origem"
+python3 scripts/mercado.py verificar-concorrencia --origem-mo "$mo_origem" --projeto "$project"
+python3 scripts/mercado.py verificar-recuperacao --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"
 python3 scripts/mercado.py preparar-demo --origem "$fo_origem"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.

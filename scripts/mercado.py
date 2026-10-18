@@ -6,6 +6,10 @@ import concurrent.futures
 import datetime
 import json
 import os
+import queue
+import re
+import subprocess
+import threading
 import urllib.error
 import urllib.request
 import uuid
@@ -20,7 +24,12 @@ from importlib import import_module
 
 ambiente = import_module("preparar-ambiente")
 ESCOPOS = {"leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "mercado:preparacao"],
-           "ordens": ["mercado:leitura", "ordens:enviar", "ordens:leitura"]}
+           "ordens": ["mercado:leitura", "ordens:enviar", "ordens:leitura"],
+           "risco": ["risco:leitura"], "risco-preparacao": ["risco:preparacao"]}
+# Escopos do MO usam audiência própria (RF04b): token do FO não vale no MO e vice-versa.
+AUDIENCIAS = {"risco": "prospero-middle-office", "risco-preparacao": "prospero-middle-office"}
+POR_CONTA = {"ordens", "risco"}
+ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
 CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003"}
 VALIDADE_MAXIMA = 3600
 
@@ -28,13 +37,13 @@ VALIDADE_MAXIMA = 3600
 def token(escopo, validade, conta=None):
     if escopo not in ESCOPOS or not 1 <= validade <= VALIDADE_MAXIMA:
         raise SystemExit("Escopo ou validade inválidos.")
-    if (escopo == "ordens") != (conta is not None) or (conta is not None and conta not in CONTAS):
-        raise SystemExit("Escopo ordens exige --conta CONTA-001..003; demais escopos não aceitam conta.")
+    if (escopo in POR_CONTA) != (conta is not None) or (conta is not None and conta not in CONTAS):
+        raise SystemExit("Escopos ordens e risco exigem --conta CONTA-001..003; demais escopos não aceitam conta.")
     chave = ambiente.ler(ambiente.path).get("FO_JWT_CHAVE")
     if not chave or len(chave) < 32:
         raise SystemExit("FO_JWT_CHAVE ausente; execute python3 scripts/preparar-ambiente.py.")
     agora = int(time.time())
-    claims = {"iss": "prospero-local", "aud": "prospero-front-office", "iat": agora,
+    claims = {"iss": "prospero-local", "aud": AUDIENCIAS.get(escopo, "prospero-front-office"), "iat": agora,
               "exp": agora + validade, "groups": ESCOPOS[escopo]}
     if conta:
         claims["sub"] = conta
@@ -107,9 +116,42 @@ def verificar_ordens(origem):
     print("Ordens: concorrência idempotente verificada (20 iguais, 10 divergentes, 10 OCO).")
 
 
-def verificar_risco(origem):
-    """SAGA FO→MO real (ADR-012), com carteiras semeadas (volumes novos, como na CI): compras concorrentes que somadas
-    excedem o saldo → uma RESERVADA e outra SALDO_INSUFICIENTE; venda sem custódia; quantidade máxima; Market e OCO."""
+def http(metodo, url, tok, corpo=None, cabecalhos=None):
+    extra = {"Authorization": "Bearer " + tok, **(cabecalhos or {})}
+    if corpo is not None:
+        extra["Content-Type"] = "application/json"
+    pedido = urllib.request.Request(url, method=metodo, data=None if corpo is None else json.dumps(corpo).encode(),
+                                    headers=extra)
+    with urllib.request.urlopen(pedido, timeout=10) as resposta:
+        return json.load(resposta)
+
+
+def preparar_carteira(origem_mo, conta, saldo, custodia):
+    """RF04b: redefine a carteira de uma conta de teste pela API local do MO (apaga as reservas dela)."""
+    return http("PUT", f"{origem_mo}/api/v1/preparacoes-risco/contas/{conta}", token("risco-preparacao", 60),
+                {"saldo": saldo, "custodia": custodia})
+
+
+def carteira(origem_mo, conta):
+    return http("GET", f"{origem_mo}/api/v1/risco/carteira", token("risco", 60, conta))
+
+
+def aguardar_decisao(origem, tok, caminho, prazo=20.0):
+    limite = time.monotonic() + prazo
+    while time.monotonic() < limite:
+        corpo = http("GET", origem + caminho, tok)
+        ordens = corpo.get("ordens", [corpo])
+        if all(o["estado"] != "RECEBIDA" for o in ordens):
+            return ordens
+        time.sleep(0.2)
+    raise SystemExit(f"Risco sem resposta em {prazo:.0f} s para {caminho} (MO, Kafka ou tópicos indisponíveis?).")
+
+
+def verificar_risco(origem, origem_mo):
+    """SAGA FO→MO real (ADR-012), repetível: prepara CONTA-002 (R$ 1.000.000,00 e 1.000 ações/ativo); compras
+    concorrentes que somadas excedem o saldo → uma RESERVADA e outra SALDO_INSUFICIENTE; venda sem custódia; quantidade
+    máxima; Market e OCO; ao fim, a carteira do MO reflete exatamente as reservas."""
+    preparar_carteira(origem_mo, "CONTA-002", "1000000.00", {t: 1000 for t in ATIVOS})
     tok = token("ordens", 120, "CONTA-002")
 
     def chamar(caminho, corpo=None):
@@ -123,15 +165,8 @@ def verificar_risco(origem):
                 raise SystemExit(f"HTTP {resposta.status} em {caminho}")
             return json.load(resposta)
 
-    def decidido(caminho, prazo=20.0):
-        limite = time.monotonic() + prazo
-        while time.monotonic() < limite:
-            corpo = chamar(caminho)
-            ordens = corpo.get("ordens", [corpo])
-            if all(o["estado"] != "RECEBIDA" for o in ordens):
-                return ordens
-            time.sleep(0.2)
-        raise SystemExit(f"Risco sem resposta em {prazo:.0f} s para {caminho} (MO, Kafka ou tópicos indisponíveis?).")
+    def decidido(caminho):
+        return aguardar_decisao(origem, tok, caminho)
 
     def limit(ticker, lado, quantidade, preco):
         return {"ticker": ticker, "lado": lado, "tipo": "LIMIT", "validade": "DIA", "quantidade": quantidade,
@@ -165,9 +200,150 @@ def verificar_risco(origem):
         obtido = [(o["estado"], o["motivoRejeicao"]) for o in decidido(alvo)]
         if obtido != esperado:
             falhas.append(f"{nome}: esperado {esperado}, obtido {obtido}")
+    # 600.000,00 (compra concorrente vencedora) + 10 × teto(20,00) = 220,00 (Market); OCO de venda reserva 5 DELTA3.
+    final = carteira(origem_mo, "CONTA-002")
+    delta = next(c for c in final["custodias"] if c["ticker"] == "DELTA3")
+    if (final["saldoReservado"], final["saldoDisponivel"], delta["reservado"]) != ("600220.00", "399780.00", 5):
+        falhas.append(f"carteira divergente das reservas: {final}")
     if falhas:
         raise SystemExit("Falha na verificação de risco: " + "; ".join(falhas))
-    print("Risco: reserva concorrente, custódia, quantidade máxima, Market e OCO verificados pela SAGA FO→MO.")
+    print("Risco: reserva concorrente, custódia, quantidade máxima, Market, OCO e carteira do MO verificados.")
+
+
+def compose(projeto):
+    base = ["docker", "compose"]
+    return base + ["-p", projeto, "-f", "docker-compose.yml", "-f", "docker-compose.ci.yml"] if projeto else base
+
+
+def verificar_concorrencia(origem_mo, projeto):
+    """Prova SQL com duas conexões reais no PostgreSQL do MO (HLD-003): ler-e-depois-gravar concede 140 sobre 100;
+    o UPDATE condicional usado pelo MO concede só uma reserva de 70 e a segunda reavalia após o commit da primeira."""
+    psql = compose(projeto) + ["exec", "-T", "postgres-middle-office", "psql", "-X", "-U", "prospero_mo", "-d",
+                               "prospero_mo", "-v", "ON_ERROR_STOP=1", "-A", "-t"]
+
+    class Sessao:
+        def __init__(self):
+            self.p = subprocess.Popen(psql, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                      text=True, bufsize=1)
+            self.linhas = queue.Queue()
+            threading.Thread(target=lambda: [self.linhas.put(l.strip()) for l in self.p.stdout], daemon=True).start()
+
+        def enviar(self, sql):
+            self.p.stdin.write(sql + "\n")
+            self.p.stdin.flush()
+
+        def ler(self, prazo=10.0):
+            return self.linhas.get(timeout=prazo)
+
+        def fechar(self):
+            self.p.stdin.close()
+            self.p.wait(timeout=10)
+
+    def unico(sql):
+        return subprocess.check_output(psql + ["-c", sql], text=True).strip()
+
+    conta = "CONTA-003"
+    filtro = f"conta = '{conta}'"
+    # RED: sem proteção, as duas sessões leem 100, ambas concedem 70 e gravam o valor calculado na leitura.
+    preparar_carteira(origem_mo, conta, "100.00", {})
+    a, b = Sessao(), Sessao()
+    concedidas = 0
+    for s in (a, b):
+        s.enviar(f"BEGIN; SELECT disponivel FROM conta_risco WHERE {filtro};")
+    for s in (a, b):
+        if s.ler() != "BEGIN" or s.ler() != "100.00":
+            raise SystemExit("Concorrência SQL: leitura inicial inesperada.")
+        concedidas += 1
+    for s in (a, b):
+        s.enviar(f"UPDATE conta_risco SET disponivel = 30.00, reservado = 70.00 WHERE {filtro}; COMMIT;")
+        s.ler()
+        s.ler()
+        s.fechar()
+    if concedidas != 2:
+        raise SystemExit("Concorrência SQL: anomalia de ler-e-depois-gravar não reproduzida.")
+    # GREEN: UPDATE condicional (o mesmo de RepositorioRiscoJpa.reservarCaixa).
+    preparar_carteira(origem_mo, conta, "100.00", {})
+    reservar = (f"UPDATE conta_risco SET disponivel = disponivel - 70, reservado = reservado + 70 "
+                f"WHERE {filtro} AND disponivel >= 70;")
+    a, b = Sessao(), Sessao()
+    a.enviar("BEGIN; " + reservar)
+    if (a.ler(), a.ler()) != ("BEGIN", "UPDATE 1"):
+        raise SystemExit("Concorrência SQL: primeira reserva não aplicada.")
+    b.enviar("BEGIN; SET LOCAL lock_timeout = '15s'; " + reservar)
+    b.ler()
+    b.ler()
+    limite = time.monotonic() + 10
+    while unico("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
+                "AND query LIKE 'UPDATE conta_risco%'") != "1":
+        if time.monotonic() > limite:
+            raise SystemExit("Concorrência SQL: a segunda sessão não esperou o lock da linha de controle.")
+        time.sleep(0.2)
+    a.enviar("COMMIT;")
+    a.ler()
+    segunda = b.ler(15)
+    b.enviar("COMMIT;")
+    b.ler()
+    a.fechar()
+    b.fechar()
+    estado = unico(f"SELECT disponivel || '|' || reservado FROM conta_risco WHERE {filtro}")
+    preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS})
+    if segunda != "UPDATE 0" or estado != "30.00|70.00":
+        raise SystemExit(f"Concorrência SQL: esperado UPDATE 0 e 30.00|70.00, obtido {segunda} e {estado}.")
+    print("Concorrência SQL: ler-e-depois-gravar concede 140 sobre 100; UPDATE condicional concede uma reserva de 70.")
+
+
+def verificar_recuperacao(origem, origem_mo, projeto):
+    """MO parado: ordem fica RECEBIDA e é decidida uma vez ao voltar; comando reentregue e mensagem inválida no tópico
+    não criam reserva nem travam o consumo (ADR-012)."""
+    base = compose(projeto)
+    conta = "CONTA-003"
+    preparar_carteira(origem_mo, conta, "1000.00", {})
+    tok = token("ordens", 300, conta)
+    ordem = {"ticker": "ALFA3", "lado": "COMPRA", "tipo": "LIMIT", "validade": "DIA", "quantidade": 10,
+             "precoLimite": "10.00"}
+    subprocess.run(base + ["stop", "middle-office"], check=True, capture_output=True)
+    try:
+        criada = http("POST", origem + "/api/v1/ordens", tok, ordem,
+                      {"X-Idempotency-Key": "recup-" + uuid.uuid4().hex[:16]})
+        time.sleep(3)
+        if http("GET", f"{origem}/api/v1/ordens/{criada['id']}", tok)["estado"] != "RECEBIDA":
+            raise SystemExit("Recuperação: ordem decidida com o MO parado.")
+    finally:
+        subprocess.run(base + ["start", "middle-office"], check=True, capture_output=True)
+    if projeto:
+        # Porta publicada dinâmica (CI) pode mudar quando o contêiner reinicia.
+        origem_mo = "http://" + subprocess.check_output(base + ["port", "middle-office", "8080"], text=True).strip()
+    limite = time.monotonic() + 180
+    while True:
+        try:
+            if http("GET", origem_mo + "/q/health/ready", "x").get("status") == "UP":
+                break
+        except (urllib.error.URLError, ConnectionError, ValueError):
+            pass
+        if time.monotonic() > limite:
+            raise SystemExit("Recuperação: MO não voltou a ficar pronto.")
+        time.sleep(1)
+    [decidida] = aguardar_decisao(origem, tok, f"/api/v1/ordens/{criada['id']}", 60)
+    if (decidida["estado"], carteira(origem_mo, conta)["saldoReservado"]) != ("RESERVADA", "100.00"):
+        raise SystemExit(f"Recuperação: esperado RESERVADA com 100.00 reservado, obtido {decidida}.")
+    # Reentrega do mesmo comando (cópia da outbox do FO) e mensagem inválida, seguidas de uma ordem nova.
+    payload = subprocess.check_output(base + [
+        "exec", "-T", "postgres-front-office", "psql", "-X", "-A", "-t", "-U", "prospero_fo", "-d", "prospero_fo",
+        "-c", f"SELECT payload FROM outbox WHERE payload LIKE '%\"correlacao\":\"{criada['id']}\"%'"],
+        text=True).strip()
+    mensagens = f"{conta}|{payload}\n{conta}|{{nao-e-json\n"
+    subprocess.run(base + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-console-producer.sh", "--bootstrap-server",
+                           "localhost:9092", "--topic", "risco.comandos.v1", "--property", "parse.key=true",
+                           "--property", "key.separator=|"], input=mensagens, text=True, check=True,
+                   capture_output=True)
+    nova = http("POST", origem + "/api/v1/ordens", tok, {**ordem, "quantidade": 5},
+                {"X-Idempotency-Key": "recup-" + uuid.uuid4().hex[:16]})
+    aguardar_decisao(origem, tok, f"/api/v1/ordens/{nova['id']}", 30)
+    reservado = carteira(origem_mo, conta)["saldoReservado"]
+    preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS})
+    if reservado != "150.00":
+        raise SystemExit(f"Recuperação: reentrega alterou a reserva (esperado 150.00, obtido {reservado}).")
+    print("Recuperação: MO parado mantém RECEBIDA e decide uma vez; reentrega e mensagem inválida sem efeito.")
 
 
 def escrever_config(destino, conteudo):
@@ -187,34 +363,64 @@ def main():
     c = sub.add_parser("config-runner", help="Grava configuração do runner com token de preparação.")
     c.add_argument("destino")
     c.add_argument("--origem", default="http://front-office:8080")
+    c.add_argument("--origem-mo", default="http://middle-office:8080")
     c.add_argument("--validade", type=int, default=900)
-    c.add_argument("--perfil", choices=["mercado", "ordens"], default="mercado",
+    c.add_argument("--perfil", choices=["mercado", "ordens", "risco"], default="mercado",
                    help="Menor privilégio: cada workbook recebe só os tokens de que precisa.")
     v = sub.add_parser("verificar-ordens", help="Verifica idempotência concorrente no PostgreSQL real (CONTA-003).")
     v.add_argument("--origem", default="http://127.0.0.1:8081")
-    r = sub.add_parser("verificar-risco", help="Verifica reservas pela SAGA FO→MO (CONTA-002, carteira semeada).")
+    r = sub.add_parser("verificar-risco", help="Verifica reservas pela SAGA FO→MO (prepara CONTA-002).")
     r.add_argument("--origem", default="http://127.0.0.1:8081")
+    r.add_argument("--origem-mo", default="http://127.0.0.1:8082")
+    q = sub.add_parser("verificar-concorrencia", help="Prova SQL com duas conexões no PostgreSQL do MO (CONTA-003).")
+    q.add_argument("--origem-mo", default="http://127.0.0.1:8082")
+    q.add_argument("--projeto", help="Projeto Compose de CI (usa docker-compose.ci.yml).")
+    e = sub.add_parser("verificar-recuperacao", help="Para o MO, verifica RECEBIDA, reentrega e mensagem inválida.")
+    e.add_argument("--origem", default="http://127.0.0.1:8081")
+    e.add_argument("--origem-mo", default="http://127.0.0.1:8082")
+    e.add_argument("--projeto", help="Projeto Compose de CI (usa docker-compose.ci.yml).")
     d = sub.add_parser("preparar-demo", help="Prepara o namespace principal com dados sintéticos.")
     d.add_argument("--origem", default="http://127.0.0.1:8081")
     args = parser.parse_args()
-    if args.comando in {"preparar-demo", "verificar-ordens", "verificar-risco"}:
-        partes = urlsplit(args.origem)
-        if (partes.scheme != "http" or partes.hostname not in {"127.0.0.1", "localhost"} or partes.username
-                or partes.password or partes.path not in {"", "/"} or partes.query or partes.fragment):
-            raise SystemExit("Origem deve ser http local (loopback), sem credenciais nem caminho.")
-        {"preparar-demo": preparar_demo, "verificar-ordens": verificar_ordens,
-         "verificar-risco": verificar_risco}[args.comando](args.origem)
+    if args.comando in {"preparar-demo", "verificar-ordens", "verificar-risco", "verificar-concorrencia",
+                        "verificar-recuperacao"}:
+        for origem in (getattr(args, "origem", None), getattr(args, "origem_mo", None)):
+            partes = urlsplit(origem) if origem else None
+            if partes and (partes.scheme != "http" or partes.hostname not in {"127.0.0.1", "localhost"}
+                           or partes.username or partes.password or partes.path not in {"", "/"} or partes.query
+                           or partes.fragment):
+                raise SystemExit("Origem deve ser http local (loopback), sem credenciais nem caminho.")
+        if getattr(args, "projeto", None) and not re.fullmatch(r"prospero-ci-\d+-\d+", args.projeto):
+            raise SystemExit("Projeto Compose de CI inválido.")
+        match args.comando:
+            case "preparar-demo":
+                preparar_demo(args.origem)
+            case "verificar-ordens":
+                verificar_ordens(args.origem)
+            case "verificar-risco":
+                verificar_risco(args.origem, args.origem_mo)
+            case "verificar-concorrencia":
+                verificar_concorrencia(args.origem_mo, args.projeto)
+            case "verificar-recuperacao":
+                verificar_recuperacao(args.origem, args.origem_mo, args.projeto)
         return
     if args.comando == "token":
         print(token(args.escopo, args.validade, args.conta))
         return
+    risco = lambda valor: {"origem": args.origem_mo, "headers": {"Authorization": "Bearer " + valor}}
     # ordens-a/ordens-b: mesma origem com contas distintas, para testar isolamento entre contas.
     bearer = lambda valor: {"origem": args.origem, "headers": {"Authorization": "Bearer " + valor}}
     if args.perfil == "mercado":
         config = {"servicos": {"front-office": bearer(token("preparacao", args.validade))}}
-    else:
+    elif args.perfil == "ordens":
         config = {"servicos": {"ordens-a": bearer(token("ordens", args.validade, "CONTA-002")),
                                "ordens-b": bearer(token("ordens", args.validade, "CONTA-003"))}}
+    else:
+        # RF04b: ordens e carteira da CONTA-002, carteira da CONTA-003 (isolamento) e preparação de carteiras.
+        config = {"servicos": {"ordens-a": bearer(token("ordens", args.validade, "CONTA-002")),
+                               "risco-a": risco(token("risco", args.validade, "CONTA-002")),
+                               "risco-b": risco(token("risco", args.validade, "CONTA-003")),
+                               "preparacao-risco": risco(token("risco-preparacao", args.validade))}}
     escrever_config(args.destino, json.dumps(config, indent=2) + "\n")
     print("Configuração do runner gravada; token não exibido.")
 

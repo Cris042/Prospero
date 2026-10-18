@@ -2,6 +2,7 @@ package br.prospero.mo.risco;
 
 import br.prospero.mo.mensageria.dominio.MensagemSaida;
 import br.prospero.mo.risco.actor.AvaliarRiscoActor;
+import br.prospero.mo.risco.dominio.Carteira;
 import br.prospero.mo.risco.dominio.ComandoRisco;
 import br.prospero.mo.risco.dominio.Decisao;
 import br.prospero.mo.risco.dominio.Lado;
@@ -102,9 +103,12 @@ class AvaliarRiscoActorTest {
 
     /** Mesma semântica do UPDATE condicional: suficiência e mutação juntas. */
     static class Memoria implements RepositorioRisco {
-        final Map<String, BigDecimal> disponivel = new HashMap<>(Map.of("CONTA-002", new BigDecimal("100.00")));
+        final Map<String, BigDecimal> disponivel = new HashMap<>(Map.of("CONTA-002", new BigDecimal("100.00"),
+                "CONTA-003", new BigDecimal("100.00")));
         final Map<String, Long> custodia = new HashMap<>(Map.of("CONTA-002|ALFA3", 1000L));
         final Map<UUID, Decisao> decisoes = new HashMap<>();
+        final Map<String, BigDecimal> totais = new HashMap<>();
+        final Map<String, Long> custodiaTotal = new HashMap<>();
 
         @Override
         public Optional<Decisao> decisao(UUID intencao) {
@@ -122,7 +126,7 @@ class AvaliarRiscoActorTest {
         }
 
         @Override
-        public boolean reservarCaixa(String conta, BigDecimal valor) {
+        public synchronized boolean reservarCaixa(String conta, BigDecimal valor) {
             BigDecimal atual = disponivel.get(conta);
             if (atual.compareTo(valor) < 0) {
                 return false;
@@ -139,6 +143,28 @@ class AvaliarRiscoActorTest {
             }
             custodia.put(conta + "|" + ticker, atual - quantidade);
             return true;
+        }
+
+        @Override
+        public synchronized Optional<Carteira> carteira(String conta) {
+            BigDecimal livre = disponivel.get(conta);
+            if (livre == null) {
+                return Optional.empty();
+            }
+            BigDecimal total = totais.getOrDefault(conta, new BigDecimal("100.00"));
+            List<Carteira.Custodia> custodias = custodia.entrySet().stream().filter(e -> e.getKey().startsWith(conta + "|"))
+                    .map(e -> new Carteira.Custodia(e.getKey().substring(conta.length() + 1),
+                            custodiaTotal.getOrDefault(e.getKey(), 1000L), e.getValue(),
+                            custodiaTotal.getOrDefault(e.getKey(), 1000L) - e.getValue())).toList();
+            return Optional.of(new Carteira(conta, total, livre, total.subtract(livre), custodias));
+        }
+
+        @Override
+        public synchronized void preparar(String conta, BigDecimal saldo, Map<String, Long> quantidades) {
+            disponivel.put(conta, saldo);
+            totais.put(conta, saldo);
+            custodia.put(conta + "|ALFA3", quantidades.getOrDefault("ALFA3", 0L));
+            custodiaTotal.put(conta + "|ALFA3", quantidades.getOrDefault("ALFA3", 0L));
         }
 
         @Override

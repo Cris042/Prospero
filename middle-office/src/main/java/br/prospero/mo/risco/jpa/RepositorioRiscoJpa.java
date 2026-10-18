@@ -1,5 +1,6 @@
 package br.prospero.mo.risco.jpa;
 
+import br.prospero.mo.risco.dominio.Carteira;
 import br.prospero.mo.risco.dominio.Decisao;
 import br.prospero.mo.risco.dominio.Lado;
 import br.prospero.mo.risco.dominio.MotivoRejeicao;
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -113,6 +115,43 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
                     .setParameter("v", d.valorReservado(), BigDecimal.class)
                     .setParameter("q", d.quantidadeReservada(), Long.class)
                     .setParameter("d", quando).executeUpdate();
+        }
+    }
+
+    @Override
+    @Transactional
+    public Optional<Carteira> carteira(String conta) {
+        List<?> caixa = em.createNativeQuery("SELECT total, disponivel, reservado FROM conta_risco WHERE conta = :c")
+                .setParameter("c", conta).getResultList();
+        if (caixa.isEmpty()) {
+            return Optional.empty();
+        }
+        Object[] c = (Object[]) caixa.getFirst();
+        List<Carteira.Custodia> custodias = em.createNativeQuery("""
+                        SELECT ticker, total, disponivel, reservado FROM custodia_risco WHERE conta = :c ORDER BY ticker""")
+                .setParameter("c", conta).getResultList().stream().map(linha -> {
+                    Object[] l = (Object[]) linha;
+                    return new Carteira.Custodia((String) l[0], ((Number) l[1]).longValue(),
+                            ((Number) l[2]).longValue(), ((Number) l[3]).longValue());
+                }).toList();
+        return Optional.of(new Carteira(conta, (BigDecimal) c[0], (BigDecimal) c[1], (BigDecimal) c[2], custodias));
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void preparar(String conta, BigDecimal saldo, Map<String, Long> custodia) {
+        // Bloqueia primeiro a linha de controle: reservas concorrentes da conta esperam e reavaliam o novo saldo.
+        em.createNativeQuery("UPDATE conta_risco SET total = :s, disponivel = :s, reservado = 0 WHERE conta = :c")
+                .setParameter("s", saldo).setParameter("c", conta).executeUpdate();
+        em.createNativeQuery("DELETE FROM reserva WHERE conta = :c").setParameter("c", conta).executeUpdate();
+        List<?> tickers = em.createNativeQuery("SELECT ticker FROM custodia_risco WHERE conta = :c ORDER BY ticker")
+                .setParameter("c", conta).getResultList();
+        for (Object ticker : tickers) {
+            long quantidade = custodia.getOrDefault((String) ticker, 0L);
+            em.createNativeQuery("""
+                            UPDATE custodia_risco SET total = :q, disponivel = :q, reservado = 0
+                            WHERE conta = :c AND ticker = :t""")
+                    .setParameter("q", quantidade).setParameter("c", conta).setParameter("t", ticker).executeUpdate();
         }
     }
 
