@@ -1,0 +1,109 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { TestBed } from '@angular/core/testing';
+import { of, Subject, throwError } from 'rxjs';
+import { Boleta } from './boleta';
+import { mensagemErro, Ordem, OrdensService, PedidoOrdem } from './ordens.service';
+
+const ORDEM: Ordem = {
+  id: '11111111-1111-4111-8111-111111111111',
+  ticker: 'ALFA3',
+  lado: 'COMPRA',
+  tipo: 'LIMIT',
+  validade: 'DIA',
+  quantidade: 100,
+  precoLimite: '10.25',
+  precoGatilho: null,
+  grupoOco: null,
+  papelOco: null,
+  estado: 'RECEBIDA',
+  dataSessao: '2026-10-17',
+  recebidaEm: '2026-10-17T15:00:00Z',
+};
+
+describe('Boleta', () => {
+  let envios: { pedido: PedidoOrdem; chave: string; resposta: Subject<Ordem> }[];
+
+  beforeEach(async () => {
+    envios = [];
+    await TestBed.configureTestingModule({
+      imports: [Boleta],
+      providers: [
+        {
+          provide: OrdensService,
+          useValue: {
+            listar: () => of({ ordens: [ORDEM], proximoCursor: null }),
+            enviar: (pedido: PedidoOrdem, chave: string) => {
+              const resposta = new Subject<Ordem>();
+              envios.push({ pedido, chave, resposta });
+              return resposta;
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+  });
+
+  it('oferece só as validades da matriz e os preços exigidos pelo tipo', async () => {
+    const fixture = TestBed.createComponent(Boleta);
+    await fixture.whenStable();
+    const boleta = fixture.componentInstance;
+    boleta.simples.controls.tipo.setValue('MARKET');
+    expect(boleta.validades()).toEqual(['IOC', 'FOK']);
+    expect(boleta.simples.controls.validade.value).toBe('IOC');
+    boleta.simples.controls.tipo.setValue('STOP_LIMIT');
+    expect(boleta.validades()).toEqual(['DIA']);
+    fixture.detectChanges();
+    const html = fixture.nativeElement as HTMLElement;
+    expect(html.textContent).toContain('Preço limite');
+    expect(html.textContent).toContain('Preço de disparo');
+  });
+
+  it('envia uma vez em clique duplo e não promete execução', async () => {
+    const fixture = TestBed.createComponent(Boleta);
+    await fixture.whenStable();
+    const boleta = fixture.componentInstance;
+    boleta.simples.patchValue({ precoLimite: '10.25' });
+    boleta.enviar();
+    boleta.enviar();
+    expect(envios).toHaveLength(1);
+    expect(envios[0].pedido).toEqual(
+      expect.objectContaining({ tipo: 'LIMIT', precoLimite: '10.25', precoGatilho: null }),
+    );
+    envios[0].resposta.next(ORDEM);
+    envios[0].resposta.complete();
+    fixture.detectChanges();
+    const texto = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(texto).toContain('Ordem registrada — estado Recebida.');
+    expect(texto.toLowerCase()).not.toContain('executada');
+  });
+
+  it('reaproveita a chave após falha de rede e gera outra após recusa', async () => {
+    const fixture = TestBed.createComponent(Boleta);
+    await fixture.whenStable();
+    const boleta = fixture.componentInstance;
+    boleta.simples.patchValue({ precoLimite: '10.25' });
+    boleta.enviar();
+    envios[0].resposta.error(new HttpErrorResponse({ status: 0 }));
+    boleta.enviar();
+    expect(envios[1].chave).toBe(envios[0].chave);
+    envios[1].resposta.error(
+      new HttpErrorResponse({ status: 422, error: { codigo: 'PRECO_INVALIDO' } }),
+    );
+    fixture.detectChanges();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[role=alert]')?.textContent,
+    ).toContain('Preço inválido');
+    boleta.enviar();
+    expect(envios[2].chave).not.toBe(envios[1].chave);
+  });
+
+  it('traduz Problem Details e trata erro de servidor como repetível', () => {
+    expect(
+      mensagemErro(
+        new HttpErrorResponse({ status: 409, error: { codigo: 'IDEMPOTENCIA_CONFLITO' } }),
+      ),
+    ).toEqual({ texto: expect.stringContaining('outros dados'), repetivel: false });
+    expect(mensagemErro(new HttpErrorResponse({ status: 503 })).repetivel).toBe(true);
+    expect(mensagemErro(throwError(() => 'x')).repetivel).toBe(true);
+  });
+});

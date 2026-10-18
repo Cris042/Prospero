@@ -47,9 +47,7 @@ test('consulta os quatro serviços reais e atualiza sem erros ou transbordamento
 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Próspero');
-  await expect(
-    page.getByText('Negociação ainda não implementada.', { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText('Execução ainda não implementada.', { exact: false })).toBeVisible();
   await esperarDisponiveis(page);
   for (const servico of servicos) {
     for (const rota of ['api/v1/sistema', 'q/health/ready']) {

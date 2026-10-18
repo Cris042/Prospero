@@ -1,0 +1,138 @@
+:host {
+  display: block;
+}
+.boleta {
+  padding: 32px 0 56px;
+  border-top: 1px solid #dae2df;
+}
+.sobretitulo {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #486b5f;
+  font-weight: 700;
+  margin: 0;
+}
+h2 {
+  margin: 8px 0 8px;
+}
+.aviso {
+  padding: 10px 14px;
+  border-left: 3px solid #c99a2e;
+  background: #fff8e6;
+  color: #5c4500;
+  font-size: 14px;
+}
+.modos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  padding: 8px 14px;
+  border: 1px solid #b8c7c0;
+  border-radius: 8px;
+  background: white;
+  color: #173c34;
+}
+button[aria-pressed='true'] {
+  background: #173c34;
+  color: white;
+  border-color: #173c34;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px 16px;
+  align-items: end;
+  padding: 20px;
+  border: 1px solid #dae2df;
+  border-radius: 12px;
+  background: white;
+}
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #36493f;
+}
+select,
+input {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid #b8c7c0;
+  border-radius: 8px;
+  background: white;
+  min-width: 0;
+}
+.primario {
+  background: #173c34;
+  color: white;
+  border-color: #173c34;
+}
+.dica {
+  font-size: 13px;
+  color: #54665e;
+  margin: 0;
+}
+.alerta {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fbeae6;
+  color: #7a2414;
+}
+.sucesso {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #eaf5ee;
+  color: #1d4d33;
+  overflow-wrap: anywhere;
+}
+.cabecalho-lista {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+.rolagem {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #dae2df;
+  border-radius: 12px;
+  background: white;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+th,
+td {
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid #eef2ef;
+}
+thead th {
+  font-size: 12px;
+  color: #54665e;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

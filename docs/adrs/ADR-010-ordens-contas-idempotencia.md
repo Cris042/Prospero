@@ -1,7 +1,7 @@
 # ADR-010 — Ordens, contas sintéticas e idempotência no front office (RF02)
 
 - Data: 2026-10-17.
-- Estado: **aceita**; API e persistência implementadas na RF02a, boleta e token de escrita no proxy na RF02c.
+- Estado: **aceita e implementada** — API e persistência na RF02a; boleta Angular e token de escrita no proxy na RF02c.
 - Origem: refinamento da [RF02](../roadmap.md#rf02--envio-e-acompanhamento-inicial-de-ordens) com cinco pareceres medium (arquitetura, QA, segurança, operação, viabilidade), todos **SEGUIR COM RESSALVAS**.
 - Decisor: usuário (combinações, contas, token de escrita, limites); detalhes técnicos consolidados dos pareceres.
 
@@ -19,7 +19,7 @@
 | Idempotência | Cabeçalho obrigatório `X-Idempotency-Key` (8–64 `[A-Za-z0-9_-]`; prefixo `x-` exigido pelo runner XLSX). Unicidade `(conta, chave)` com SHA-256 do pedido normalizado na mesma transação das ordens; mesmo pedido devolve a mesma resposta (`X-Idempotencia-Repetida: true`), pedido divergente é 409 `IDEMPOTENCIA_CONFLITO`. Chave válida por 24 h, expurgo em lotes de 100 com `FOR UPDATE SKIP LOCKED` (envios concorrentes não se bloqueiam) que nunca remove ordens. A validação do pedido precede a consulta da chave: pedido inválido com chave já usada recebe o erro de validação. |
 | Limites | Até 1000 ordens por conta e sessão, garantido por upsert condicional (429 `LIMITE_ORDENS`, sem `Retry-After` porque libera só na próxima sessão, desfazendo a reserva da chave); corpo até 64 KiB; quantidade até 1 000 000; preço decimal textual com até duas casas e até 1 000 000,00. |
 | Mensageria | RF02 só persiste. Outbox, envelope e tópicos entram na RF04 (primeiro consumidor real); a fronteira transacional do registro é o ponto onde a outbox será acrescentada. Divergência temporária com o fluxo futuro do HLD-002. |
-| Token de escrita (RF02c) | Aceito com proteções: o proxy injeta token da CONTA-001 só em `POST/GET /api/v1/ordens*`, recusa `Origin`/`Host` fora de `localhost:4200`/`127.0.0.1:4200`, aplica rate limit e usa validade curta regenerada por `preparar-ambiente.py`. Qualquer processo local pode enviar ordens fictícias pela conta demo; aceitável apenas no ambiente local. |
+| Token de escrita (RF02c) | Aceito com proteções: `FO_TOKEN_ORDENS` (CONTA-001, `ordens:enviar`/`ordens:leitura`, 7 dias, regenerado por `preparar-ambiente.py` quando falta menos de um dia) é injetado pelo Nginx e pelo `proxy.conf.mjs` só em `GET/POST /api/v1/ordens*` (inclui `ordens-oco`). POST exige `Origin` de `localhost`/`127.0.0.1` (qualquer porta, pois a CI publica portas dinâmicas); o servidor recusa `Host` diferente desses nomes com 421 (DNS rebinding); rate limit de 10 req/s com rajada de 20 por IP; demais métodos 403. A boleta gera `X-Idempotency-Key` por envio e reaproveita a chave só após falha de comunicação. Qualquer processo local (ou outra aplicação servida em localhost) pode enviar ordens fictícias pela conta demo; aceitável apenas no ambiente local. |
 
 ## Consequências
 

@@ -1,19 +1,37 @@
 import { readFileSync } from 'node:fs';
 
 // Desenvolvimento: injeta o token de leitura da RF01 lido do .env local, sem expô-lo ao navegador.
-function tokenLeitura() {
-  if (process.env.FO_TOKEN_LEITURA) return process.env.FO_TOKEN_LEITURA;
+function tokenDoAmbiente(nome) {
+  if (process.env[nome]) return process.env[nome];
   try {
     const linha = readFileSync(new URL('../.env', import.meta.url), 'utf8')
       .split('\n')
-      .find((l) => l.startsWith('FO_TOKEN_LEITURA='));
-    return linha?.slice('FO_TOKEN_LEITURA='.length).trim();
+      .find((l) => l.startsWith(nome + '='));
+    return linha?.slice(nome.length + 1).trim();
   } catch {
     return undefined;
   }
 }
 
-const token = tokenLeitura();
+const token = tokenDoAmbiente('FO_TOKEN_LEITURA');
+const tokenOrdens = tokenDoAmbiente('FO_TOKEN_ORDENS');
+const ORIGEM_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/;
+
+// Espelha o Nginx (ADR-010): GET/POST apenas; POST exige Origin local; Host local contra DNS rebinding.
+function ordensPermitidas(req, res) {
+  const host = (req.headers.host ?? '').replace(/:[0-9]+$/, '');
+  const origemOk = req.method === 'GET' || ORIGEM_LOCAL.test(req.headers.origin ?? '');
+  if (
+    !['GET', 'POST'].includes(req.method) ||
+    !['localhost', '127.0.0.1'].includes(host) ||
+    !origemOk
+  ) {
+    res.statusCode = 403;
+    res.end('{"erro":"Origem não permitida para ordens"}');
+    return false;
+  }
+  return undefined;
+}
 const PREPARACAO = /preparacoes-mercado/i;
 
 // Rota genérica do FO: bloqueia preparação mesmo codificada e descarta Authorization do cliente.
@@ -42,6 +60,12 @@ export default {
       res.end('{"erro":"Preparação indisponível pelo navegador"}');
       return false;
     },
+  },
+  '/servicos/front-office/api/v1/ordens': {
+    ...servico(8081),
+    pathRewrite: { '^/servicos/front-office': '' },
+    headers: tokenOrdens ? { Authorization: `Bearer ${tokenOrdens}` } : {},
+    bypass: ordensPermitidas,
   },
   '/servicos/front-office/api/v1/ativos': {
     ...servico(8081),
