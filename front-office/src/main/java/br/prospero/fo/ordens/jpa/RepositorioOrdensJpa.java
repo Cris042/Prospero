@@ -1,22 +1,26 @@
 package br.prospero.fo.ordens.jpa;
 
 import br.prospero.fo.comum.dominio.Categoria;
+import br.prospero.fo.comum.dominio.MensagemSaida;
 import br.prospero.fo.comum.dominio.RegraNegocioException;
 import br.prospero.fo.ordens.dominio.BaseTunel;
 import br.prospero.fo.ordens.dominio.EstadoOrdem;
 import br.prospero.fo.ordens.dominio.LadoOrdem;
+import br.prospero.fo.ordens.dominio.MotivoRejeicao;
 import br.prospero.fo.ordens.dominio.Ordem;
 import br.prospero.fo.ordens.dominio.OrigemBase;
 import br.prospero.fo.ordens.dominio.PapelOco;
 import br.prospero.fo.ordens.dominio.ParametrosAtivo;
 import br.prospero.fo.ordens.dominio.RepositorioOrdens;
 import br.prospero.fo.ordens.dominio.ResultadoRegistro;
+import br.prospero.fo.ordens.dominio.ResultadoRisco;
 import br.prospero.fo.ordens.dominio.TipoOrdem;
 import br.prospero.fo.ordens.dominio.Validade;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import org.hibernate.query.NativeQuery;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -75,7 +79,8 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
 
     @Override
     @Transactional
-    public ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> ordens) {
+    public ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> ordens,
+                                       MensagemSaida comandoRisco) {
         OffsetDateTime expirado = OffsetDateTime.ofInstant(agora.minus(RETENCAO_CHAVE), ZoneOffset.UTC);
         // SKIP LOCKED: envios concorrentes não esperam o expurgo uns dos outros.
         em.createNativeQuery("""
@@ -112,7 +117,31 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
                     "Limite de 1000 ordens por conta na sessão atingido.");
         }
         ordens.forEach(o -> em.persist(entidade(o)));
+        // Outbox na mesma transação (ADR-012): ordem sem comando de risco nunca confirma, e vice-versa.
+        em.createNativeQuery("""
+                        INSERT INTO outbox (id, topico, chave, tipo, payload, traceparent, criado_em)
+                        VALUES (:id, :topico, :chave, :tipo, :payload, :trace, :criado)""")
+                .unwrap(NativeQuery.class)
+                .setParameter("id", comandoRisco.id()).setParameter("topico", comandoRisco.topico())
+                .setParameter("chave", comandoRisco.chave()).setParameter("tipo", comandoRisco.tipo())
+                .setParameter("payload", comandoRisco.payload())
+                .setParameter("trace", comandoRisco.traceparent(), String.class)
+                .setParameter("criado", OffsetDateTime.ofInstant(comandoRisco.criadaEm(), ZoneOffset.UTC))
+                .executeUpdate();
         return new ResultadoRegistro.Novo(ordens);
+    }
+
+    @Override
+    @Transactional
+    public int aplicarRisco(ResultadoRisco r) {
+        // Condicional: só ordens RECEBIDA da conta e intenção do resultado; repetição não altera nada.
+        return em.createNativeQuery("""
+                        UPDATE ordem SET estado = :e, motivo_rejeicao = :m, versao = versao + 1
+                        WHERE conta = :c AND grupo_envio = :g AND estado = 'RECEBIDA'""")
+                .unwrap(NativeQuery.class)
+                .setParameter("e", r.estado().name())
+                .setParameter("m", r.motivo() == null ? null : r.motivo().name(), String.class)
+                .setParameter("c", r.conta()).setParameter("g", r.grupoEnvio()).executeUpdate();
     }
 
     @Override
@@ -178,6 +207,7 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
                 Validade.valueOf(e.validade), e.quantidade, e.precoLimite, e.precoGatilho, e.grupoOco,
                 e.papelOco == null ? null : PapelOco.valueOf(e.papelOco), e.grupoEnvio, EstadoOrdem.valueOf(e.estado),
                 e.dataSessao, e.recebidaEm,
-                e.precoBaseTunel == null ? null : new BaseTunel(e.precoBaseTunel, OrigemBase.valueOf(e.origemBase)));
+                e.precoBaseTunel == null ? null : new BaseTunel(e.precoBaseTunel, OrigemBase.valueOf(e.origemBase)),
+                e.motivoRejeicao == null ? null : MotivoRejeicao.valueOf(e.motivoRejeicao));
     }
 }

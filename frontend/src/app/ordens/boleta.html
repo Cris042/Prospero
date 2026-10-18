@@ -169,7 +169,9 @@
             <td>{{ o.quantidade }}</td>
             <td>{{ decimal(o.precoLimite) }}</td>
             <td>{{ decimal(o.precoGatilho) }}</td>
-            <td>{{ rotulo(o.estado) }}</td>
+            <td>
+              {{ rotulo(o.estado) }}{{ o.motivoRejeicao ? ' · ' + rotulo(o.motivoRejeicao) : '' }}
+            </td>
           </tr>
         } @empty {
           <tr>

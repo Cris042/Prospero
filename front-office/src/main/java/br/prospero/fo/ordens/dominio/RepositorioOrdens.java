@@ -1,5 +1,7 @@
 package br.prospero.fo.ordens.dominio;
 
+import br.prospero.fo.comum.dominio.MensagemSaida;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -19,9 +21,16 @@ public interface RepositorioOrdens {
 
     /**
      * Na mesma transação: reserva a chave (conta, chave), confere o hash em caso de repetição,
-     * aplica o limite diário de ordens e grava as ordens.
+     * aplica o limite diário de ordens, grava as ordens e, só para envio novo, o comando de risco na outbox.
      */
-    ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> ordens);
+    ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> ordens,
+                                MensagemSaida comandoRisco);
+
+    /**
+     * Transição condicional RECEBIDA → RESERVADA/REJEITADA das ordens da intenção na conta do resultado;
+     * devolve quantas ordens mudaram (0 para repetição, outra conta ou ordem já decidida).
+     */
+    int aplicarRisco(ResultadoRisco resultado);
 
     Optional<Ordem> buscar(String conta, UUID id);
 

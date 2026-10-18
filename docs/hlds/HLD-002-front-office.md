@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Hoje implementa identidade técnica, consulta de mercado (RF01), registro/consulta de ordens com idempotência (RF02) e validação de lote, tick e túnel (RF03, ADR-011). SAGA, outbox, consulta de trajetória e WebSocket ainda não existem.
+Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Hoje implementa identidade técnica, consulta de mercado (RF01), registro/consulta de ordens com idempotência (RF02) e validação de lote, tick e túnel (RF03, ADR-011) e o passo de risco da SAGA (RF04a, ADR-012: outbox na transação do registro, relay Kafka, consumo de `risco.resultados.v1` com transição condicional para `RESERVADA`/`REJEITADA`). Demais passos da SAGA, outbox, consulta de trajetória e WebSocket ainda não existem.
 
 Futuro: receber/consultar ordens, persistir estados, orquestrar validação/reserva/execução e expor projeções. Risco pertence ao MO; livro ao ME; contabilidade ao BO. Angular apresenta estados sem coordenar SAGA.
 
@@ -22,7 +22,7 @@ Organização por funcionalidade sob `br.prospero.fo`: REST → Actor; Actor coo
 
 ## Fluxo futuro e dados
 
-Receber DTO → validar estrutura → Actor registra ordem e intenção de publicação na mesma transação local → publisher recuperável Kafka → respostas/eventos avançam a máquina de estados persistida. RF02a implementada conforme [ADR-010](../adrs/ADR-010-ordens-contas-idempotencia.md): `POST/GET /api/v1/ordens` e `/api/v1/ordens-oco`, `202` com `Location`, idempotência `(conta, X-Idempotency-Key)` com hash na mesma transação, contas sintéticas por `sub`, estado único `RECEBIDA`. A intenção de publicação (outbox) entra na RF04, quando houver consumidor; até lá o registro é apenas local.
+Receber DTO → validar estrutura → Actor registra ordem e intenção de publicação na mesma transação local → publisher recuperável Kafka → respostas/eventos avançam a máquina de estados persistida. RF02a implementada conforme [ADR-010](../adrs/ADR-010-ordens-contas-idempotencia.md): `POST/GET /api/v1/ordens` e `/api/v1/ordens-oco`, `202` com `Location`, idempotência `(conta, X-Idempotency-Key)` com hash na mesma transação, contas sintéticas por `sub`, estado único `RECEBIDA`. Desde a RF04a a outbox recebe `AVALIAR_RISCO` na mesma transação; o relay publica em `risco.comandos.v1` (chave = conta) e o consumidor aplica o resultado só a ordens `RECEBIDA` da mesma conta e intenção ([ADR-012](../adrs/ADR-012-risco-reservas-saga.md)).
 
 RF01 implementada conforme [ADR-009](../adrs/ADR-009-projecao-mercado-fo.md): projeção de leitura no PostgreSQL do FO (`snapshot_mercado`, uma linha JSONB por namespace/ticker), consulta `GET /api/v1/ativos` e `/api/v1/ativos/{ticker}/livro` e preparação sintética local por namespace, todas com JWT. Redis permanece opção de cache futuro, sem uso atual. Atualização por negócios entra na RF06. Negócio não usa HTTP entre MS. Nomes de comandos, envelopes e tópicos dependem do catálogo transversal do HLD-001.
 

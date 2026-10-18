@@ -38,6 +38,15 @@ const ROTULOS: Record<string, string> = {
   TAKE_PROFIT: 'Take Profit',
   STOP_LOSS: 'Stop Loss',
   RECEBIDA: 'Recebida',
+  RESERVADA: 'Reservada',
+  REJEITADA: 'Rejeitada',
+  SALDO_INSUFICIENTE: 'saldo insuficiente',
+  CUSTODIA_INSUFICIENTE: 'custódia insuficiente',
+  QUANTIDADE_MAXIMA_EXCEDIDA: 'quantidade acima do máximo por ordem',
+  QUANTIDADE_FORA_DO_LOTE: 'quantidade fora do lote',
+  ATIVO_DESCONHECIDO: 'ativo desconhecido',
+  CONTA_DESCONHECIDA: 'conta desconhecida',
+  PRECO_BASE_AUSENTE: 'sem preço de referência',
 };
 
 @Component({

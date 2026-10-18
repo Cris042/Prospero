@@ -48,6 +48,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
     - dados-fo
     - eventos
@@ -125,6 +127,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
     - dados-mo
     - eventos
@@ -309,6 +313,35 @@ services:
       options:
         max-size: 5m
         max-file: '2'
+  # RF04 (ADR-012): criação idempotente dos tópicos; auto-create continua desligado no broker.
+  kafka-init:
+    image: apache/kafka:4.1.0
+    entrypoint:
+    - /bin/sh
+    - -ec
+    command:
+    - |
+      for topico in risco.comandos.v1 risco.resultados.v1; do
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic "$$topico" --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000 --config retention.bytes=67108864
+      done
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_HEAP_OPTS: -Xmx128m
+    restart: 'no'
+    networks:
+    - eventos
+    mem_limit: 256m
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: '1'
   kafka:
     image: apache/kafka:4.1.0
     hostname: kafka

@@ -17,7 +17,7 @@
 | Aplicação | Limit: limite. Stop: disparo. Stop Limit: disparo e limite. OCO: alvo, disparo e limite do Stop Loss. **Market**: sem checagem de preço na entrada; a execução fica limitada ao túnel no matching (RF05) e o saldo é cancelado (IOC/FOK). |
 | Stop Limit | Em toda Stop Limit (simples ou perna do OCO): venda com limite ≤ disparo; compra com limite ≥ disparo; igualdade aceita (`STOP_LIMIT_INCOERENTE`). |
 | Auditoria | A ordem persiste `preco_base_tunel` e `origem_base` (`ULTIMO`/`REFERENCIA`); null para Market e ordens anteriores à RF03. |
-| Estado | Sem `REJEITADA` persistida; o enum cresce na RF04. |
+| Estado | Sem `REJEITADA` persistida pela validação síncrona; a RF04 (ADR-012) persiste `REJEITADA` apenas para o risco assíncrono. A base também acompanha o comando de Market para o MO dimensionar a reserva, sem ser gravada na ordem. |
 
 ## Consequências
 

@@ -41,6 +41,15 @@ export interface PedidoOco {
   };
 }
 
+export type MotivoRejeicao =
+  | 'SALDO_INSUFICIENTE'
+  | 'CUSTODIA_INSUFICIENTE'
+  | 'QUANTIDADE_MAXIMA_EXCEDIDA'
+  | 'QUANTIDADE_FORA_DO_LOTE'
+  | 'ATIVO_DESCONHECIDO'
+  | 'CONTA_DESCONHECIDA'
+  | 'PRECO_BASE_AUSENTE';
+
 export interface Ordem {
   readonly id: string;
   readonly ticker: string;
@@ -52,7 +61,9 @@ export interface Ordem {
   readonly precoGatilho: string | null;
   readonly grupoOco: string | null;
   readonly papelOco: 'TAKE_PROFIT' | 'STOP_LOSS' | null;
-  readonly estado: 'RECEBIDA';
+  /** RECEBIDA aguarda o risco; RESERVADA não implica execução (RF04, ADR-012). */
+  readonly estado: 'RECEBIDA' | 'RESERVADA' | 'REJEITADA';
+  readonly motivoRejeicao: MotivoRejeicao | null;
   readonly dataSessao: string;
   readonly recebidaEm: string;
 }
