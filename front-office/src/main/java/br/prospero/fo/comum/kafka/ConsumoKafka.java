@@ -1,9 +1,10 @@
 package br.prospero.fo.comum.kafka;
 
 import br.prospero.fo.comum.dominio.MensagemInvalidaException;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
@@ -14,20 +15,31 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * Laço de consumo com commit manual depois do efeito local (ADR-012). Mensagem inválida é registrada e o offset avança;
- * falha transitória reposiciona as partições no primeiro registro não confirmado e repete após uma pausa.
+ * falha de processamento reposiciona as partições no primeiro registro não confirmado e repete com espera crescente.
+ * Depois de {@link #TENTATIVAS_MAXIMAS} falhas seguidas no mesmo offset o registro é tratado como inválido, para um
+ * defeito determinístico não travar a partição; se nem o registro do descarte for possível (banco fora), segue repetindo.
+ * Cópia espelhada em middle-office (projetos Maven independentes): corrigir nos dois.
  */
 public final class ConsumoKafka implements Runnable {
+    static final int TENTATIVAS_MAXIMAS = 10;
     private static final Logger LOG = Logger.getLogger(ConsumoKafka.class);
-    private final Properties propriedades;
+    private static final long ESPERA_INICIAL_MS = 500;
+    private static final long ESPERA_MAXIMA_MS = 30_000;
+    private final Supplier<Consumer<String, byte[]>> fabrica;
     private final String topico;
     private final Processador processador;
     private final Rejeicao rejeicao;
+    private final MeterRegistry metricas;
+    private final AtomicInteger vivo = new AtomicInteger();
+    private final Map<TopicPartition, Long> falhaEm = new HashMap<>();
+    private final Map<TopicPartition, Integer> falhas = new HashMap<>();
     private volatile boolean ativo = true;
-    private volatile KafkaConsumer<String, byte[]> consumidor;
+    private volatile Consumer<String, byte[]> consumidor;
 
     /** Efeito local de um registro, numa transação própria. */
     @FunctionalInterface
@@ -40,16 +52,20 @@ public final class ConsumoKafka implements Runnable {
         void registrar(String topico, int particao, long deslocamento, String motivo);
     }
 
-    public ConsumoKafka(Properties propriedades, String topico, Processador processador, Rejeicao rejeicao) {
-        this.propriedades = propriedades;
+    public ConsumoKafka(Supplier<Consumer<String, byte[]>> fabrica, String topico, Processador processador,
+                        Rejeicao rejeicao, MeterRegistry metricas) {
+        this.fabrica = fabrica;
         this.topico = topico;
         this.processador = processador;
         this.rejeicao = rejeicao;
+        this.metricas = metricas;
+        metricas.gauge("prospero.consumo.ativo", List.of(io.micrometer.core.instrument.Tag.of("topico", topico)), vivo);
     }
 
     @Override
     public void run() {
-        try (KafkaConsumer<String, byte[]> c = new KafkaConsumer<>(propriedades)) {
+        vivo.set(1);
+        try (Consumer<String, byte[]> c = fabrica.get()) {
             consumidor = c;
             c.subscribe(List.of(topico));
             while (ativo) {
@@ -58,22 +74,26 @@ public final class ConsumoKafka implements Runnable {
                 } catch (WakeupException parada) {
                     break;
                 } catch (RuntimeException falha) {
-                    LOG.warnf("Consumo de %s falhou; repetindo: %s", topico, falha.getClass().getSimpleName());
-                    pausar();
+                    pausar(falha);
                 }
             }
+        } catch (Throwable fatal) {
+            LOG.errorf("Consumidor de %s encerrado por erro fatal: %s", topico, fatal.getClass().getSimpleName());
+            throw fatal;
+        } finally {
+            vivo.set(0);
         }
     }
 
     public void parar() {
         ativo = false;
-        KafkaConsumer<String, byte[]> c = consumidor;
+        Consumer<String, byte[]> c = consumidor;
         if (c != null) {
             c.wakeup();
         }
     }
 
-    private void ciclo(KafkaConsumer<String, byte[]> c) {
+    void ciclo(Consumer<String, byte[]> c) {
         ConsumerRecords<String, byte[]> registros = c.poll(Duration.ofMillis(500));
         List<TopicPartition> particoes = new ArrayList<>(registros.partitions());
         Map<TopicPartition, OffsetAndMetadata> confirmados = new HashMap<>();
@@ -81,7 +101,7 @@ public final class ConsumoKafka implements Runnable {
             TopicPartition particao = particoes.get(i);
             for (ConsumerRecord<String, byte[]> registro : registros.records(particao)) {
                 try {
-                    processarOuRejeitar(registro);
+                    processarOuRejeitar(particao, registro);
                 } catch (RuntimeException falha) {
                     if (!confirmados.isEmpty()) {
                         c.commitSync(confirmados);
@@ -92,6 +112,8 @@ public final class ConsumoKafka implements Runnable {
                     }
                     throw falha;
                 }
+                falhaEm.remove(particao);
+                falhas.remove(particao);
                 confirmados.put(particao, new OffsetAndMetadata(registro.offset() + 1));
             }
         }
@@ -100,19 +122,44 @@ public final class ConsumoKafka implements Runnable {
         }
     }
 
-    private void processarOuRejeitar(ConsumerRecord<String, byte[]> registro) {
+    private void processarOuRejeitar(TopicPartition particao, ConsumerRecord<String, byte[]> registro) {
         try {
             processador.processar(registro);
         } catch (MensagemInvalidaException invalida) {
-            LOG.warnf("Mensagem inválida descartada: topico=%s particao=%d offset=%d motivo=%s", registro.topic(),
-                    registro.partition(), registro.offset(), invalida.getMessage());
-            rejeicao.registrar(registro.topic(), registro.partition(), registro.offset(), invalida.getMessage());
+            rejeitar(registro, invalida.getMessage());
+        } catch (RuntimeException falha) {
+            int seguidas = contarFalha(particao, registro.offset());
+            metricas.counter("prospero.consumo.falhas", "topico", topico).increment();
+            LOG.warnf("Falha ao processar: topico=%s particao=%d offset=%d tentativa=%d erro=%s", registro.topic(),
+                    registro.partition(), registro.offset(), seguidas, falha.getClass().getSimpleName());
+            if (seguidas < TENTATIVAS_MAXIMAS) {
+                throw falha;
+            }
+            rejeitar(registro, "falha persistente: " + falha.getClass().getSimpleName());
         }
     }
 
-    private void pausar() {
+    private void rejeitar(ConsumerRecord<String, byte[]> registro, String motivo) {
+        LOG.warnf("Mensagem descartada: topico=%s particao=%d offset=%d motivo=%s", registro.topic(),
+                registro.partition(), registro.offset(), motivo);
+        rejeicao.registrar(registro.topic(), registro.partition(), registro.offset(), motivo);
+        metricas.counter("prospero.consumo.descartadas", "topico", topico).increment();
+    }
+
+    private int contarFalha(TopicPartition particao, long offset) {
+        Long anterior = falhaEm.put(particao, offset);
+        int seguidas = anterior != null && anterior == offset ? falhas.getOrDefault(particao, 0) + 1 : 1;
+        falhas.put(particao, seguidas);
+        return seguidas;
+    }
+
+    /** Espera crescente pela maior sequência de falhas em curso, limitada a 30 s. */
+    private void pausar(RuntimeException falha) {
+        int seguidas = falhas.values().stream().max(Integer::compare).orElse(1);
+        long espera = Math.min(ESPERA_MAXIMA_MS, ESPERA_INICIAL_MS << Math.min(seguidas - 1, 10));
+        LOG.debugf("Consumo de %s repetirá em %d ms após %s", topico, espera, falha.getClass().getSimpleName());
         try {
-            Thread.sleep(1000);
+            Thread.sleep(espera);
         } catch (InterruptedException erro) {
             Thread.currentThread().interrupt();
             ativo = false;

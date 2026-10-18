@@ -83,6 +83,9 @@ public final class EnvelopeRisco {
             exigirPrecosDoTipo(perna);
             pernas.add(perna);
         }
+        if (pernas.size() == 2) {
+            exigirParOco(pernas.get(0), pernas.get(1));
+        }
         return new ComandoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, padrao(dados, "ticker", TICKER),
                 enumeracao(dados, "lado", Lado.class), preco(dados, "precoBase"), pernas, traceparent);
     }
@@ -107,6 +110,15 @@ public final class EnvelopeRisco {
             dados.put("quantidadeReservada", decisao.quantidadeReservada());
         }
         return raiz.toString();
+    }
+
+    /** OCO (ADR-010): Take Profit Limit + Stop Loss Stop/Stop Limit, ids distintos e mesma quantidade. */
+    private static void exigirParOco(Perna alvo, Perna stop) {
+        boolean stopValido = stop.tipo() == TipoOrdem.STOP || stop.tipo() == TipoOrdem.STOP_LIMIT;
+        if (alvo.tipo() != TipoOrdem.LIMIT || !stopValido || alvo.id().equals(stop.id())
+                || alvo.quantidade() != stop.quantidade()) {
+            throw new EnvelopeInvalidoException("par OCO");
+        }
     }
 
     /** Matriz da RF02 (ADR-010): cada tipo tem exatamente os preços que lhe cabem. */

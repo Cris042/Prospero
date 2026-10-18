@@ -160,8 +160,12 @@ class SagaRiscoTest {
     @Test
     void resultadoForaDoContratoENegado() {
         String ok = "{\"resultado\":\"REJEITADA\",\"motivo\":\"SALDO_INSUFICIENTE\",\"valorReservado\":null,\"quantidadeReservada\":null}";
+        String reservada = "{\"resultado\":\"RESERVADA\",\"motivo\":null,\"valorReservado\":\"10.00\",\"quantidadeReservada\":null}";
         ResultadoRisco lido = EnvelopeRisco.resultado(resultado(envelope("middle-office", ok)));
         assertEquals(MotivoRejeicao.SALDO_INSUFICIENTE, lido.motivo());
+        assertEquals(EstadoOrdem.RESERVADA, EnvelopeRisco.resultado(resultado(envelope("middle-office", reservada))).estado());
+        assertEquals(EstadoOrdem.RESERVADA, EnvelopeRisco.resultado(resultado(envelope("middle-office",
+                reservada.replace("\"10.00\"", "null").replace("null}", "3}")))).estado(), "custódia");
         for (String invalido : new String[]{
                 envelope("front-office", ok),
                 envelope("middle-office", ok.replace("SALDO_INSUFICIENTE", "INVENTADO")),
@@ -172,6 +176,12 @@ class SagaRiscoTest {
                 envelope("middle-office", ok).replace("\"versao\":1", "\"versao\":2"),
                 envelope("middle-office", ok).replace("\"versao\":1", "\"versao\":1,\"versao\":1"),
                 envelope("middle-office", ok).replace("CONTA-002", "conta-x"),
+                envelope("middle-office", ok).replace("2026-10-18T12:00:00Z", "ontem"),
+                envelope("middle-office", ok).replace("\"traceparent\":null", "\"traceparent\":\"x\""),
+                envelope("middle-office", ok.replace("\"valorReservado\":null", "\"valorReservado\":\"10.00\"")),
+                envelope("middle-office", reservada.replace("\"10.00\"", "10.00")),
+                envelope("middle-office", reservada.replace("\"10.00\"", "null")),
+                envelope("middle-office", reservada.replace("null}", "5}")),
                 "{", "[]", "x".repeat(EnvelopeRisco.TAMANHO_MAXIMO + 1)}) {
             assertThrows(MensagemInvalidaException.class, () -> EnvelopeRisco.resultado(resultado(invalido)), invalido);
         }

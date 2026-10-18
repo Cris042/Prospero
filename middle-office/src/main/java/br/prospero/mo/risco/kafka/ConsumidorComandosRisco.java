@@ -7,6 +7,7 @@ import br.prospero.mo.risco.actor.AvaliarRiscoActor;
 import br.prospero.mo.risco.dominio.ComandoRisco;
 import br.prospero.mo.risco.helper.EnvelopeInvalidoException;
 import br.prospero.mo.risco.helper.EnvelopeRisco;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
@@ -19,6 +20,7 @@ import jakarta.enterprise.event.Observes;
 import br.prospero.mo.mensageria.dominio.EventosRejeitados;
 import jakarta.inject.Inject;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /** Adaptador Kafka: lê risco.comandos.v1 e chama o caso de uso, sem passar pelo REST. */
@@ -29,13 +31,14 @@ public class ConsumidorComandosRisco {
     private final ConfiguracaoKafka configuracao;
     private final OpenTelemetry telemetria;
     private final Tracer tracer;
+    private final MeterRegistry metricas;
     private final boolean habilitada;
     private ConsumoKafka consumo;
     private Thread linha;
 
     @Inject
     public ConsumidorComandosRisco(AvaliarRiscoActor actor, EventosRejeitados rejeitados,
-                                   ConfiguracaoKafka configuracao, OpenTelemetry telemetria, Tracer tracer,
+                                   ConfiguracaoKafka configuracao, OpenTelemetry telemetria, Tracer tracer, MeterRegistry metricas,
                                    @ConfigProperty(name = "prospero.mensageria.habilitada", defaultValue = "true")
                                    boolean habilitada) {
         this.actor = actor;
@@ -43,6 +46,7 @@ public class ConsumidorComandosRisco {
         this.configuracao = configuracao;
         this.telemetria = telemetria;
         this.tracer = tracer;
+        this.metricas = metricas;
         this.habilitada = habilitada;
     }
 
@@ -50,8 +54,8 @@ public class ConsumidorComandosRisco {
         if (!habilitada) {
             return;
         }
-        consumo = new ConsumoKafka(configuracao.consumidor("middle-office-risco"), EnvelopeRisco.TOPICO_COMANDOS,
-                this::processar, rejeitados::registrar);
+        consumo = new ConsumoKafka(() -> new KafkaConsumer<>(configuracao.consumidor("middle-office-risco")), EnvelopeRisco.TOPICO_COMANDOS,
+                this::processar, rejeitados::registrar, metricas);
         linha = Thread.ofPlatform().name("consumidor-risco").daemon().start(consumo);
     }
 

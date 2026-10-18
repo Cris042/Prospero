@@ -27,6 +27,10 @@ class EnvelopeRiscoTest {
             {"id":"%s","tipo":"LIMIT","quantidade":100,"precoLimite":"10.10","precoGatilho":null}"""
             .formatted(UUID.randomUUID());
 
+    static final String STOP = """
+            {"id":"%s","tipo":"STOP","quantidade":100,"precoLimite":null,"precoGatilho":"9.50"}"""
+            .formatted(UUID.randomUUID());
+
     static String envelope(String origem, String pernas) {
         return """
                 {"id":"%s","tipo":"AVALIAR_RISCO","versao":1,"origem":"%s","correlacao":"%s",
@@ -52,6 +56,11 @@ class EnvelopeRiscoTest {
     }
 
     @Test
+    void leParOcoCoerente() {
+        assertEquals(2, ler(envelope("front-office", PERNA + "," + STOP)).pernas().size());
+    }
+
+    @Test
     void recusaTudoForaDoContrato() {
         String ok = envelope("front-office", PERNA);
         String[] invalidos = {
@@ -73,6 +82,9 @@ class EnvelopeRiscoTest {
                 ok.replace("\"LIMIT\"", "\"MARKET\""),
                 ok.replace("\"LIMIT\"", "\"ICEBERG\""),
                 envelope("front-office", PERNA + "," + PERNA + "," + PERNA),
+                envelope("front-office", PERNA + "," + PERNA),
+                envelope("front-office", PERNA + "," + PERNA.replace("\"LIMIT\"", "\"STOP\"")),
+                envelope("front-office", PERNA + "," + STOP.replace("100", "50")),
                 envelope("front-office", ""),
                 ok.replace("2026-10-18T12:00:00Z", "ontem"),
                 ok.replace("-01\"", "-01x\""),

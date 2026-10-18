@@ -27,12 +27,14 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Publica a outbox em ordem de criação (ADR-012): lote com FOR UPDATE SKIP LOCKED, envio síncrono com ack e
  * publicado_em marcado só depois. Falha interrompe o lote e repete no próximo ciclo (pelo menos uma vez).
+ * A ordem por conta pressupõe uma única instância do relay por serviço. Cópia espelhada em front-office: corrigir nos dois.
  */
 @ApplicationScoped
 public class RelayOutbox {
     private static final Logger LOG = Logger.getLogger(RelayOutbox.class);
     private static final int LOTE = 50;
     private static final int CICLOS_MANUTENCAO = 25;
+    private static final Duration LOTE_MAXIMO = Duration.ofSeconds(20);
     private final Instance<EntityManager> ems;
     private EntityManager em;
     private final ConfiguracaoKafka configuracao;
@@ -89,9 +91,14 @@ public class RelayOutbox {
     private int publicarLote() {
         List<?> linhas = em.createNativeQuery("""
                         SELECT id, topico, chave, payload, traceparent FROM outbox WHERE publicado_em IS NULL
-                        ORDER BY criado_em LIMIT :n FOR UPDATE SKIP LOCKED""").setParameter("n", LOTE).getResultList();
+                        ORDER BY criado_em, id LIMIT :n FOR UPDATE SKIP LOCKED""").setParameter("n", LOTE).getResultList();
         List<UUID> publicados = new ArrayList<>();
+        long limite = System.nanoTime() + LOTE_MAXIMO.toNanos();
         for (Object linha : linhas) {
+            // Lote limitado no tempo: a transação com FOR UPDATE não excede o timeout padrão (60 s) com Kafka lento.
+            if (System.nanoTime() > limite) {
+                break;
+            }
             Object[] c = (Object[]) linha;
             ProducerRecord<String, byte[]> registro = new ProducerRecord<>((String) c[1], (String) c[2],
                     ((String) c[3]).getBytes(StandardCharsets.UTF_8));
@@ -119,12 +126,18 @@ public class RelayOutbox {
         return publicados.size() == linhas.size() ? publicados.size() : 0;
     }
 
-    /** Atualiza o gauge de pendentes e expurga, em lotes, mensagens publicadas há mais de um dia. */
+    /**
+     * Atualiza o gauge de pendentes e expurga, em lotes, mensagens publicadas há mais de um dia e diagnósticos de
+     * mensagens inválidas com mais de sete dias.
+     */
     private void manter() {
         pendentes.set(((Number) em.createNativeQuery("SELECT count(*) FROM outbox WHERE publicado_em IS NULL")
                 .getSingleResult()).longValue());
         em.createNativeQuery("""
                 DELETE FROM outbox WHERE id IN (SELECT id FROM outbox
                 WHERE publicado_em < now() - INTERVAL '1 day' LIMIT 500)""").executeUpdate();
+        em.createNativeQuery("""
+                DELETE FROM evento_rejeitado WHERE id IN (SELECT id FROM evento_rejeitado
+                WHERE recebido_em < now() - INTERVAL '7 days' LIMIT 500)""").executeUpdate();
     }
 }

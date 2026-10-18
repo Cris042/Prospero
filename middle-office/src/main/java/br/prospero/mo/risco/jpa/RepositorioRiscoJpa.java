@@ -20,7 +20,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** SQL nativo: as reservas são UPDATE condicionais na linha de controle, sem ler-e-depois-gravar (HLD-003). */
+/**
+ * SQL nativo: as reservas são UPDATE condicionais na linha de controle, sem ler-e-depois-gravar (HLD-003). Mutações
+ * exigem a transação do Actor (MANDATORY): débito sem decisão e outbox nunca confirma sozinho.
+ */
 @ApplicationScoped
 public class RepositorioRiscoJpa implements RepositorioRisco {
     private final EntityManager em;
@@ -67,7 +70,7 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
     }
 
     @Override
-    @Transactional
+    @Transactional(Transactional.TxType.MANDATORY)
     public boolean reservarCaixa(String conta, BigDecimal valor) {
         // Suficiência e mutação no mesmo comando: a segunda transação concorrente reavalia o WHERE após o commit.
         return em.createNativeQuery("""
@@ -77,7 +80,7 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
     }
 
     @Override
-    @Transactional
+    @Transactional(Transactional.TxType.MANDATORY)
     public boolean reservarCustodia(String conta, String ticker, long quantidade) {
         return em.createNativeQuery("""
                         UPDATE custodia_risco SET disponivel = disponivel - :q, reservado = reservado + :q
@@ -87,7 +90,7 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
     }
 
     @Override
-    @Transactional
+    @Transactional(Transactional.TxType.MANDATORY)
     public void registrar(Decisao d) {
         OffsetDateTime quando = OffsetDateTime.ofInstant(d.decididaEm(), ZoneOffset.UTC);
         // Intenção concorrente duplicada viola a PK e desfaz a transação inteira; a reentrega encontra a decisão.

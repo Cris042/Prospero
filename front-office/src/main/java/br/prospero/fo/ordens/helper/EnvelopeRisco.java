@@ -35,6 +35,8 @@ public final class EnvelopeRisco {
     private static final Set<String> CAMPOS_RESULTADO = Set.of("resultado", "motivo", "valorReservado",
             "quantidadeReservada");
     private static final Pattern CONTA = Pattern.compile("CONTA-\\d{3}");
+    private static final Pattern PRECO = Pattern.compile("\\d{1,13}\\.\\d{2}");
+    private static final Pattern TRACEPARENT = Pattern.compile("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}");
 
     private EnvelopeRisco() {
     }
@@ -89,6 +91,14 @@ public final class EnvelopeRisco {
         if (!CONTA.matcher(conta).matches()) {
             throw new MensagemInvalidaException("conta");
         }
+        try {
+            Instant.parse(texto(raiz, "ocorridoEm"));
+        } catch (RuntimeException erro) {
+            throw new MensagemInvalidaException("ocorridoEm");
+        }
+        if (!raiz.get("traceparent").isNull() && !TRACEPARENT.matcher(texto(raiz, "traceparent")).matches()) {
+            throw new MensagemInvalidaException("traceparent");
+        }
         JsonNode dados = raiz.get("dados");
         exigirCampos(dados, CAMPOS_RESULTADO, "dados");
         EstadoOrdem estado = switch (texto(dados, "resultado")) {
@@ -104,10 +114,31 @@ public final class EnvelopeRisco {
                 throw new MensagemInvalidaException("motivo");
             }
         }
+        exigirReservaCoerente(dados, estado);
         try {
             return new ResultadoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, estado, motivo);
         } catch (IllegalArgumentException erro) {
             throw new MensagemInvalidaException("motivo do resultado");
+        }
+    }
+
+    /** RESERVADA traz exatamente um recurso (valor em texto decimal ou quantidade inteira); REJEITADA, nenhum. */
+    private static void exigirReservaCoerente(JsonNode dados, EstadoOrdem estado) {
+        JsonNode valor = dados.get("valorReservado");
+        JsonNode quantidade = dados.get("quantidadeReservada");
+        boolean temValor = !valor.isNull();
+        boolean temQuantidade = !quantidade.isNull();
+        if (temValor && (!valor.isTextual() || !PRECO.matcher(valor.textValue()).matches()
+                || new BigDecimal(valor.textValue()).signum() <= 0)) {
+            throw new MensagemInvalidaException("valorReservado");
+        }
+        if (temQuantidade && (!quantidade.isIntegralNumber() || !quantidade.canConvertToLong()
+                || quantidade.longValue() <= 0)) {
+            throw new MensagemInvalidaException("quantidadeReservada");
+        }
+        boolean coerente = estado == EstadoOrdem.RESERVADA ? temValor != temQuantidade : !temValor && !temQuantidade;
+        if (!coerente) {
+            throw new MensagemInvalidaException("recurso reservado");
         }
     }
 
