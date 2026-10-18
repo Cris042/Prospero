@@ -71,7 +71,7 @@ const limit = (preco, extra = {}) => ({
       '/id': '${id}',
       '/tipo': 'LIMIT',
       '/validade': 'DIA',
-      '/estado': 'RESERVADA',
+      '/estado': 'ABERTA',
       '/motivoRejeicao': null,
     },
   });

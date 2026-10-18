@@ -55,7 +55,7 @@ public final class EnvelopeRisco {
             throw new EnvelopeInvalidoException("json");
         }
         exigirCampos(raiz, CAMPOS, "envelope");
-        if (!"AVALIAR_RISCO".equals(texto(raiz, "tipo")) || !raiz.get("versao").isInt() || raiz.get("versao").intValue() != 1) {
+        if (!"AVALIAR_RISCO".equals(texto(raiz, "tipo")) || !raiz.get("versao").isInt() || (raiz.get("versao").intValue() != 1 && raiz.get("versao").intValue() != 2)) {
             throw new EnvelopeInvalidoException("tipo ou versao");
         }
         if (!"front-office".equals(texto(raiz, "origem"))) {
@@ -65,21 +65,31 @@ public final class EnvelopeRisco {
         String traceparent = raiz.get("traceparent").isNull() ? null : padrao(raiz, "traceparent", TRACEPARENT);
         instante(raiz, "ocorridoEm");
         JsonNode dados = raiz.get("dados");
-        exigirCampos(dados, CAMPOS_COMANDO, "dados");
+        boolean v2 = raiz.get("versao").intValue() == 2;
+        exigirCampos(dados, v2 ? Set.of("ticker", "lado", "precoBase", "ordens", "dataSessao") : CAMPOS_COMANDO, "dados");
+        java.time.LocalDate sessao = null;
+        if (v2) {
+            try {
+                String data = texto(dados, "dataSessao");
+                sessao = java.time.LocalDate.parse(data);
+                if (!sessao.toString().equals(data)) throw new IllegalArgumentException();
+            } catch (RuntimeException e) { throw new EnvelopeInvalidoException("dataSessao"); }
+        }
         JsonNode ordens = dados.get("ordens");
         if (!ordens.isArray() || ordens.isEmpty() || ordens.size() > 2) {
             throw new EnvelopeInvalidoException("ordens");
         }
         List<Perna> pernas = new ArrayList<>();
         for (JsonNode ordem : ordens) {
-            exigirCampos(ordem, CAMPOS_PERNA, "ordem");
+            exigirCampos(ordem, v2 ? Set.of("id", "tipo", "quantidade", "precoLimite", "precoGatilho", "validade") : CAMPOS_PERNA, "ordem");
             JsonNode quantidade = ordem.get("quantidade");
             if (!quantidade.canConvertToExactIntegral() || !quantidade.isIntegralNumber() || quantidade.longValue() < 1
                     || quantidade.longValue() > QUANTIDADE_MAXIMA) {
                 throw new EnvelopeInvalidoException("quantidade");
             }
             Perna perna = new Perna(uuid(ordem, "id"), enumeracao(ordem, "tipo", TipoOrdem.class),
-                    quantidade.longValue(), preco(ordem, "precoLimite"), preco(ordem, "precoGatilho"));
+                    quantidade.longValue(), preco(ordem, "precoLimite"), preco(ordem, "precoGatilho"),
+                    v2 ? enumeracao(ordem, "validade", br.prospero.mo.risco.dominio.Validade.class) : null);
             exigirPrecosDoTipo(perna);
             pernas.add(perna);
         }
@@ -87,7 +97,7 @@ public final class EnvelopeRisco {
             exigirParOco(pernas.get(0), pernas.get(1));
         }
         return new ComandoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, padrao(dados, "ticker", TICKER),
-                enumeracao(dados, "lado", Lado.class), preco(dados, "precoBase"), pernas, traceparent);
+                enumeracao(dados, "lado", Lado.class), preco(dados, "precoBase"), pernas, traceparent, sessao);
     }
 
     public static String resultado(UUID id, Decisao decisao, Instant agora, String traceparent) {

@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho baseado no [PRD-001](../prds/PRD-001-simulador-prosper
 
 ## Objetivo técnico e estado atual
 
-Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam consulta de mercado, registro/validação de ordens e SAGA de risco/reserva FO ↔ MO. A RF05a acrescenta o núcleo puro do livro, ainda sem integração Kafka; posições, liquidação e WebSocket permanecem planejados. O roadmap registra PRs e evidências de cada fatia.
+Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam mercado, ordens/validação e SAGA de risco/reserva FO ↔ MO. RF05a implementou o núcleo puro do livro; RF05b conecta MO → ME → MO/FO com publicação recuperável, consumo/liberação e progresso das ordens, em validação. Posições, liquidação e WebSocket permanecem planejados. O roadmap registra PRs e evidências.
 
 A P05 adicionou a conversão decimal técnica pura no MO, integrada pelo PR #3. Validação financeira, risco e reservas vieram depois, nas RF03–RF04 (ADR-011 e ADR-012).
 
@@ -39,9 +39,9 @@ Contratos HTTP de negócio: DTOs, `/api/v1`, Swagger/OpenAPI e status adequados 
 
 ## Dados e consistência
 
-Cada serviço é fonte de verdade de seu contexto e dono de credenciais/migrações Flyway. FO e MO possuem tabelas de negócio, outbox e deduplicação para ordens e reservas (ADR-010–ADR-012); ME e BO ainda têm apenas a migração de identidade técnica. Não existe commit global entre quatro bancos. Reservas usam proteção atômica local; consumo e liberação após execução dependem da RF05b. Timeout sozinho não autoriza liberar recurso quando execução ainda pode ocorrer.
+Cada serviço é fonte de verdade de seu contexto e dono de credenciais/migrações Flyway. FO/MO possuem ordens, reservas, outbox e deduplicação; ME acrescenta metadados de replay na RF05b, sem tabela do livro; BO mantém a identidade técnica. Não existe commit global. Reservas, consumo/liberação e progresso usam transações locais e reentrega idempotente. Timeout sozinho não autoriza liberar recurso quando execução ainda pode ocorrer.
 
-Livro puro em memória existe na RF05a; replay da sessão e offset publicado no PostgreSQL são destino da RF05b, com snapshots adiados (ADR-013). Redis será projeção de mercado, não autoridade para reserva. Quatro bancos independentes não são réplicas. Kafka atual possui broker único KRaft/RF1; consenso/replicação distribuída entre bancos são N/A. Versões reais e adoção ficam em [libs](../libs.md).
+Livro em memória, replay da sessão e checkpoint PostgreSQL seguem ADR-013; RF05b opera laboratório de sessão única/posse exclusiva e retenção integral, sem snapshots/rebalanceamento automático. Redis será projeção de mercado, não autoridade para reserva. Quatro bancos independentes não são réplicas. Kafka atual possui broker único KRaft/RF1; consenso/replicação distribuída entre bancos são N/A. Versões reais e adoção ficam em [libs](../libs.md).
 
 ## Segurança
 

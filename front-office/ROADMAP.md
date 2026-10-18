@@ -4,17 +4,17 @@
 
 Receber comandos HTTP, persistir o estado das ordens e orquestrar a SAGA. Comunicação com outros serviços somente por Kafka; persistência exclusiva em `postgres-front-office`, banco/usuário `prospero_fo`. Este roteiro detalha a participação do componente nas tarefas do [roadmap global](../docs/roadmap.md); não cria PRs duplicados para o mesmo RF.
 
-A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
+A fundação P02 foi integrada pelo PR #1. RF01–RF04 acrescentaram mercado, ordens idempotentes, validação e SAGA de risco. A RF05b acrescenta o consumidor/progresso de matching; evidências e PRs no roadmap global.
 
 ## Entregas
 
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
 | FO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
-| FO01 | RF01 | Consultar ativos/cotações e expor o livro projetado. | Planejada |
-| FO02 | RF02 | Enviar ordens, DTOs, idempotência de submissão e consulta de estado. | Planejada |
-| FO03 | RF03, RF04 | Encaminhar validação/risco e persistir transições e compensações da SAGA. | RF03 concluída (PR #20); passo de risco da SAGA na RF04a (ADR-012) em revisão |
-| FO04 | RF05, RF06 | Consumir execuções e atualizar a visão das ordens/cotações via eventos. | Planejada |
+| FO01 | RF01 | Consultar ativos/cotações e expor o livro projetado. | Concluída — PR #17 integrado |
+| FO02 | RF02 | Enviar ordens, DTOs, idempotência de submissão e consulta de estado. | Concluída — PRs #18/#19 integrados |
+| FO03 | RF03, RF04 | Encaminhar validação/risco e persistir transições e compensações da SAGA. | Concluída — PRs #20–#22 |
+| FO04 | RF05, RF06 | Consumir execuções e atualizar a visão das ordens/cotações via eventos. | Progresso de ordens na RF05b em validação; cotação por negócio na RF06 |
 | FO05 | RF09 | Disponibilizar linha do tempo e atualizações WebSocket. | Planejada |
 | FO06 | RF10 | Receber cancelamento e acompanhar confirmação/liberação. | Planejada |
 | FO99 | V01 | Resiliência, métricas, rastreio e critérios não funcionais aplicáveis | Planejada |

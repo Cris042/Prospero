@@ -38,7 +38,7 @@ public class OrdemEntity {
     public String papelOco;
     @Column(name = "grupo_envio", nullable = false)
     public UUID grupoEnvio;
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, length = 24)
     public String estado;
     @Column(name = "data_sessao", nullable = false)
     public LocalDate dataSessao;
@@ -50,6 +50,14 @@ public class OrdemEntity {
     public String origemBase;
     @Column(name = "motivo_rejeicao", length = 32)
     public String motivoRejeicao;
+    @Column(name = "admissao_matching")
+    public UUID admissaoMatching;
+    @Column(name = "quantidade_executada", nullable = false)
+    public long quantidadeExecutada;
+    @Column(name = "quantidade_cancelada", nullable = false)
+    public long quantidadeCancelada;
+    @Column(name = "motivo_encerramento", length = 32)
+    public String motivoEncerramento;
     @Version
     public long versao;
 }

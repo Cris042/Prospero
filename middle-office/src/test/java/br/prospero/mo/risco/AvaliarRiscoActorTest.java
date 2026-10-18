@@ -55,6 +55,32 @@ class AvaliarRiscoActorTest {
     }
 
     @Test
+    void comandoV2ReservaEAdmiteSomenteUmaVez() {
+        var antiga = compra("CONTA-002", 7, "10.00");
+        var p = antiga.pernas().getFirst();
+        var nova = new ComandoRisco(antiga.evento(), antiga.intencao(), antiga.conta(), antiga.ticker(), antiga.lado(),
+                antiga.precoBase(), List.of(new br.prospero.mo.risco.dominio.Perna(p.id(), p.tipo(), p.quantidade(),
+                p.precoLimite(), null, br.prospero.mo.risco.dominio.Validade.DIA)), null, java.time.LocalDate.of(2026,10,18));
+        actor.avaliar(nova, null);
+        actor.avaliar(nova, null);
+        assertEquals(2, outbox.size());
+        assertEquals(1, outbox.stream().filter(m -> m.topico().equals("matching.comandos.v1")).count());
+        assertTrue(outbox.getFirst().payload().contains("\"precoMaximo\":\"10.00\""));
+    }
+
+    @Test
+    void preparacaoRecusaReservaLegadaSemAlterarCarteira() {
+        var comando=compra("CONTA-002",7,"10.00");
+        actor.avaliar(comando,null);
+        var antes=repositorio.carteira("CONTA-002").orElseThrow();
+        var erro=org.junit.jupiter.api.Assertions.assertThrows(br.prospero.mo.comum.dominio.RegraNegocioException.class,
+                ()->repositorio.preparar("CONTA-002",new BigDecimal("1000.00"),Map.of()));
+        assertEquals("RESERVA_VIVA",erro.codigo());
+        assertEquals(antes,repositorio.carteira("CONTA-002").orElseThrow());
+        assertEquals(1,repositorio.decisoes.size());
+    }
+
+    @Test
     void reservaCaixaEPublicaResultado() {
         Decisao d = actor.avaliar(compra("CONTA-002", 7, "10.00"), null).decisao();
         assertEquals(ResultadoRisco.RESERVADA, d.resultado());
@@ -103,6 +129,11 @@ class AvaliarRiscoActorTest {
 
     /** Mesma semântica do UPDATE condicional: suficiência e mutação juntas. */
     static class Memoria implements RepositorioRisco {
+        @Override public void bloquearConta(String conta) { }
+        final Map<UUID, ComandoRisco> admissoes = new HashMap<>();
+        @Override public void registrarAdmissao(ComandoRisco comando, Decisao decisao) {
+            admissoes.put(comando.intencao(), comando);
+        }
         final Map<String, BigDecimal> disponivel = new HashMap<>(Map.of("CONTA-002", new BigDecimal("100.00"),
                 "CONTA-003", new BigDecimal("100.00")));
         final Map<String, Long> custodia = new HashMap<>(Map.of("CONTA-002|ALFA3", 1000L));
@@ -161,6 +192,10 @@ class AvaliarRiscoActorTest {
 
         @Override
         public synchronized void preparar(String conta, BigDecimal saldo, Map<String, Long> quantidades) {
+            if (decisoes.values().stream().anyMatch(d -> d.conta().equals(conta) && d.resultado() == ResultadoRisco.RESERVADA)) {
+                throw new br.prospero.mo.comum.dominio.RegraNegocioException(br.prospero.mo.comum.dominio.Categoria.CONFLITO,
+                        "RESERVA_VIVA", "Conta possui reserva ativa.");
+            }
             disponivel.put(conta, saldo);
             totais.put(conta, saldo);
             custodia.put(conta + "|ALFA3", quantidades.getOrDefault("ALFA3", 0L));

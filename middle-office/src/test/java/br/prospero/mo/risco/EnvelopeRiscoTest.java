@@ -45,6 +45,22 @@ class EnvelopeRiscoTest {
     }
 
     @Test
+    void versaoDoisExigeSessaoValidadeESomenteSimplesPodeSerAdmitida() {
+        String pernaV2=PERNA.replace("\"precoGatilho\":null","\"precoGatilho\":null,\"validade\":\"DIA\"");
+        String v2=envelope("front-office",pernaV2).replace("\"versao\":1","\"versao\":2")
+                .replace("\"ticker\":\"ALFA3\"","\"dataSessao\":\"2026-10-18\",\"ticker\":\"ALFA3\"");
+        var comando=ler(v2);
+        assertTrue(comando.admissivel());
+        assertEquals(java.time.LocalDate.of(2026,10,18),comando.dataSessao());
+        assertEquals(br.prospero.mo.risco.dominio.Validade.DIA,comando.pernas().getFirst().validade());
+        assertThrows(EnvelopeInvalidoException.class,()->ler(v2.replace("2026-10-18","2026-02-30")));
+        assertThrows(EnvelopeInvalidoException.class,()->ler(v2.replace(",\"validade\":\"DIA\"","")));
+        org.junit.jupiter.api.Assertions.assertFalse(ler(envelope("front-office",PERNA)).admissivel());
+        String stopV2=STOP.replace("\"precoGatilho\":\"9.50\"","\"precoGatilho\":\"9.50\",\"validade\":\"DIA\"");
+        org.junit.jupiter.api.Assertions.assertFalse(ler(v2.replace(pernaV2,stopV2)).admissivel());
+    }
+
+    @Test
     void leComandoValido() {
         ComandoRisco c = ler(envelope("front-office", PERNA));
         assertEquals("CONTA-002", c.conta());

@@ -140,15 +140,17 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public void preparar(String conta, BigDecimal saldo, Map<String, Long> custodia) {
-        // Bloqueia as linhas de controle (caixa e todas as custódias, em ordem fixa) antes de apagar reservas: uma
-        // reserva concorrente ou já confirmou (e o DELETE seguinte a enxerga) ou espera e reavalia o novo saldo.
-        // O consumidor trava uma linha por vez e nunca espera pela conta, então não há ciclo de deadlock.
+        bloquearConta(conta);
+        if (!em.createNativeQuery("SELECT 1 FROM reserva WHERE conta = :c AND estado IN ('ATIVA', 'PARCIAL')")
+                .setParameter("c", conta).getResultList().isEmpty()) {
+            throw new br.prospero.mo.comum.dominio.RegraNegocioException(
+                    br.prospero.mo.comum.dominio.Categoria.CONFLITO, "RESERVA_VIVA", "Conta possui reserva ativa.");
+        }
         em.createNativeQuery("UPDATE conta_risco SET total = :s, disponivel = :s, reservado = 0 WHERE conta = :c")
                 .setParameter("s", saldo).setParameter("c", conta).executeUpdate();
         List<?> tickers = em.createNativeQuery(
                         "SELECT ticker FROM custodia_risco WHERE conta = :c ORDER BY ticker FOR UPDATE")
                 .setParameter("c", conta).getResultList();
-        em.createNativeQuery("DELETE FROM reserva WHERE conta = :c").setParameter("c", conta).executeUpdate();
         for (Object ticker : tickers) {
             long quantidade = custodia.getOrDefault((String) ticker, 0L);
             em.createNativeQuery("""
@@ -156,6 +158,28 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
                             WHERE conta = :c AND ticker = :t""")
                     .setParameter("q", quantidade).setParameter("c", conta).setParameter("t", ticker).executeUpdate();
         }
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void bloquearConta(String conta) {
+        em.createNativeQuery("SELECT conta FROM conta_risco WHERE conta = :c FOR UPDATE")
+                .setParameter("c", conta).getResultList();
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void registrarAdmissao(br.prospero.mo.risco.dominio.ComandoRisco c, Decisao d) {
+        var p = c.pernas().getFirst();
+        nativa("""
+                UPDATE reserva SET ordem=:o, admissao=:a, tipo=:t, validade=:v, data_sessao=:s,
+                quantidade_inicial=:q, quantidade_restante=:q, preco_limite=:l, preco_maximo=:m,
+                valor_restante=:r WHERE intencao=:i
+                """).setParameter("o", p.id()).setParameter("a", br.prospero.mo.risco.helper.EnvelopeAdmissao.id(c.intencao())).setParameter("t", p.tipo().name())
+                .setParameter("v", p.validade().name()).setParameter("s", c.dataSessao())
+                .setParameter("q", p.quantidade()).setParameter("l", p.precoLimite(), BigDecimal.class)
+                .setParameter("m", d.valorReservado() == null ? null : d.valorReservado().divide(BigDecimal.valueOf(p.quantidade())), BigDecimal.class)
+                .setParameter("r", d.valorReservado(), BigDecimal.class).setParameter("i", c.intencao()).executeUpdate();
     }
 
     /** Nulos tipados: sem o tipo, o PostgreSQL recebe o parâmetro nulo como bytea. */

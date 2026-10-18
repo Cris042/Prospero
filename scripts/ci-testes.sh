@@ -51,23 +51,35 @@ COMPOSE_PARALLEL_LIMIT=1 "${compose[@]}" --progress plain build
 "${compose[@]}" build runner-planilhas
 "${compose[@]}" up -d --wait --wait-timeout 240
 python3 scripts/verificar-ambiente.py --projeto "$project"
+python3 scripts/testar-matching-postgres.py --projeto "$project" --cache "$cache"
 "${compose[@]}" run --rm --no-deps -T runner-planilhas
 # RF01/RF02: workbooks com tokens curtos (preparação e contas de teste) em arquivo temporário fora do Git e da imagem.
 runner_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-runner.XXXXXX")"
-# workbook:perfil — cada planilha recebe só os tokens do seu perfil.
-for item in mercado:mercado ordens:ordens validacao:ordens risco:risco; do
-  workbook="${item%%:*}" perfil="${item##*:}"
+# Cenários que preparam carteiras antecedem Stop/OCO, preservadas até RF05c.
+rodar_workbook() {
+  local workbook="$1" perfil="$2"
   python3 scripts/mercado.py config-runner "$runner_cfg/$workbook.json" --perfil "$perfil"
   "${compose[@]}" run --rm --no-deps -T -v "$runner_cfg/$workbook.json:/config/runner.json:ro" \
     runner-planilhas "runner/exemplos/$workbook.xlsx" --config /config/runner.json
-done
+}
+rodar_workbook mercado mercado
+# Repetição deliberada comprova limpeza por negócios reais, sem apagar reservas/livro.
+rodar_workbook matching risco
+rodar_workbook matching risco
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
-python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"
 mo_origem="http://$("${compose[@]}" port middle-office 8080)"
-# RF04: SAGA FO→MO, prova SQL com duas conexões e recuperação (MO parado, reentrega, mensagem inválida).
-python3 scripts/mercado.py verificar-risco --origem "$fo_origem" --origem-mo "$mo_origem"
+python3 scripts/mercado.py verificar-matching --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"
 python3 scripts/mercado.py verificar-concorrencia --origem-mo "$mo_origem" --projeto "$project"
 python3 scripts/mercado.py verificar-recuperacao --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"
+# start/restart pode alterar a porta dinâmica publicada na CI.
+mo_origem="http://$("${compose[@]}" port middle-office 8080)"
+# RF04 mantém OCO final na CONTA-003; a prova seguinte usa CONTA-002, sem apagar esse fato.
+rodar_workbook risco risco
+python3 scripts/mercado.py verificar-risco --origem "$fo_origem" --origem-mo "$mo_origem"
+# RF02/RF03 ainda registram Stop/OCO; nenhuma preparação de carteira após essas provas.
+rodar_workbook ordens ordens
+rodar_workbook validacao ordens
+python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"
 python3 scripts/mercado.py preparar-demo --origem "$fo_origem"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.

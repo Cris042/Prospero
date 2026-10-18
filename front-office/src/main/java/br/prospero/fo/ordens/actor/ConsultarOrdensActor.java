@@ -67,7 +67,8 @@ public class ConsultarOrdensActor {
                 o.papelOco() == null ? null : o.papelOco().name(), o.estado().name(), o.dataSessao(), o.recebidaEm(),
                 o.baseTunel() == null ? null : o.baseTunel().preco().toPlainString(),
                 o.baseTunel() == null ? null : o.baseTunel().origem().name(),
-                o.motivoRejeicao() == null ? null : o.motivoRejeicao().name());
+                o.motivoRejeicao() == null ? null : o.motivoRejeicao().name(),
+                o.quantidadeExecutada(), o.quantidadeCancelada(), o.motivoEncerramento());
     }
 
     private static String texto(BigDecimal valor) {

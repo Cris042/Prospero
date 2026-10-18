@@ -4,7 +4,11 @@ Simulador local de mercado financeiro com cinco ações fictícias, livro de ofe
 
 ## Estado atual
 
-A fundação contém quatro microsserviços Quarkus/Java 26, Angular e Docker Compose. Cada serviço expõe identidade técnica, saúde, OpenAPI e métricas. O painel inicial consulta identidade e prontidão reais e, desde a RF01, o mercado: cinco ativos fictícios com último preço, variação, bid/ask, spread, volume e livro agregado em cinco níveis, a partir de snapshots sintéticos preparados por API ([ADR-009](docs/adrs/ADR-009-projecao-mercado-fo.md); `python3 scripts/mercado.py preparar-demo` popula a demonstração). Desde a RF02, a boleta registra ordens Market/Limit/Stop/Stop Limit e OCO da conta demo, com idempotência ([ADR-010](docs/adrs/ADR-010-ordens-contas-idempotencia.md)); a ordem fica apenas **Recebida** depois de validar lote, tick e o túnel de ±10% ([ADR-011](docs/adrs/ADR-011-validacao-preco-ordens.md)). O token de escrita da conta demo vale 7 dias; ao expirar (a boleta avisa), rode `python3 scripts/preparar-ambiente.py` e `docker compose up -d frontend` para renová-lo. **Risco, execução e liquidação ainda não foram implementados.** Estado e PRs de entrega estão no [roadmap](docs/roadmap.md).
+A fundação contém quatro microsserviços Quarkus/Java26, Angular e Docker Compose, com saúde, OpenAPI e métricas. RF01–RF04 entregam consulta de mercado sintético, boleta idempotente, validação de lote/tick/túnel e risco/reservas por Kafka. A ordem entra como `RECEBIDA` e o MO confirma `RESERVADA` ou `REJEITADA`. [Roadmap](docs/roadmap.md) registra PRs, gates e limites de cada entrega.
+
+RF05a implementou o núcleo de matching. RF05b conecta Limit/Market simples ao MO e projeta execução no FO, em validação: preço-tempo/FIFO, preço passivo, parciais, IOC/FOK, consumo/liberação e replay com IDs determinísticos. O laboratório mantém uma sessão por log, posse exclusiva e limite de10.000 registros por partição; não há virada diária automática. Stop/OCO aguardam RF05c; robô formador de mercado aguarda RF05d. A liquidação e os créditos de caixa/custódia ainda dependem da RF08; mercado projetado por negócios depende da RF06. [Contratos e recuperação](docs/hlds/HLD-004-matching-engine.md#contrato-de-integração-rf05b).
+
+`python3 scripts/mercado.py preparar-demo` popula o mercado sintético pela API; isso não semeia o livro de execução. O token de escrita da conta demo vale7 dias; ao expirar, rode `python3 scripts/preparar-ambiente.py` e `docker compose up -d frontend`. Preparação de carteira recusa409 com reserva viva; não apaga ofertas nem reservas para limpar testes. `matching.xlsx` repete cenários por APIs e encerra suas ofertas por negócios reais.
 
 ## Escopo do simulador
 
@@ -217,7 +221,7 @@ Hoje o painel provisionado informa coleta técnica por up. No fluxo futuro, inic
 <details>
 <summary>Estratégia de testes do matching e recuperação</summary>
 
-A RF05 deverá cobrir prioridade, preço passivo, parciais, IOC/FOK, stops/cascatas e OCO com exemplos e propriedades. Ao final de processamento elegível, livro ativo com ambos os lados não pode permanecer cruzado; quantidade se conserva e o mesmo log controlado reproduz os mesmos negócios. Concorrência, publicação abortada, retomada e cancelamento exigem testes específicos, além de cenários via API/planilha. jqwik/Testcontainers são alternativas citadas na referência, não bibliotecas adotadas automaticamente. O matching ainda não existe: não há suíte financeira executada a anunciar.
+A RF05a cobre núcleo/preço-tempo, preço passivo, parciais, IOC/FOK e propriedades determinísticas; RF05b acrescenta integração, replay, reservas e cenários por API/planilha. Stops/cascatas/OCO seguem na RF05c e cancelamento na RF10. Livro elegível não pode permanecer cruzado e quantidade se conserva. Publicação parcial, posse, retenção e recuperação têm evidências separadas do núcleo; resultados reais e limites ficam no roadmap/PR. jqwik/Testcontainers permanecem alternativas, sem dependências novas adotadas.
 
 </details>
 
@@ -287,7 +291,7 @@ npm start
 
 ## Recuperação, concorrência, desempenho e segurança — pareceres
 
-Cinco propostas foram avaliadas por **cinco agentes distintos**, confrontando requisitos, código e fontes oficiais. Todas têm aplicação com as ressalvas abaixo. **São desenhos/recomendações futuros:** a fundação atual não implementa liquidação, reservas, matching, autenticação de negócio ou arquivamento. Nenhum benchmark/falha financeira foi executado nesta avaliação.
+Cinco propostas foram avaliadas por **cinco agentes distintos**, confrontando requisitos, código e fontes oficiais. São desenhos/recomendações com as ressalvas abaixo; esta avaliação histórica não executou benchmark nem falhas financeiras. Reservas e autenticação local foram implementadas depois, na RF04, e matching nas fatias RF05a/b; liquidação e arquivamento seguem futuros. O estado atual fica no roadmap.
 
 | Proposta | Parecer | Motivo e aplicação no Próspero |
 | --- | --- | --- |
@@ -309,7 +313,7 @@ Cinco propostas foram avaliadas por **cinco agentes distintos**, confrontando re
 
 ## Regras de risco sem novo deploy — avaliação
 
-A proposta para o middle office é permitir alterar limites de forma controlada, com versão e auditoria. **Para limites numéricos com fórmulas estáveis, recomendamos primeiro parâmetros tipados/versionados e estratégias Java.** Uma DSL é candidata quando o analista precisa mudar combinações de condições; CEL Java restrito e compilador autoral foram comparados no [ADR-008](docs/adrs/ADR-008-politicas-risco.md). A decisão de adotar DSL permanece pendente; MO hoje só tem fundação e decimal técnico P05.
+A proposta para o middle office é permitir alterar limites de forma controlada, com versão e auditoria. **Para limites numéricos com fórmulas estáveis, recomendamos primeiro parâmetros tipados/versionados e estratégias Java.** Uma DSL é candidata quando o analista precisa mudar combinações de condições; CEL Java restrito e compilador autoral foram comparados no [ADR-008](docs/adrs/ADR-008-politicas-risco.md). A decisão de adotar DSL permanece pendente; MO implementa risco/reservas com parâmetros locais e regras Java (ADR-012), sem compilador dinâmico.
 
 Se adotada, aplicação proposta: escrever regra → tokens → árvore com precedência → tipos/unidades → otimização de constantes → instruções verificadas de VM de pilha. Compilar ao publicar versão e avaliar programa imutável por ordem, com `e`/`ou` em curto-circuito, sem reflexão/I/O/loops. `2%` representa razão decimal exata `0.02`, sem double; `patrimonio e var_95` deve ser recusado se as variáveis forem monetárias. Esses nomes são exemplos, sem fonte de VaR implementada. Não há medição que sustente “microssegundos”.
 

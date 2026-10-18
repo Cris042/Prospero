@@ -4,9 +4,9 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de risco: validação RF03, reservas/limites RF04, consumo/liberação RF05/RF10 e efeitos de liquidação RF08. Desde a RF04a ([ADR-012](../adrs/ADR-012-risco-reservas-saga.md)): consumidor de `risco.comandos.v1`, cálculo puro da reserva por tipo (`risco/helper/CalculoReserva`), linhas de controle `conta_risco`/`custodia_risco` com UPDATE condicional, `decisao_risco` por intenção, `reserva` e outbox de `risco.resultados.v1` na mesma transação. Consumo/liberação (RF05/RF10) e efeitos de liquidação continuam pendentes.
+Contexto de risco: validação RF03, reservas/limites RF04, consumo/liberação RF05/RF10 e efeitos de liquidação RF08. RF04 implementa consumidor de `risco.comandos.v1`, cálculo puro da reserva, controles condicionais, decisão por intenção, reserva e outbox de resultado na mesma transação. A RF05b acrescenta admissão de Limit/Market simples pelo MO e consumo/liberação por eventos do ME; cancelamento a pedido (RF10) e créditos de liquidação (RF08) permanecem futuros. Estado de validação/PR no roadmap.
 
-A P05 entrega somente `decimal/dominio/ValorEscalado`, `RegraDeSinal` e `decimal/helper/ConversaoDecimalExata`: núcleo técnico exato, não um tipo financeiro com escala/tick aprovado. P05 foi integrada ao main pelo PR #3 em 2026-10-17. RF03 continua planejada.
+A P05 entregou `decimal/dominio/ValorEscalado`, `RegraDeSinal` e `decimal/helper/ConversaoDecimalExata`: núcleo técnico exato integrado pelo PR #3. RF03 foi implementada no FO pelo PR #20; parâmetros financeiros do risco estão no ADR-012 e nas migrações locais.
 
 ## Stack e organização
 
@@ -26,9 +26,15 @@ A P05 adapta conceitos/casos do [MinervaFinancas no commit 34fc98a](https://gith
 
 Saldo de caixa não equivale a reserva intradiária; transação monolítica e serialização SQLite não comprovam concorrência PostgreSQL nem coordenação entre nossos bancos. O doador não fornece SAGA/outbox/reservas adequadas ao fluxo. Short/PnL e calendário dependem das RF07/RF08, conforme HLD-005; P05 não conclui RF03/RF04.
 
-## Fluxo futuro e dados
+## Fluxo e dados
 
 Comando recebido por evento → validar parâmetros e limites → transação local verifica/atualiza recurso e registra reserva com confirmação recuperável → publica resultado. Nenhuma leitura síncrona de conta/posição em banco alheio. Fonte, atualização e ordenação da posição usada no risco precisam de contrato por evento.
+
+Na RF05b, risco versão2 transporta sessão/validade. Admissão determinística e metadados são gravados com a reserva e outbox; v1 legado e Stop/OCO continuam preservados sem admissão. `V3__consumo_matching.sql` amplia reservas com quantidade inicial/restante, preço máximo, ordem/admissão/sessão e estados `ATIVA/PARCIAL/ENCERRADA`, além das tabelas de deduplicação de eventos/negócios. O [contrato conjunto](HLD-004-matching-engine.md#contrato-de-integração-rf05b) fixa os envelopes.
+
+O consumidor aplica os dois lados de cada negócio em uma transação, validando antes dos débitos. Compra reduz o total pelo custo executado, consome o reservado ao preço máximo e devolve a melhoria ao disponível; venda reduz total/reservado da custódia. Terminal valida progresso e libera só o saldo. Não credita ações ao comprador nem caixa ao vendedor antes da RF08. Conta/ativo/ordem/sessão/correlação, preço, lote e saldo são conferidos; diagnóstico não contém payload. Evento incoerente bloqueia o consumo sem avançar offset; falha transitória não vira descarte por número de tentativas.
+
+Admissão, consumo/liberação e preparação usam guardião de conta em ordem fixa. Preparação recusa409 com qualquer reserva viva, inclusive legada/Stop/OCO/admissão pendente, e preserva fatos de deduplicação. Não apagar reserva para repetir cenário. Recuperação de migração é aditiva ou por cópia privada consistente; não presumir retorno seguro ao binário anterior após execução financeira.
 
 Objetos financeiros e regras puras devem explicitar escala, sinal, arredondamento e overflow antes do código. Estratégias independentes de túnel, máximo, poder de compra e exposição são proposta de organização; não criar engine genérica. Snapshot de risco não substitui proteção contra concorrência na transação.
 
@@ -42,7 +48,7 @@ Gramática/funções enumeradas, aritmética exata sem double, curto-circuito, l
 
 ## Limites concorrentes e write skew — avaliação para RF04
 
-**Parecer: válido com ressalvas.** Duas transações podem ler disponível 100 e inserir reservas distintas de 70; juntas violam o limite se ambas confirmarem. É write skew de uma invariante agregada, diferente de sobrescrever a mesma linha (lost update). Snapshot isolation/`REPEATABLE READ` PostgreSQL não elimina essa anomalia. Nenhuma tabela/reserva financeira existe hoje: é risco de desenho, não defeito reproduzido. [Isolamento PostgreSQL 16](https://www.postgresql.org/docs/16/transaction-iso.html).
+**Parecer: válido com ressalvas.** Duas transações podem ler disponível 100 e inserir reservas distintas de 70; juntas violam o limite se ambas confirmarem. É write skew de uma invariante agregada, diferente de sobrescrever a mesma linha (lost update). Snapshot isolation/`REPEATABLE READ` PostgreSQL não elimina essa anomalia. O MO implementou controles condicionais na RF04; o exemplo abaixo fundamenta a proteção, sem substituir as evidências reais registradas no roadmap/PR. [Isolamento PostgreSQL 16](https://www.postgresql.org/docs/16/transaction-iso.html).
 
 Recomendação inicial a validar: linha local de controle por conta/recurso com atualização condicional que confere suficiência e altera disponível/reservado, na mesma transação de reserva, decisão/versionamento, deduplicação e outbox. Todos os escritores — admissão, consumo, liberação e alteração de limite/fatos pertinentes — preservam a mesma invariante. Não materializar sem definir quais limites incluem conta, ativo, posição e exposição vendida.
 
@@ -60,9 +66,9 @@ Teste futuro em PostgreSQL 16 real: duas conexões/transações, barreira após 
 
 ## Recuperação, riscos e pendências
 
-Definir atomicidade entre reserva e evento de confirmação, deduplicação e consumo/liberação em execução parcial, preço melhor, IOC, rejeição e cancelamento. Proteger limites compartilhados contra duas ordens concorrentes; escolher update condicional/lock/versão/isolamento conforme invariante e teste, sem prescrever solução não refinada.
+Reserva/resultado e reserva/admissão usam transação local/outbox; deduplicação e consumo/liberação da RF05b confirmam com os efeitos. O contrato preserva reentrega, execução parcial, preço melhor, IOC e rejeição; cancelamento solicitado pelo investidor permanece na RF10.
 
-Reservas de Market/Stop/Stop Limit/short, proteção de posição/exposição e limite por ordem são pendentes. Timeout não libera automaticamente recursos quando execução ainda pode ocorrer. Separar disponível/reservado/liquidado; efeitos BO chegam por eventos idempotentes.
+Reservas de Market/Stop/Stop Limit/OCO e limite por ordem foram definidos no ADR-012; short está desabilitado. Admissão de Stop/OCO aguarda RF05c. Timeout não libera automaticamente recursos quando execução ainda pode ocorrer. Separar disponível/reservado/liquidado; efeitos BO chegarão por eventos idempotentes.
 
 Lote, tick e túnel de ±10% são validados no FO desde a RF03 ([ADR-011](../adrs/ADR-011-validacao-preco-ordens.md)); o MO pode revalidar como defesa em profundidade na RF04. Pendentes no MO: calendário de negociação e regras de risco. Testar limites, concorrência, reentrega e compensação; núcleo decimal tem evidência [P05 — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P05-testes.md). [Roadmap MO](../../middle-office/ROADMAP.md); RNF01/RNF05/RNF06 e operação RNF07/RNF08.
 

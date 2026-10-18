@@ -10,7 +10,17 @@ import java.util.UUID;
  * precoBase é a base do túnel calculada pelo FO (último da sessão ou referência), usada só para compra Market.
  */
 public record ComandoRisco(UUID evento, UUID intencao, String conta, String ticker, Lado lado, BigDecimal precoBase,
-                           List<Perna> pernas, String traceparent) {
+                           List<Perna> pernas, String traceparent, java.time.LocalDate dataSessao) {
+    public ComandoRisco(UUID evento, UUID intencao, String conta, String ticker, Lado lado, BigDecimal precoBase,
+                        List<Perna> pernas, String traceparent) {
+        this(evento, intencao, conta, ticker, lado, precoBase, pernas, traceparent, null);
+    }
+
+    public boolean admissivel() {
+        return dataSessao != null && pernas.size() == 1 && pernas.getFirst().validade() != null
+                && (pernas.getFirst().tipo() == TipoOrdem.LIMIT || pernas.getFirst().tipo() == TipoOrdem.MARKET);
+    }
+
     public ComandoRisco {
         Objects.requireNonNull(evento);
         Objects.requireNonNull(intencao);
