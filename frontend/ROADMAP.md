@@ -4,7 +4,7 @@
 
 Apresentar dados e operações do investidor, consumindo APIs versionadas. O projeto também hospeda o runner de planilhas, sem transformá-lo em funcionalidade de importação pela interface. Este documento detalha a participação nas tarefas do [roadmap global](../docs/roadmap.md).
 
-A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3, TypeScript estrito, painel responsivo, consulta real de identidade/readiness dos quatro serviços, estados de falha independentes e container Nginx. Não há boleta, ativos, execução ou posições implementados.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3, TypeScript estrito, painel responsivo, consulta real de identidade/readiness dos quatro serviços, estados de falha independentes e container Nginx. RF01 acrescentou a consulta de ativos e livro; RF02 a boleta de registro de ordens (simples e OCO) com lista da conta demo. Execução, reservas e posições continuam não implementadas.
 
 ## Entregas
 
@@ -12,8 +12,8 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3,
 | --- | --- | --- | --- |
 | UI00 | P02 | Aplicação inicial, proxy, painel técnico e container | Concluída — PR #1 integrado |
 | UI01 | P03 | Runner CLI `.xlsx`, exemplos e relatório via API | Concluída — PR #9 integrado em 2026-10-17; 49 testes runner + exemplo real validados |
-| UI02 | RF01 | Lista dos cinco ativos, cotações e profundidade | Planejada |
-| UI03 | RF02 | Boleta, tipos/validades e acompanhamento de submissão | Planejada |
+| UI02 | RF01 | Lista dos cinco ativos, cotações e profundidade | Concluída — PR #17 integrado |
+| UI03 | RF02 | Boleta, tipos/validades e acompanhamento de submissão | Em revisão — RF02c (boleta, token de escrita protegido no proxy, E2E) |
 | UI04 | RF03, RF04 | Exibir validações, rejeições, reservas e poder de compra | Planejada |
 | UI05 | RF05, RF06 | Livro, parciais e atualizações de mercado | Planejada |
 | UI06 | RF07, RF08 | Posições, resultados, histórico e liquidação | Planejada |

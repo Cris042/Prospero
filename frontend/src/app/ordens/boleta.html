@@ -1,0 +1,182 @@
+<section class="boleta" aria-labelledby="boleta-titulo">
+  <p class="sobretitulo">CONTA DEMO · CONTA-001</p>
+  <h2 id="boleta-titulo">Boleta</h2>
+  <p class="aviso">
+    Esta etapa apenas <strong>registra</strong> a ordem: confere formato, tipo e validade. Tick,
+    lote, túnel de preço, reserva de saldo e execução ainda não estão implementados.
+  </p>
+
+  <div class="modos" role="group" aria-label="Tipo de envio">
+    <button type="button" [attr.aria-pressed]="modo() === 'SIMPLES'" (click)="alternar('SIMPLES')">
+      Ordem simples
+    </button>
+    <button type="button" [attr.aria-pressed]="modo() === 'OCO'" (click)="alternar('OCO')">
+      OCO (Take Profit + Stop Loss)
+    </button>
+  </div>
+
+  @if (modo() === 'SIMPLES') {
+    <form [formGroup]="simples" (ngSubmit)="enviar()" aria-label="Ordem simples">
+      <label
+        >Ativo
+        <select formControlName="ticker">
+          @for (t of tickers; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
+      <label
+        >Lado
+        <select formControlName="lado">
+          <option value="COMPRA">Compra</option>
+          <option value="VENDA">Venda</option>
+        </select>
+      </label>
+      <label
+        >Tipo
+        <select formControlName="tipo">
+          @for (t of tipos; track t) {
+            <option [value]="t">{{ rotulo(t) }}</option>
+          }
+        </select>
+      </label>
+      <label
+        >Validade
+        <select formControlName="validade">
+          @for (v of validades(); track v) {
+            <option [value]="v">{{ rotulo(v) }}</option>
+          }
+        </select>
+      </label>
+      <label
+        >Quantidade
+        <input formControlName="quantidade" type="number" min="1" max="1000000" step="1" required />
+      </label>
+      @if (exigeLimite(tipoAtual())) {
+        <label
+          >Preço limite (R$)
+          <input formControlName="precoLimite" inputmode="decimal" placeholder="10,25" required />
+        </label>
+      }
+      @if (exigeGatilho(tipoAtual())) {
+        <label
+          >Preço de disparo (R$)
+          <input formControlName="precoGatilho" inputmode="decimal" placeholder="9,80" required />
+        </label>
+      }
+      <button type="submit" class="primario" [disabled]="enviando()">
+        {{ enviando() ? 'Enviando…' : 'Registrar ordem' }}
+      </button>
+    </form>
+  } @else {
+    <form [formGroup]="oco" (ngSubmit)="enviar()" aria-label="Ordem OCO">
+      <label
+        >Ativo
+        <select formControlName="ticker">
+          @for (t of tickers; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
+      <label
+        >Lado
+        <select formControlName="lado">
+          <option value="VENDA">Venda (protege posição comprada)</option>
+          <option value="COMPRA">Compra (cobre posição vendida)</option>
+        </select>
+      </label>
+      <label
+        >Quantidade
+        <input formControlName="quantidade" type="number" min="1" max="1000000" step="1" required />
+      </label>
+      <label
+        >Alvo — Take Profit (R$)
+        <input formControlName="alvo" inputmode="decimal" placeholder="11,00" required />
+      </label>
+      <label
+        >Stop Loss
+        <select formControlName="tipoStop">
+          <option value="STOP">Stop</option>
+          <option value="STOP_LIMIT">Stop Limit</option>
+        </select>
+      </label>
+      <label
+        >Preço de disparo (R$)
+        <input formControlName="gatilho" inputmode="decimal" placeholder="9,50" required />
+      </label>
+      @if (tipoStopAtual() === 'STOP_LIMIT') {
+        <label
+          >Limite do Stop (R$)
+          <input formControlName="limiteStop" inputmode="decimal" placeholder="9,45" required />
+        </label>
+      }
+      <p class="dica">Validade: Dia (sessão de São Paulo).</p>
+      <button type="submit" class="primario" [disabled]="enviando()">
+        {{ enviando() ? 'Enviando…' : 'Registrar OCO' }}
+      </button>
+    </form>
+  }
+
+  @if (erro(); as texto) {
+    <p class="alerta" role="alert">{{ texto }}</p>
+  }
+  @if (registro(); as ordens) {
+    <div class="sucesso" role="status">
+      <strong
+        >{{ ordens.length > 1 ? 'Ordens registradas' : 'Ordem registrada' }} — estado
+        Recebida.</strong
+      >
+      @for (o of ordens; track o.id) {
+        <span
+          >{{ o.papelOco ? rotulo(o.papelOco) + ': ' : '' }}{{ rotulo(o.lado) }} {{ o.quantidade }}
+          {{ o.ticker }} · {{ rotulo(o.tipo) }} · ID {{ o.id }}</span
+        >
+      }
+    </div>
+  }
+
+  <div class="cabecalho-lista">
+    <h3 id="minhas-ordens">Minhas ordens</h3>
+    <button type="button" (click)="atualizarLista()">Atualizar ordens</button>
+  </div>
+  @if (erroLista()) {
+    <p class="alerta" role="alert">Não foi possível consultar as ordens.</p>
+  }
+  <div class="rolagem" role="region" aria-labelledby="minhas-ordens" tabindex="0">
+    <table>
+      <caption class="sr-only">
+        Ordens registradas da conta demo, mais recentes primeiro
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Ativo</th>
+          <th scope="col">Lado</th>
+          <th scope="col">Tipo</th>
+          <th scope="col">Validade</th>
+          <th scope="col">Qtd.</th>
+          <th scope="col">Limite</th>
+          <th scope="col">Disparo</th>
+          <th scope="col">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (o of lista(); track o.id) {
+          <tr>
+            <td>{{ o.ticker }}</td>
+            <td>{{ rotulo(o.lado) }}</td>
+            <td>{{ rotulo(o.tipo) }}{{ o.papelOco ? ' · ' + rotulo(o.papelOco) : '' }}</td>
+            <td>{{ rotulo(o.validade) }}</td>
+            <td>{{ o.quantidade }}</td>
+            <td>{{ decimal(o.precoLimite) }}</td>
+            <td>{{ decimal(o.precoGatilho) }}</td>
+            <td>{{ rotulo(o.estado) }}</td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="8">Nenhuma ordem registrada.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>

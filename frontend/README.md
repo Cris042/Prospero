@@ -12,7 +12,7 @@ npm run build
 npm start
 ```
 
-Node 24.16.0; Angular 22.2.3 e TypeScript 6.0. O dev server usa `proxy.conf.mjs` para as APIs em localhost:8081–8084 e injeta o token de leitura da RF01 (`FO_TOKEN_LEITURA` do ambiente ou do `.env`); a preparação de mercado é bloqueada pelo proxy. No container, o build estático é servido por Nginx em 8080 e publicado em localhost:4200, com proxy por DNS Docker e mesma origem.
+Node 24.16.0; Angular 22.2.3 e TypeScript 6.0. O dev server usa `proxy.conf.mjs` para as APIs em localhost:8081–8084 e injeta o token de leitura da RF01 (`FO_TOKEN_LEITURA`) e o de ordens da conta demo (`FO_TOKEN_ORDENS`, só GET/POST em `/api/v1/ordens*`, POST com Origin local), lidos do ambiente ou do `.env`; a preparação de mercado é bloqueada pelo proxy. O Nginx do container aplica as mesmas regras, além de recusar Host não local (421) e limitar a taxa de envio. No container, o build estático é servido por Nginx em 8080 e publicado em localhost:4200, com proxy por DNS Docker e mesma origem.
 
 Consulte o [roadmap Angular](ROADMAP.md), o [README geral](../README.md) e os [contratos de API](../docs/adrs/ADR-003-contratos-api.md). O runner de planilhas da P03 é uma CLI em container, descrita abaixo.
 

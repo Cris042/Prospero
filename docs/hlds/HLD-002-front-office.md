@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Hoje implementa identidade técnica, Actor/DTO e infraestrutura. APIs de ordens, SAGA, outbox, consulta de trajetória e WebSocket ainda não existem.
+Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Hoje implementa identidade técnica, consulta de mercado (RF01) e registro/consulta de ordens com idempotência (RF02). SAGA, outbox, consulta de trajetória e WebSocket ainda não existem.
 
 Futuro: receber/consultar ordens, persistir estados, orquestrar validação/reserva/execução e expor projeções. Risco pertence ao MO; livro ao ME; contabilidade ao BO. Angular apresenta estados sem coordenar SAGA.
 

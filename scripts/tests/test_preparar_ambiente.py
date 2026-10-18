@@ -34,7 +34,7 @@ class PrepararAmbienteTest(unittest.TestCase):
     def test_cria_todas_as_chaves_com_permissao_privada(self):
         ambiente.main()
         valores = ambiente.ler(self.env)
-        for chave in ambiente.SENHAS + ["FO_JWT_CHAVE", "FO_JWT_JWK", "FO_TOKEN_LEITURA"]:
+        for chave in ambiente.SENHAS + ["FO_JWT_CHAVE", "FO_JWT_JWK", "FO_TOKEN_LEITURA", "FO_TOKEN_ORDENS"]:
             self.assertIn(chave, valores)
         self.assertEqual(stat.S_IMODE(os.stat(self.env).st_mode), 0o600)
         self.assertGreaterEqual(len(valores["FO_JWT_CHAVE"]), 32)
@@ -60,6 +60,23 @@ class PrepararAmbienteTest(unittest.TestCase):
         jwk = json.loads(decodificar(valores["FO_JWT_JWK"]))["keys"][0]
         self.assertEqual((jwk["kty"], jwk["alg"]), ("oct", "HS256"))
         self.assertEqual(decodificar(jwk["k"]), valores["FO_JWT_CHAVE"].encode())
+
+
+class TokenOrdensTest(PrepararAmbienteTest):
+    def test_token_de_ordens_da_conta_demo_com_validade_curta_e_renovacao(self):
+        ambiente.main()
+        valores = ambiente.ler(self.env)
+        claims = json.loads(decodificar(valores["FO_TOKEN_ORDENS"].split(".")[1]))
+        self.assertEqual(claims["sub"], "CONTA-001")
+        self.assertEqual(sorted(claims["groups"]), ["ordens:enviar", "ordens:leitura"])
+        self.assertLessEqual(claims["exp"] - claims["iat"], 7 * 24 * 3600)
+        # Token prestes a expirar é regenerado; os demais valores ficam intactos.
+        prestes = ambiente.jwt({"exp": 1}, valores["FO_JWT_CHAVE"])
+        self.env.write_text(self.env.read_text().replace(valores["FO_TOKEN_ORDENS"], prestes))
+        ambiente.main()
+        renovados = ambiente.ler(self.env)
+        self.assertNotEqual(renovados["FO_TOKEN_ORDENS"], prestes)
+        self.assertEqual(renovados["FO_TOKEN_LEITURA"], valores["FO_TOKEN_LEITURA"])
 
 
 if __name__ == "__main__":

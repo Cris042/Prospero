@@ -12,8 +12,11 @@ import time
 root = Path(__file__).resolve().parents[1]
 path = root / ".env"
 SENHAS = ["FO_DB_PASSWORD", "MO_DB_PASSWORD", "ME_DB_PASSWORD", "BO_DB_PASSWORD", "GRAFANA_ADMIN_PASSWORD"]
-# Token só de leitura usado pelo proxy Nginx; o navegador nunca recebe a credencial.
+# Tokens injetados pelo proxy Nginx; o navegador nunca recebe a credencial.
 VALIDADE_LEITURA = 365 * 24 * 3600
+# Escrita (RF02c, ADR-010): validade curta, regenerada quando faltar menos de um dia.
+VALIDADE_ORDENS = 7 * 24 * 3600
+RENOVAR_ANTES = 24 * 3600
 
 
 def jwt(payload, chave):
@@ -29,6 +32,14 @@ def jwk(chave):
     codificar = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()
     conjunto = {"keys": [{"kty": "oct", "kid": "prospero-local", "alg": "HS256", "k": codificar(chave.encode())}]}
     return codificar(json.dumps(conjunto, separators=(",", ":")).encode())
+
+
+def expira_em(token):
+    try:
+        corpo = token.split(".")[1]
+        return json.loads(base64.urlsafe_b64decode(corpo + "=" * (-len(corpo) % 4)))["exp"]
+    except (IndexError, KeyError, ValueError):
+        return 0
 
 
 def ler(arquivo):
@@ -57,6 +68,11 @@ def main():
         agora = int(time.time())
         novos["FO_TOKEN_LEITURA"] = jwt({"iss": "prospero-local", "aud": "prospero-front-office", "iat": agora,
                                          "exp": agora + VALIDADE_LEITURA, "groups": ["mercado:leitura"]}, chave)
+    agora = int(time.time())
+    if "FO_JWT_CHAVE" in novos or expira_em(existentes.get("FO_TOKEN_ORDENS", "")) < agora + RENOVAR_ANTES:
+        novos["FO_TOKEN_ORDENS"] = jwt({"iss": "prospero-local", "aud": "prospero-front-office", "sub": "CONTA-001",
+                                        "iat": agora, "exp": agora + VALIDADE_ORDENS,
+                                        "groups": ["ordens:enviar", "ordens:leitura"]}, chave)
     if novos:
         # Reescreve atomicamente preservando valores existentes; nunca exibe segredos.
         linhas = [l for l in path.read_text().splitlines() if not any(l.startswith(k + "=") for k in novos)]
