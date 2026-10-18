@@ -133,7 +133,8 @@ class MotorMatchingTest {
         MotorMatching outro = new MotorMatching(Map.of("ALFA3", ALFA));
         outro.processar(vendaLimit(10, "10.50"));
         Admissao barata = compra("CONTA-002", TipoOrdem.MARKET, Validade.IOC, 10, null, "10.40");
-        assertEquals(MotivoEncerramento.FORA_DA_FAIXA, ((OrdemEncerrada) outro.processar(barata).getLast()).motivo());
+        assertEquals(MotivoEncerramento.LIMITADA_PELA_RESERVA,
+                ((OrdemEncerrada) outro.processar(barata).getLast()).motivo());
     }
 
     @Test
@@ -188,13 +189,95 @@ class MotorMatchingTest {
                 rejeicao(compra("CONTA-002", TipoOrdem.LIMIT, Validade.DIA, 1, "10.00", null)));
         assertEquals(MotivoRejeicao.COMBINACAO_INVALIDA,
                 rejeicao(venda("CONTA-003", TipoOrdem.LIMIT, Validade.DIA, 1, null)));
+        assertEquals(MotivoRejeicao.PRECO_INVALIDO, rejeicao(vendaLimit(1, "10.005")));
+        assertEquals(MotivoRejeicao.PRECO_INVALIDO, rejeicao(vendaLimit(1, "0.00")));
+        assertEquals(MotivoRejeicao.PRECO_INVALIDO, rejeicao(vendaLimit(1, "-1.00")));
+        assertEquals(MotivoRejeicao.QUANTIDADE_INVALIDA, rejeicao(vendaLimit(MotorMatching.MAX_QUANTIDADE + 1, "10.00")));
         Admissao v = vendaLimit(1, "10.00");
         motor.processar(v);
-        assertEquals(MotivoRejeicao.ORDEM_DUPLICADA, rejeicao(v), "reentrega não altera o livro");
+        assertEquals(List.of(), motor.processar(v), "reentrega é ignorada: nenhuma rejeição terminal de ordem viva");
         for (int i = 0; i < MotorMatching.MAX_ORDENS_ATIVAS_POR_CONTA - 1; i++) {
             motor.processar(vendaLimit(1, "12.00"));
         }
         assertEquals(MotivoRejeicao.LIMITE_ORDENS_ATIVAS, rejeicao(vendaLimit(1, "12.00")));
+    }
+
+    @Test
+    void fokNuncaExecutaParcialmentePeloTetoDeNegocios() {
+        for (int i = 0; i < 300; i++) {
+            motor.processar(vendaLimit(1, "10.00"));
+        }
+        Admissao fok = compra("CONTA-002", TipoOrdem.LIMIT, Validade.FOK, 300, "10.00", "10.00");
+        List<Evento> eventos = motor.processar(fok);
+        assertTrue(doTipo(eventos, Negocio.class).isEmpty());
+        assertEquals(new OrdemEncerrada(fok.ordem(), "ALFA3", MotivoEncerramento.FOK_SEM_LIQUIDEZ, 0, 300),
+                eventos.getLast());
+        Admissao cabe = compra("CONTA-002", TipoOrdem.LIMIT, Validade.FOK, 256, "10.00", "10.00");
+        assertEquals(MotivoEncerramento.EXECUTADA, ((OrdemEncerrada) motor.processar(cabe).getLast()).motivo());
+    }
+
+    @Test
+    void sessaoNovaReiniciaIdsEBaseESessaoAnteriorERecusada() {
+        motor.processar(vendaLimit(1, "10.50"));
+        motor.processar(compraLimit(1, "10.50"));
+        LocalDate seguinte = SESSAO.plusDays(1);
+        Admissao venda = new Admissao(UUID.randomUUID(), UUID.randomUUID(), "CONTA-003", "ALFA3", Lado.VENDA,
+                TipoOrdem.LIMIT, Validade.DIA, 1, d("11.10"), null, seguinte);
+        motor.processar(venda);
+        // Base volta à referência 10,00 → teto 11,00: a oferta de 11,10 fica fora da faixa.
+        Admissao market = new Admissao(UUID.randomUUID(), UUID.randomUUID(), "CONTA-002", "ALFA3", Lado.COMPRA,
+                TipoOrdem.MARKET, Validade.IOC, 1, null, d("12.00"), seguinte);
+        assertEquals(MotivoEncerramento.FORA_DA_FAIXA, ((OrdemEncerrada) motor.processar(market).getLast()).motivo());
+        Admissao limit = new Admissao(UUID.randomUUID(), UUID.randomUUID(), "CONTA-002", "ALFA3", Lado.COMPRA,
+                TipoOrdem.LIMIT, Validade.DIA, 1, d("11.10"), d("11.10"), seguinte);
+        assertEquals("ALFA3-2026-10-20-1", doTipo(motor.processar(limit), Negocio.class).getFirst().id());
+        assertEquals(MotivoRejeicao.SESSAO_ANTERIOR, rejeicao(compraLimit(1, "10.00")),
+                "sessão atrasada não reinicia a sequência de IDs");
+    }
+
+    @Test
+    void marketLimitadaPelaReservaTemMotivoProprio() {
+        motor.processar(vendaLimit(10, "10.50"));
+        Admissao barata = compra("CONTA-002", TipoOrdem.MARKET, Validade.IOC, 10, null, "10.40");
+        assertEquals(MotivoEncerramento.LIMITADA_PELA_RESERVA,
+                ((OrdemEncerrada) motor.processar(barata).getLast()).motivo());
+    }
+
+    @Test
+    void parametrosDoAtivoInvalidosSaoRecusados() {
+        for (String[] p : new String[][]{{"0", "10.00", "10"}, {"0.005", "10.00", "10"}, {"0.05", "10.01", "10"},
+                {"0.01", "10.00", "0"}, {"0.01", "10.00", "51"}, {"0.01", "0", "10"}}) {
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> new ParametrosAtivo("X", d(p[0]), d(p[1]), d(p[2])));
+        }
+    }
+
+    @Test
+    void tetoArredondaParaDentroENaoPorProximidade() {
+        assertEquals(d("11.05"), FaixaPreco.teto(d("10.05"), d("0.01"), BigDecimal.TEN), "11,055 → 11,05");
+        assertEquals(d("9.05"), FaixaPreco.piso(d("10.05"), d("0.01"), BigDecimal.TEN), "9,045 → 9,05");
+    }
+
+    @Test
+    void ordemExecutadaLiberaVagaNoLimiteDeAtivas() {
+        for (int i = 0; i < MotorMatching.MAX_ORDENS_ATIVAS_POR_CONTA; i++) {
+            motor.processar(vendaLimit(1, "12.00"));
+        }
+        assertEquals(MotivoRejeicao.LIMITE_ORDENS_ATIVAS, rejeicao(vendaLimit(1, "12.00")));
+        motor.processar(compraLimit(1, "12.00"));
+        assertTrue(motor.processar(vendaLimit(1, "12.00")).getFirst() instanceof OrdemAceita, "vaga liberada");
+    }
+
+    @Test
+    void reentregaEhIgnoradaEmQualquerAtivo() {
+        Admissao v = vendaLimit(1, "10.00");
+        motor.processar(v);
+        MotorMatching dois = new MotorMatching(Map.of("ALFA3", ALFA, "OMEGA3", new ParametrosAtivo("OMEGA3",
+                d("0.05"), d("50.00"), BigDecimal.TEN)));
+        dois.processar(v);
+        Admissao outroAtivo = new Admissao(v.ordem(), v.intencao(), v.conta(), "OMEGA3", v.lado(), v.tipo(),
+                v.validade(), v.quantidade(), d("50.00"), null, v.sessao());
+        assertEquals(List.of(), dois.processar(outroAtivo));
     }
 
     private MotivoRejeicao rejeicao(Admissao a) {

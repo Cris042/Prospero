@@ -20,7 +20,7 @@
 | Tema | Decisão |
 | --- | --- |
 | Livro | Por ativo: compras por preço decrescente e vendas crescente, FIFO por nível (sequência de chegada ao ME, nunca horário), índice por ID. Negócio ao **preço da oferta passiva**. Livro nunca cruzado após cada comando. |
-| Faixa da Market | Base = último negócio do próprio ME na sessão, senão referência. Compra executa a `≤ min(⌊base×1,1/tick⌋×tick, preço máximo reservado)`; venda a `≥ ⌈base×0,9/tick⌉×tick`. Market nunca repousa: sobra cancelada (`FORA_DA_FAIXA` se a faixa interrompeu, senão `SEM_LIQUIDEZ`). |
+| Faixa da Market | Base = último negócio do próprio ME na sessão, senão referência. Compra executa a `≤ min(⌊base×1,1/tick⌋×tick, preço máximo reservado)`; venda a `≥ ⌈base×0,9/tick⌉×tick`. Market nunca repousa: sobra cancelada (`FORA_DA_FAIXA` se o túnel interrompeu, `LIMITADA_PELA_RESERVA` se o preço reservado foi o corte mais restritivo, senão `SEM_LIQUIDEZ`). |
 | Limit | Compra com limite acima do preço máximo reservado é rejeitada (`PRECO_ACIMA_DA_RESERVA`). DIA repousa o saldo; IOC cancela a sobra (`SALDO_CANCELADO_IOC`); FOK verifica antes a quantidade inteira executável sem tocar o livro (`FOK_SEM_LIQUIDEZ`). |
 | Stops (RF05c) | Gatilho pelo último negócio do ME, igualdade aciona (compra `último ≥ gatilho`, venda `último ≤ gatilho`); gatilho já satisfeito na entrada aciona imediatamente. Stop acionado vira Market IOC com faixa; Stop Limit vira Limit DIA sem prioridade original. Cascata no mesmo comando, em ordem de acionamento e sequência. |
 | OCO (RF05c) | Parcial numa perna reduz a outra na mesma quantidade; execução total cancela a outra; acionamento do stop cancela o Take Profit. A reserva única do par é consumida uma vez. |

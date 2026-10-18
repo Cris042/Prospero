@@ -4,9 +4,9 @@ Data: 2026-10-17. Desenho baseado no [PRD-001](../prds/PRD-001-simulador-prosper
 
 ## Objetivo técnico e estado atual
 
-Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. As APIs iniciais expõem identidade e saúde técnica; negociação, SAGA, reservas, livro, posições, liquidação e WebSocket permanecem planejados.
+Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam consulta de mercado, registro/validação de ordens e SAGA de risco/reserva FO ↔ MO. A RF05a acrescenta o núcleo puro do livro, ainda sem integração Kafka; posições, liquidação e WebSocket permanecem planejados. O roadmap registra PRs e evidências de cada fatia.
 
-A P05 adiciona apenas conversão decimal técnica pura no MO, sem endpoint/regra financeira, integrada ao main pelo PR #3 em 2026-10-17. Isso não implementa validação financeira, risco ou reservas.
+A P05 adicionou a conversão decimal técnica pura no MO, integrada pelo PR #3. Validação financeira, risco e reservas vieram depois, nas RF03–RF04 (ADR-011 e ADR-012).
 
 ## Arquitetura
 
@@ -26,12 +26,12 @@ A figura estrutural representa a fundação: Nginx encaminha consultas técnicas
 
 Cada microsserviço possui build, imagem, migrações, credenciais e container PostgreSQL próprios. Os demais não acessam seu banco nem sua implementação. A colaboração de negócio ocorre via Kafka; a disponibilidade de todos não é exigida para iniciar cada processo, mas o fluxo ponta a ponta depende de seus participantes.
 
-REST chama Actor; Actor coordena domínio/Helpers puros e repositórios JPA separados. O domínio não conhece HTTP, Quarkus ou JPA. SAGA, outbox e consumidores idempotentes coordenarão o fluxo distribuído. O livro permanece em memória, sem consultar banco por ordem. DDD e Object Calisthenics seguem os [ADRs](../adrs/README.md).
+REST chama Actor; Actor coordena domínio/Helpers puros e repositórios JPA separados. O domínio não conhece HTTP, Quarkus ou JPA. SAGA, outbox e consumidores idempotentes coordenam o fluxo FO ↔ MO; os demais saltos são futuros. O livro permanece em memória, sem consultar banco por ordem. DDD e Object Calisthenics seguem os [ADRs](../adrs/README.md).
 
 
 ## Fluxos e contratos
 
-Atual: navegador → Nginx/proxy Angular → endpoints `/api/v1/sistema` dos serviços. Cada aplicação verifica suas dependências locais de saúde. O teste de contrato desativa banco/Kafka apenas no perfil de teste; smoke Compose verifica dependências reais.
+Atual: navegador → Nginx/proxy Angular → identidade técnica, mercado e ordens no FO e carteiras de risco no MO. As ordens registradas/validadas seguem por outbox/Kafka para reserva ou rejeição no MO, retornando ao FO. Cada aplicação verifica suas dependências locais de saúde; testes de contrato e integração distinguem infraestrutura desativada de dependências reais.
 
 Planejado: investidor → API FO → registro e SAGA/outbox → Kafka → validação/reserva MO → matching sequencial ME → execução/contabilidade BO → projeções e estados consultáveis no FO/Angular. Representa responsabilidades de destino; nomes de tópicos, esquemas, transições, compensações e garantias de publicação serão definidos nas RFs e não constituem contratos já existentes.
 
@@ -39,13 +39,13 @@ Contratos HTTP de negócio: DTOs, `/api/v1`, Swagger/OpenAPI e status adequados 
 
 ## Dados e consistência
 
-Cada serviço é fonte de verdade de seu contexto e dono de credenciais/migrações Flyway. As migrações atuais só identificam schemas: não há tabelas financeiras. O desenho futuro usa transações locais, outbox, deduplicação e compensações; não existe commit global entre quatro bancos. Reservas requerem proteção atômica local e reconciliação de falhas; timeout sozinho não autoriza liberar recurso quando execução ainda pode ocorrer.
+Cada serviço é fonte de verdade de seu contexto e dono de credenciais/migrações Flyway. FO e MO possuem tabelas de negócio, outbox e deduplicação para ordens e reservas (ADR-010–ADR-012); ME e BO ainda têm apenas a migração de identidade técnica. Não existe commit global entre quatro bancos. Reservas usam proteção atômica local; consumo e liberação após execução dependem da RF05b. Timeout sozinho não autoriza liberar recurso quando execução ainda pode ocorrer.
 
-Livro em memória e replay/snapshots são destino do ME; Redis será projeção de mercado, não autoridade para reserva. Quatro bancos independentes não são réplicas. Kafka atual possui broker único KRaft/RF1; consenso/replicação distribuída entre bancos são N/A. Versões reais e adoção ficam em [libs](../libs.md).
+Livro puro em memória existe na RF05a; replay da sessão e offset publicado no PostgreSQL são destino da RF05b, com snapshots adiados (ADR-013). Redis será projeção de mercado, não autoridade para reserva. Quatro bancos independentes não são réplicas. Kafka atual possui broker único KRaft/RF1; consenso/replicação distribuída entre bancos são N/A. Versões reais e adoção ficam em [libs](../libs.md).
 
 ## Segurança
 
-Ambiente de estudo, sem dados/operações financeiras reais. Portas publicadas em loopback, configuração sensível local fora do Git e permissões/bancos separados. Não tratar loopback como proteção suficiente para futuras APIs de controle ou negócio. Autenticação/autorização de atores é pendência anterior aos respectivos fluxos; não afirmar RBAC já implementado. Preservar DTOs, limites de entradas e logs sem credenciais. A ferramenta técnica de carga usa alvos enumerados e limites contra abuso/SSRF, com JWT HS256 de controle e atestado externo de preflight assinados por chaves distintas; não expõe comandos/socket Docker.
+Ambiente de estudo, sem dados/operações financeiras reais. Portas publicadas em loopback, configuração sensível local fora do Git e permissões/bancos separados. Não tratar loopback como proteção suficiente: FO e MO validam JWT local e escopo de conta; proxy injeta tokens locais sem expô-los ao navegador (ADR-009/ADR-012). Isso não implementa cadastro/senhas nem os papéis conceituais completos do PRD. Preservar DTOs, limites de entradas e logs sem credenciais. A ferramenta técnica de carga usa alvos enumerados e limites contra abuso/SSRF, com JWT HS256 de controle e atestado externo de preflight assinados por chaves distintas; não expõe comandos/socket Docker.
 
 ### Eventos autenticados e senhas — avaliação de mecanismos
 
@@ -98,7 +98,7 @@ Decisões: [ADR-001 backend/fronteiras](../adrs/ADR-001-arquitetura-backend.md),
 
 ## Verificação e rastreabilidade
 
-Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF10 ainda planejados; P03 implementada, com validação/revisão e estado de PR no roadmap; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
+Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF04 integradas, RF05 em andamento e RF06–RF10 planejadas; PRs, revisões e testes discriminados no roadmap. P03 implementada; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
 
 ## HLDs dos contextos
 
