@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. Fundação técnica e banco de suporte existem; não há livro, algoritmo, replay, snapshots ou processamento financeiro implementados. RNF02/RNF03 e metas RNF04 ainda exigem provas.
+Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. Desde a RF05a ([ADR-013](../adrs/ADR-013-matching-execucao.md)) existe o núcleo puro `livro/dominio/MotorMatching` (livro por ativo com `TreeMap` e filas FIFO, Limit/Market, DIA/IOC/FOK, preço passivo, faixa da Market e limite pela reserva, IDs `TICKER-sessão-n`), sem Kafka; adaptador, replay e stops seguem nas fatias RF05b–RF05c. RNF02/RNF03 e metas RNF04 ainda exigem provas.
 
 Desenho: um escritor por ativo, sequenciado pela partição Kafka; núcleo puro recebe comando e produz eventos. Não consulta JPA/banco por ordem nem decide poder de compra. Stops ficam no ME como simplificação já descrita no domínio; risco e reservas precedem admissão ao matching.
 

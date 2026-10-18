@@ -11,7 +11,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
 | ME00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
-| ME01 | RF05 | Implementar domínio puro: livro, preço-tempo, FIFO e execuções parciais. | Planejada |
+| ME01 | RF05 | Implementar domínio puro: livro, preço-tempo, FIFO e execuções parciais. | RF05a em revisão (ADR-013) |
 | ME02 | RF05 | Implementar Market/Limit/Stop/Stop Limit, IOC/FOK e OCO. | Planejada |
 | ME03 | RF05 | Integrar Kafka por ativo, snapshots, offsets e replay após falhas. | Planejada |
 | ME04 | RF06 | Publicar negócios e mudanças de ofertas mesmo sem execução. | Planejada |
