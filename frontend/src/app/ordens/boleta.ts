@@ -9,7 +9,19 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { catchError, EMPTY, finalize, map, Observable, Subject, switchMap } from 'rxjs';
+import {
+  catchError,
+  EMPTY,
+  finalize,
+  map,
+  Observable,
+  Subject,
+  Subscription,
+  switchMap,
+  take,
+  takeWhile,
+  timer,
+} from 'rxjs';
 import { formatarDecimal } from '../mercado/mercado.service';
 import {
   exigeGatilho,
@@ -66,6 +78,8 @@ export class Boleta implements OnInit {
    */
   private pendente: { chave: string; assinatura: string } | null = null;
   private readonly recarregar = new Subject<void>();
+  /** Acompanhamento do último envio; um novo envio ou troca de modo cancela o anterior. */
+  private acompanhamento: Subscription | null = null;
 
   readonly tickers = TICKERS;
   readonly tipos: readonly Tipo[] = ['LIMIT', 'MARKET', 'STOP', 'STOP_LIMIT'];
@@ -137,6 +151,7 @@ export class Boleta implements OnInit {
   }
 
   alternar(modo: 'SIMPLES' | 'OCO'): void {
+    this.acompanhamento?.unsubscribe();
     this.modo.set(modo);
     this.erro.set(null);
     this.registro.set(null);
@@ -144,6 +159,7 @@ export class Boleta implements OnInit {
 
   enviar(): void {
     if (this.enviando()) return;
+    this.acompanhamento?.unsubscribe();
     this.enviando.set(true);
     this.erro.set(null);
     this.registro.set(null);
@@ -168,6 +184,7 @@ export class Boleta implements OnInit {
           this.pendente = null;
           this.registro.set(ordens);
           this.atualizarLista();
+          this.acompanharRisco(ordens.map((o) => o.id));
         },
         error: (falha) => {
           const { texto, repetivel } = mensagemErro(falha);
@@ -179,6 +196,39 @@ export class Boleta implements OnInit {
 
   atualizarLista(): void {
     this.recarregar.next();
+  }
+
+  /** Estado do envio registrado; o par OCO muda junto (ADR-012). */
+  estadoRegistro(ordens: readonly Ordem[]): string {
+    const [primeira] = ordens;
+    const motivo = primeira.motivoRejeicao ? ` (${this.rotulo(primeira.motivoRejeicao)})` : '';
+    return this.rotulo(primeira.estado) + motivo;
+  }
+
+  /**
+   * O risco do MO responde de forma assíncrona: consulta a lista a cada 500 ms (até 10 s) enquanto as ordens do
+   * envio estiverem RECEBIDA. Sem resposta, a ordem continua Recebida — não há liberação por timeout.
+   */
+  private acompanharRisco(ids: readonly string[]): void {
+    this.acompanhamento = timer(500, 500)
+      .pipe(
+        take(20),
+        switchMap(() => this.ordens.listar().pipe(catchError(() => EMPTY))),
+        map((pagina) => {
+          this.lista.set(pagina.ordens);
+          return pagina.ordens.filter((o) => ids.includes(o.id));
+        }),
+        takeWhile(
+          (atuais) => atuais.length === 0 || atuais.some((o) => o.estado === 'RECEBIDA'),
+          true,
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((atuais) => {
+        if (atuais.length === ids.length && this.registro()?.every((o) => ids.includes(o.id))) {
+          this.registro.set(atuais);
+        }
+      });
   }
 
   private enviarSimples(chave: string): Observable<readonly Ordem[]> {

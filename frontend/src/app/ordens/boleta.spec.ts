@@ -50,6 +50,17 @@ describe('Boleta', () => {
     }).compileComponents();
   });
 
+  it('descreve o resultado do risco com o motivo da rejeição em pt-BR', async () => {
+    const boleta = TestBed.createComponent(Boleta).componentInstance;
+    expect(boleta.estadoRegistro([ORDEM])).toBe('Recebida');
+    expect(boleta.estadoRegistro([{ ...ORDEM, estado: 'RESERVADA' }])).toBe('Reservada');
+    expect(
+      boleta.estadoRegistro([
+        { ...ORDEM, estado: 'REJEITADA', motivoRejeicao: 'SALDO_INSUFICIENTE' },
+      ]),
+    ).toBe('Rejeitada (saldo insuficiente)');
+  });
+
   it('oferece só as validades da matriz e os preços exigidos pelo tipo', async () => {
     const fixture = TestBed.createComponent(Boleta);
     await fixture.whenStable();

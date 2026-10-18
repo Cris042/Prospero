@@ -16,7 +16,7 @@ Organização por funcionalidade sob `br.prospero.mo`: REST → Actor; Actor coo
 
 ## Interfaces e implantação atuais
 
-`GET /api/v1/sistema` retorna identidade técnica. Porta externa `8082` em loopback → `8080` no container; `/q/health/ready`, `/q/openapi`, `/q/swagger-ui/` e `/q/metrics` são técnicos. Configuração usa variáveis locais fora do Git. Banco/container exclusivo `postgres-middle-office`, banco `prospero_mo`, rede de dados própria. Não acessar tabelas de outro serviço.
+`GET /api/v1/sistema` retorna identidade técnica. Desde a RF04b: `GET /api/v1/risco/carteira` (JWT `risco:leitura`, conta do `sub`) e `PUT /api/v1/preparacoes-risco/contas/{conta}` (JWT `risco:preparacao`, só CONTA-002/003, desligado fora do Compose local), com Problem Details iguais aos do FO ([ADR-012](../adrs/ADR-012-risco-reservas-saga.md)). Porta externa `8082` em loopback → `8080` no container; `/q/health/ready`, `/q/openapi`, `/q/swagger-ui/` e `/q/metrics` são técnicos. Configuração usa variáveis locais fora do Git. Banco/container exclusivo `postgres-middle-office`, banco `prospero_mo`, rede de dados própria. Não acessar tabelas de outro serviço.
 
 `V1__identificar_schema.sql` identifica o schema; `V2__criar_risco_e_reservas.sql` (RF04a) cria parâmetros dos ativos, carteiras sintéticas semeadas, decisões, reservas, outbox e diagnóstico de mensagens inválidas. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Processo pode iniciar sem outro MS Java, mas depende de sua infraestrutura para ficar pronto; não confundir autonomia com conclusão de negócio sem participantes.
 
@@ -97,7 +97,7 @@ Dicionário migrado da proposta histórica. **Planejado e incompleto**, não sch
 
 ## Segurança, observabilidade e testes
 
-Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação e autorização por conta/papel são pendências, sem RBAC presumido. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.
+Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação: JWT local de audiência `prospero-middle-office` (RF04b); identidade real e RBAC continuam pendentes. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.
 
 Fundação: saúde de banco/Kafka, métricas técnicas, logs com correlação e exportação OTLP. Não afirmar trace financeiro completo, métricas de domínio ou capacidade comprovada. Testes atuais usam JUnit/REST Assured/ArchUnit; perfil de contrato desativa banco/Kafka, smoke Compose exercita dependências reais. Casos futuros via API/planilha conforme ADR-004 complementam invariantes internas e testes de concorrência/recuperação.
 

@@ -1,7 +1,7 @@
 # ADR-012 — Risco, reservas e SAGA FO ↔ MO (RF04)
 
 - Data: 2026-10-18.
-- Estado: **aceita**; RF04a implementa contrato, reserva e SAGA; RF04b completa preparação de carteiras, planilha, tela e testes de recuperação.
+- Estado: **aceita e implementada** — RF04a (contrato, reserva e SAGA, PR #21) e RF04b (carteira e preparação local no MO, `risco.xlsx`, tela, prova SQL e recuperação).
 - Origem: refinamento da [RF04](../roadmap.md#rf04--risco-reservas-e-saga) com cinco pareceres medium (arquitetura, QA, segurança, operação, viabilidade), todos **SEGUIR COM RESSALVAS**.
 - Decisor: usuário (carteiras iniciais e preparação local, sem short, preço de reserva sem limite, OCO e quantidade máxima); detalhes técnicos consolidados dos pareceres.
 
@@ -34,6 +34,16 @@ A RF02/RF03 registram a ordem como `RECEBIDA` sem reserva. O PRD exige poder de 
 | Fatos do MO | Parâmetros dos ativos (lote, tick, referência, túnel, quantidade máxima, versão) e contas replicados por migração própria do MO, sem FK nem banco compartilhado. A base do túnel (último/referência) vem do FO no comando, pois só o FO tem a projeção de mercado; o MO recalcula o valor da reserva e nunca aceita valor a reservar do FO. |
 | Segurança do canal | Kafka PLAINTEXT sem HMAC/mTLS é **risco aceito no ambiente local** (HLD-001); mitigação: tópico → origem permitida, transição só a partir de `RECEBIDA` da mesma conta, decisões recalculadas pelo MO. HMAC/mTLS exigem ADR próprio. |
 | Aritmética | `BigDecimal` com escala 2 e `NUMERIC(18,2)`; quantidade × preço máximo (10⁶ × 1,1·10⁶) cabe. |
+
+## RF04b — consulta, preparação e provas
+
+| Tema | Decisão |
+| --- | --- |
+| Autenticação no MO | JWT HS256 com a mesma chave local do FO e **audiência própria** `prospero-middle-office`: token do FO não vale no MO. Quem tem a chave (ou o `.env`) emite tokens para os dois — trade-off aceito localmente; fora dele, chave própria do MO ou par assimétrico. Escopos `risco:leitura` (com `sub` = conta) e `risco:preparacao` (sem conta). |
+| Carteira | `GET /api/v1/risco/carteira`: caixa e custódia (total, disponível, reservado) só da conta do token; conta inexistente é 403 `CONTA_DESCONHECIDA`. |
+| Preparação | `PUT /api/v1/preparacoes-risco/contas/{conta}` só para CONTA-002/003 (`CONTA_NAO_PREPARAVEL` para as demais), habilitada por `MO_PREPARACAO_HABILITADA` (padrão desligado; ligada só no Compose local). Bloqueia as linhas de controle de caixa e de todas as custódias da conta (ordem fixa) antes de apagar as reservas e redefinir saldo e custódia (ativos ausentes = 0); decisões permanecem para a deduplicação. Ordens dessas contas já `RESERVADA` ficam sem recurso correspondente — aceitável só em teste; a compensação futura (RF05/RF10) libera somente por linha de `reserva` existente, nunca pela decisão. Bloqueada no proxy do navegador (Nginx e `proxy.conf.mjs`), que também não repassa `Authorization` do cliente ao MO. |
+| Tela | A boleta acompanha o envio por polling (500 ms, até 10 s) e mostra `Reservada` ou `Rejeitada (motivo)`; sem resposta, continua `Recebida`. |
+| Provas | `risco.xlsx` (caixa, custódia, teto Market, OCO, quantidade máxima, isolamento), `verificar-risco` repetível (prepara CONTA-002 e confere a carteira), `verificar-concorrencia` (duas conexões PostgreSQL: ler-e-gravar concede 140 sobre 100; UPDATE condicional concede só 70, com a segunda sessão esperando o lock e reavaliando para `UPDATE 0`) e `verificar-recuperacao` (MO parado mantém `RECEBIDA` e decide uma vez; comando reentregue e mensagem inválida no tópico sem efeito). |
 
 ## Riscos residuais aceitos (ambiente local)
 

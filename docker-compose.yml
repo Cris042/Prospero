@@ -120,6 +120,10 @@ services:
       DB_URL: jdbc:postgresql://postgres-middle-office:5432/prospero_mo
       DB_USER: prospero_mo
       DB_PASSWORD: ${MO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      # RF04b: mesma chave local do FO, com audiência própria do MO.
+      MO_JWT_JWK: ${FO_JWT_JWK:?Execute python3 scripts/preparar-ambiente.py}
+      # Preparação de carteiras de teste (CONTA-002/003) existe somente neste ambiente local.
+      MO_PREPARACAO_HABILITADA: 'true'
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:

@@ -8,7 +8,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | --- | --- | --- |
 | Java Temurin | 26.0.2.1_1 | Dockerfiles; compilação e runtime |
 | Quarkus | 3.40.1 | BOM e plugin dos quatro POMs |
-| SmallRye JWT (Quarkus) | BOM 3.40.1 | `quarkus-smallrye-jwt` no FO (RF01); `quarkus-smallrye-jwt-build` só em teste |
+| SmallRye JWT (Quarkus) | BOM 3.40.1 | `quarkus-smallrye-jwt` no FO (RF01) e no MO (RF04b, audiência `prospero-middle-office`); `quarkus-smallrye-jwt-build` só em teste |
 | Maven / Wrapper | 3.9.16 / 3.3.4 | Wrapper independente, distribuição com SHA-256 |
 | Hibernate / Flyway | 7.4.9.Final / 12.0.0 | Dependências resolvidas pelo BOM; persistência e migrações |
 | SmallRye OpenAPI | 4.3.5 | Swagger e contrato HTTP |

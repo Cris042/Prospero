@@ -124,7 +124,7 @@
     <div class="sucesso" role="status">
       <strong
         >{{ ordens.length > 1 ? 'Ordens registradas' : 'Ordem registrada' }} — estado
-        Recebida.</strong
+        {{ estadoRegistro(ordens) }}.</strong
       >
       @for (o of ordens; track o.id) {
         <span

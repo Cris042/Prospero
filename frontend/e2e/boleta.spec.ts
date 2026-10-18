@@ -29,7 +29,9 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   await boleta.getByRole('button', { name: 'Registrar ordem' }).dblclick();
   expect((await resposta).status()).toBe(202);
   const status = page.getByRole('status');
-  await expect(status).toContainText('Ordem registrada — estado Recebida.');
+  await expect(status).toContainText(/Ordem registrada — estado (Recebida|Reservada)\./);
+  // RF04: o risco do MO reserva o recurso de forma assíncrona e a boleta acompanha o resultado.
+  await expect(status).toContainText('Ordem registrada — estado Reservada.', { timeout: 15000 });
   await expect(status).toContainText('Compra 25 BETA3');
   await expect(page.getByRole('region', { name: 'Minhas ordens' })).toContainText('19,75');
   expect(posts).toHaveLength(1);

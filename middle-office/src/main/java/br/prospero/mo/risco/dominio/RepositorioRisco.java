@@ -1,6 +1,7 @@
 package br.prospero.mo.risco.dominio;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,4 +21,12 @@ public interface RepositorioRisco {
 
     /** Grava a decisão e, se reservada, a reserva correspondente. */
     void registrar(Decisao decisao);
+
+    Optional<Carteira> carteira(String conta);
+
+    /**
+     * Preparação local (ADR-012, RF04b): redefine caixa e custódia da conta e apaga suas reservas; ativos ausentes do
+     * mapa ficam com zero. Decisões são preservadas para a deduplicação de reentregas.
+     */
+    void preparar(String conta, BigDecimal saldo, Map<String, Long> custodia);
 }
