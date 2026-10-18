@@ -63,6 +63,8 @@ for item in mercado:mercado ordens:ordens validacao:ordens; do
 done
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
 python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"
+# RF04: SAGA FO→MO com carteiras semeadas; volumes novos a cada execução da CI.
+python3 scripts/mercado.py verificar-risco --origem "$fo_origem"
 python3 scripts/mercado.py preparar-demo --origem "$fo_origem"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.

@@ -9,12 +9,13 @@ import java.util.UUID;
 /**
  * Intenção do investidor registrada pelo FO. Preços ausentes são null conforme o tipo;
  * grupoEnvio liga a ordem (ou o par OCO) à chave de idempotência que a criou;
- * baseTunel é null para Market, cuja proteção de preço é feita no matching (RF05).
+ * baseTunel é null para Market, cuja proteção de preço é feita no matching (RF05);
+ * motivoRejeicao existe somente em REJEITADA (RF04).
  */
 public record Ordem(UUID id, String conta, String ticker, LadoOrdem lado, TipoOrdem tipo, Validade validade,
                     long quantidade, BigDecimal precoLimite, BigDecimal precoGatilho, UUID grupoOco,
                     PapelOco papelOco, UUID grupoEnvio, EstadoOrdem estado, LocalDate dataSessao,
-                    Instant recebidaEm, BaseTunel baseTunel) {
+                    Instant recebidaEm, BaseTunel baseTunel, MotivoRejeicao motivoRejeicao) {
     public Ordem {
         Objects.requireNonNull(id);
         Objects.requireNonNull(conta);
@@ -29,5 +30,16 @@ public record Ordem(UUID id, String conta, String ticker, LadoOrdem lado, TipoOr
         if (quantidade <= 0) {
             throw new IllegalArgumentException("Quantidade deve ser positiva.");
         }
+        if ((estado == EstadoOrdem.REJEITADA) != (motivoRejeicao != null)) {
+            throw new IllegalArgumentException("Motivo existe somente na rejeição.");
+        }
+    }
+
+    /** Ordem recém-registrada, ainda sem resultado do risco. */
+    public Ordem(UUID id, String conta, String ticker, LadoOrdem lado, TipoOrdem tipo, Validade validade,
+                 long quantidade, BigDecimal precoLimite, BigDecimal precoGatilho, UUID grupoOco, PapelOco papelOco,
+                 UUID grupoEnvio, EstadoOrdem estado, LocalDate dataSessao, Instant recebidaEm, BaseTunel baseTunel) {
+        this(id, conta, ticker, lado, tipo, validade, quantidade, precoLimite, precoGatilho, grupoOco, papelOco,
+                grupoEnvio, estado, dataSessao, recebidaEm, baseTunel, null);
     }
 }

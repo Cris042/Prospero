@@ -30,8 +30,8 @@ function passo(sheet, c, id, servico, metodo, caminho, opcoes = {}) {
     Object.keys(headers).length ? JSON.stringify(headers) : '',
     opcoes.corpo ? JSON.stringify(opcoes.corpo) : '',
     opcoes.captura ? JSON.stringify(opcoes.captura) : '',
-    '',
-    '',
+    opcoes.intervaloMs ?? '',
+    opcoes.prazoMs ?? '',
   ]);
   resultados.addRow([
     c,
@@ -52,7 +52,7 @@ const limit = (preco, extra = {}) => ({
   ...extra,
 });
 
-// 1. Registro e consulta: RECEBIDA, sem execução.
+// 1. Registro (RECEBIDA) e consulta até o risco do MO reservar (RF04, ADR-012), sem execução.
 {
   const c = 'LimitRegistrado';
   passo(carga, c, 'Enviar', 'ordens-a', 'POST', '/api/v1/ordens', {
@@ -65,7 +65,15 @@ const limit = (preco, extra = {}) => ({
   });
   passo(passos, c, 'Consultar', 'ordens-a', 'GET', '/api/v1/ordens/${id}', {
     status: 200,
-    esperado: { '/id': '${id}', '/tipo': 'LIMIT', '/validade': 'DIA', '/estado': 'RECEBIDA' },
+    intervaloMs: 200,
+    prazoMs: 15000,
+    esperado: {
+      '/id': '${id}',
+      '/tipo': 'LIMIT',
+      '/validade': 'DIA',
+      '/estado': 'RESERVADA',
+      '/motivoRejeicao': null,
+    },
   });
 }
 

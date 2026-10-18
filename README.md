@@ -175,7 +175,7 @@ A publicação/entrega deve ser recuperável e a ordem deve permanecer com pend�
 <details>
 <summary>Reserva antes do matching e proteção de ordens Market</summary>
 
-Sem proteção atômica, duas ordens podem usar o mesmo recurso disponível. O MO deve reservar antes da admissão ao matching e ajustar consumo/liberação após resultados conhecidos. A fórmula por tipo ainda será definida na RF04: quantidade × preço limite é uma referência didática para Limit, mas não encerra regras de exposição, parciais e sinal. Market precisa de proteção de preço/risco explícita; usar último preço mais túnel como pior preço não é política aprovada nem uma garantia de execução. Stops e short também exigem tratamento próprio.
+Sem proteção atômica, duas ordens podem usar o mesmo recurso disponível. O MO deve reservar antes da admissão ao matching e ajustar consumo/liberação após resultados conhecidos. A RF04a ([ADR-012](docs/adrs/ADR-012-risco-reservas-saga.md)) define a reserva: Limit/Stop Limit de compra por quantidade × limite; Market e Stop de compra pelo teto do túnel (o ME não poderá executar acima dele na RF05); venda exige custódia (sem short); par OCO com uma reserva. A ordem fica `RECEBIDA` até o MO responder `RESERVADA` ou `REJEITADA` com motivo; sem resposta, não há liberação por timeout.
 
 </details>
 

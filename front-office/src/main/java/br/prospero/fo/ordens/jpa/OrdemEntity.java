@@ -48,6 +48,8 @@ public class OrdemEntity {
     public BigDecimal precoBaseTunel;
     @Column(name = "origem_base", length = 10)
     public String origemBase;
+    @Column(name = "motivo_rejeicao", length = 32)
+    public String motivoRejeicao;
     @Version
     public long versao;
 }

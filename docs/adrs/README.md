@@ -15,6 +15,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-009](ADR-009-projecao-mercado-fo.md) | Projeção de mercado no PostgreSQL do FO e JWT local da RF01 | Aceita e implementada |
 | [ADR-010](ADR-010-ordens-contas-idempotencia.md) | Ordens, contas sintéticas, idempotência e 202 da RF02 | Aceita e implementada (RF02a e RF02c) |
 | [ADR-011](ADR-011-validacao-preco-ordens.md) | Lote, tick e túnel de ±10% no FO (RF03) | Aceita e implementada |
+| [ADR-012](ADR-012-risco-reservas-saga.md) | Risco, reservas e SAGA FO ↔ MO por Kafka/outbox (RF04) | Aceita; RF04a implementada, RF04b planejada |
 
 ## Relação com a proposta original
 

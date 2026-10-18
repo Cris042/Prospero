@@ -1,11 +1,14 @@
 package br.prospero.fo.ordens;
 
 import br.prospero.fo.comum.dominio.Categoria;
+import br.prospero.fo.comum.dominio.MensagemSaida;
 import br.prospero.fo.comum.dominio.RegraNegocioException;
+import br.prospero.fo.ordens.dominio.EstadoOrdem;
 import br.prospero.fo.ordens.dominio.Ordem;
 import br.prospero.fo.ordens.dominio.ParametrosAtivo;
 import br.prospero.fo.ordens.dominio.RepositorioOrdens;
 import br.prospero.fo.ordens.dominio.ResultadoRegistro;
+import br.prospero.fo.ordens.dominio.ResultadoRisco;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
@@ -30,6 +33,7 @@ import java.util.UUID;
 public class RepositorioOrdensMemoria implements RepositorioOrdens {
     static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003");
     private final List<Ordem> ordens = new ArrayList<>();
+    private final List<MensagemSaida> outbox = new ArrayList<>();
     private final Map<String, Object[]> chaves = new HashMap<>();
     private final Map<String, Integer> porSessao = new HashMap<>();
     private int maximoSessao = 1000;
@@ -66,7 +70,8 @@ public class RepositorioOrdensMemoria implements RepositorioOrdens {
     }
 
     @Override
-    public synchronized ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> novas) {
+    public synchronized ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> novas,
+                                                    MensagemSaida comandoRisco) {
         String id = conta + "|" + chave;
         Object[] existente = chaves.get(id);
         if (existente != null && ((Instant) existente[2]).isAfter(agora.minus(Duration.ofHours(24)))) {
@@ -85,7 +90,27 @@ public class RepositorioOrdensMemoria implements RepositorioOrdens {
         porSessao.put(sessao, total);
         chaves.put(id, new Object[]{hash, novas.getFirst().grupoEnvio(), agora});
         ordens.addAll(novas);
+        outbox.add(comandoRisco);
         return new ResultadoRegistro.Novo(novas);
+    }
+
+    @Override
+    public synchronized int aplicarRisco(ResultadoRisco r) {
+        int alteradas = 0;
+        for (int i = 0; i < ordens.size(); i++) {
+            Ordem o = ordens.get(i);
+            if (o.conta().equals(r.conta()) && o.grupoEnvio().equals(r.grupoEnvio()) && o.estado() == EstadoOrdem.RECEBIDA) {
+                ordens.set(i, new Ordem(o.id(), o.conta(), o.ticker(), o.lado(), o.tipo(), o.validade(), o.quantidade(),
+                        o.precoLimite(), o.precoGatilho(), o.grupoOco(), o.papelOco(), o.grupoEnvio(), r.estado(),
+                        o.dataSessao(), o.recebidaEm(), o.baseTunel(), r.motivo()));
+                alteradas++;
+            }
+        }
+        return alteradas;
+    }
+
+    synchronized List<MensagemSaida> outbox() {
+        return List.copyOf(outbox);
     }
 
     @Override
@@ -120,6 +145,7 @@ public class RepositorioOrdensMemoria implements RepositorioOrdens {
 
     synchronized void limparTudo() {
         ordens.clear();
+        outbox.clear();
         chaves.clear();
         porSessao.clear();
         maximoSessao = 1000;

@@ -1,7 +1,9 @@
 package br.prospero.fo.ordens.actor;
 
 import br.prospero.fo.comum.dominio.Categoria;
+import br.prospero.fo.comum.dominio.MensagemSaida;
 import br.prospero.fo.comum.dominio.RegraNegocioException;
+import br.prospero.fo.comum.kafka.Rastreio;
 import br.prospero.fo.ordens.dominio.BaseTunel;
 import br.prospero.fo.ordens.dominio.EstadoOrdem;
 import br.prospero.fo.ordens.dominio.FonteUltimoPreco;
@@ -16,10 +18,12 @@ import br.prospero.fo.ordens.dto.OcoRequestDTO;
 import br.prospero.fo.ordens.dto.OrdemRequestDTO;
 import br.prospero.fo.ordens.helper.AssinaturaEnvio;
 import br.prospero.fo.ordens.helper.EntradaOrdem;
+import br.prospero.fo.ordens.helper.EnvelopeRisco;
 import br.prospero.fo.ordens.helper.PoliticaOrdem;
 import br.prospero.fo.ordens.helper.SessaoNegociacao;
 import br.prospero.fo.ordens.helper.ValidacaoPreco;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.opentelemetry.api.trace.Span;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -37,7 +41,8 @@ import java.util.UUID;
 
 /**
  * Registra ordens com idempotência por (conta, chave). Ordem das verificações (ADR-011): estrutura, matriz, lote,
- * tick e coerências; depois a chave; por fim o túnel, só para envios novos. RECEBIDA não implica reserva ou execução.
+ * tick e coerências; depois a chave; por fim o túnel, só para envios novos. RECEBIDA aguarda o risco do MO, pedido
+ * pela outbox na mesma transação (ADR-012).
  */
 // @Startup: percentual inválido impede a subida em vez de falhar no primeiro envio.
 @Startup
@@ -107,16 +112,19 @@ public class EnviarOrdemActor {
         if (repetido.isPresent()) {
             return repetido.get();
         }
-        // Market não tem preço na entrada: a proteção do túnel ocorre no matching (RF05).
-        BaseTunel base = pedido.tipo() == TipoOrdem.MARKET ? null : baseTunel(ativo, agora);
-        if (base != null) {
+        BaseTunel base = baseTunel(ativo, agora);
+        boolean market = pedido.tipo() == TipoOrdem.MARKET;
+        // Market não tem preço na entrada: a proteção do túnel ocorre no matching (RF05); a base só dimensiona a
+        // reserva no MO (ADR-012) e não é gravada na ordem.
+        if (!market) {
             ValidacaoPreco.tunel(limite, base, ativo.tick(), percentualTunel);
             ValidacaoPreco.tunel(gatilho, base, ativo.tick(), percentualTunel);
         }
         UUID id = UUID.randomUUID();
         Ordem ordem = new Ordem(id, conta, pedido.ticker(), pedido.lado(), pedido.tipo(), pedido.validade(), quantidade,
-                limite, gatilho, null, null, id, EstadoOrdem.RECEBIDA, SessaoNegociacao.data(agora), agora, base);
-        return registrar(conta, chave, hash, agora, List.of(ordem), pedido.tipo().name(), pedido.validade());
+                limite, gatilho, null, null, id, EstadoOrdem.RECEBIDA, SessaoNegociacao.data(agora), agora,
+                market ? null : base);
+        return registrar(conta, chave, hash, agora, List.of(ordem), base, pedido.tipo().name(), pedido.validade());
     }
 
     private Envio registrarOco(String conta, String chave, OcoRequestDTO pedido) {
@@ -158,7 +166,7 @@ public class EnviarOrdemActor {
         Ordem stopLoss = new Ordem(UUID.randomUUID(), conta, pedido.ticker(), pedido.lado(), tipoStop,
                 Validade.DIA, quantidade, limiteStop, gatilho, grupo, PapelOco.STOP_LOSS, grupo, EstadoOrdem.RECEBIDA,
                 sessao, agora, base);
-        return registrar(conta, chave, hash, agora, List.of(takeProfit, stopLoss), "OCO", Validade.DIA);
+        return registrar(conta, chave, hash, agora, List.of(takeProfit, stopLoss), base, "OCO", Validade.DIA);
     }
 
     private BaseTunel baseTunel(ParametrosAtivo ativo, Instant agora) {
@@ -174,9 +182,14 @@ public class EnviarOrdemActor {
         return envio;
     }
 
+    /** O comando de risco vai para a outbox na mesma transação das ordens (ADR-012). */
     private Envio registrar(String conta, String chave, String hash, Instant agora, List<Ordem> ordens,
-                            String tipo, Validade validade) {
-        Envio envio = envio(repositorio.registrar(conta, chave, hash, agora, ordens));
+                            BaseTunel base, String tipo, Validade validade) {
+        UUID evento = UUID.randomUUID();
+        String traceparent = Rastreio.traceparent(Span.current().getSpanContext());
+        MensagemSaida comando = new MensagemSaida(evento, EnvelopeRisco.TOPICO_COMANDOS, conta, "AVALIAR_RISCO",
+                EnvelopeRisco.comando(evento, ordens, base.preco(), agora, traceparent), traceparent, agora);
+        Envio envio = envio(repositorio.registrar(conta, chave, hash, agora, ordens, comando));
         metricas.counter("prospero.ordens.recebidas", "tipo", tipo, "validade", validade.name(),
                 "resultado", envio.repetido() ? "REPETIDA" : "NOVA").increment();
         if (!envio.repetido()) {

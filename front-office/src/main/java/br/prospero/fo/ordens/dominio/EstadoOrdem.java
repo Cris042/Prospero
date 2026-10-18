@@ -1,6 +1,9 @@
 package br.prospero.fo.ordens.dominio;
 
-/** Único estado produzido na RF02; estados de validação, reserva e execução entram nas RF03–RF05. */
+/**
+ * RECEBIDA aguarda o risco do MO; RESERVADA tem recurso reservado (não implica execução); REJEITADA tem motivo
+ * (ADR-012). Estados de execução entram na RF05.
+ */
 public enum EstadoOrdem {
-    RECEBIDA
+    RECEBIDA, RESERVADA, REJEITADA
 }

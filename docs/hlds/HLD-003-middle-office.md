@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de risco: validação RF03, reservas/limites RF04, consumo/liberação RF05/RF10 e efeitos de liquidação RF08. A fundação tem identidade e infraestrutura; regras financeiras, reserva e consumidores Kafka ainda não estão implementados.
+Contexto de risco: validação RF03, reservas/limites RF04, consumo/liberação RF05/RF10 e efeitos de liquidação RF08. Desde a RF04a ([ADR-012](../adrs/ADR-012-risco-reservas-saga.md)): consumidor de `risco.comandos.v1`, cálculo puro da reserva por tipo (`risco/helper/CalculoReserva`), linhas de controle `conta_risco`/`custodia_risco` com UPDATE condicional, `decisao_risco` por intenção, `reserva` e outbox de `risco.resultados.v1` na mesma transação. Consumo/liberação (RF05/RF10) e efeitos de liquidação continuam pendentes.
 
 A P05 entrega somente `decimal/dominio/ValorEscalado`, `RegraDeSinal` e `decimal/helper/ConversaoDecimalExata`: núcleo técnico exato, não um tipo financeiro com escala/tick aprovado. P05 foi integrada ao main pelo PR #3 em 2026-10-17. RF03 continua planejada.
 
@@ -18,7 +18,7 @@ Organização por funcionalidade sob `br.prospero.mo`: REST → Actor; Actor coo
 
 `GET /api/v1/sistema` retorna identidade técnica. Porta externa `8082` em loopback → `8080` no container; `/q/health/ready`, `/q/openapi`, `/q/swagger-ui/` e `/q/metrics` são técnicos. Configuração usa variáveis locais fora do Git. Banco/container exclusivo `postgres-middle-office`, banco `prospero_mo`, rede de dados própria. Não acessar tabelas de outro serviço.
 
-`src/main/resources/db/migration/V1__identificar_schema.sql` só identifica o schema. Flyway mantém histórico, sem tabelas financeiras. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Processo pode iniciar sem outro MS Java, mas depende de sua infraestrutura para ficar pronto; não confundir autonomia com conclusão de negócio sem participantes.
+`V1__identificar_schema.sql` identifica o schema; `V2__criar_risco_e_reservas.sql` (RF04a) cria parâmetros dos ativos, carteiras sintéticas semeadas, decisões, reservas, outbox e diagnóstico de mensagens inválidas. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Processo pode iniciar sem outro MS Java, mas depende de sua infraestrutura para ficar pronto; não confundir autonomia com conclusão de negócio sem participantes.
 
 ## Proveniência e limites de reuso
 

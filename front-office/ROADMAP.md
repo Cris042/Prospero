@@ -13,7 +13,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | FO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | FO01 | RF01 | Consultar ativos/cotações e expor o livro projetado. | Planejada |
 | FO02 | RF02 | Enviar ordens, DTOs, idempotência de submissão e consulta de estado. | Planejada |
-| FO03 | RF03, RF04 | Encaminhar validação/risco e persistir transições e compensações da SAGA. | RF03 em revisão (validação de lote/tick/túnel no FO, ADR-011); SAGA na RF04 |
+| FO03 | RF03, RF04 | Encaminhar validação/risco e persistir transições e compensações da SAGA. | RF03 concluída (PR #20); passo de risco da SAGA na RF04a (ADR-012) em revisão |
 | FO04 | RF05, RF06 | Consumir execuções e atualizar a visão das ordens/cotações via eventos. | Planejada |
 | FO05 | RF09 | Disponibilizar linha do tempo e atualizações WebSocket. | Planejada |
 | FO06 | RF10 | Receber cancelamento e acompanhar confirmação/liberação. | Planejada |

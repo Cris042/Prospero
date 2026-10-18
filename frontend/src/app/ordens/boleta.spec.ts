@@ -16,6 +16,7 @@ const ORDEM: Ordem = {
   grupoOco: null,
   papelOco: null,
   estado: 'RECEBIDA',
+  motivoRejeicao: null,
   dataSessao: '2026-10-17',
   recebidaEm: '2026-10-17T15:00:00Z',
 };

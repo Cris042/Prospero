@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""RF01/RF02: emite tokens curtos (mercado e ordens por conta) e configuração do runner XLSX; sem exibir a chave."""
+"""RF01–RF04: emite tokens curtos (mercado e ordens por conta), configuração do runner XLSX e verificações contra o
+ambiente real; sem exibir a chave."""
 import argparse
 import concurrent.futures
 import datetime
@@ -106,6 +107,69 @@ def verificar_ordens(origem):
     print("Ordens: concorrência idempotente verificada (20 iguais, 10 divergentes, 10 OCO).")
 
 
+def verificar_risco(origem):
+    """SAGA FO→MO real (ADR-012), com carteiras semeadas (volumes novos, como na CI): compras concorrentes que somadas
+    excedem o saldo → uma RESERVADA e outra SALDO_INSUFICIENTE; venda sem custódia; quantidade máxima; Market e OCO."""
+    tok = token("ordens", 120, "CONTA-002")
+
+    def chamar(caminho, corpo=None):
+        cabecalhos = {"Authorization": "Bearer " + tok}
+        if corpo is not None:
+            cabecalhos.update({"Content-Type": "application/json", "X-Idempotency-Key": "risco-" + uuid.uuid4().hex[:16]})
+        pedido = urllib.request.Request(origem + caminho, method="POST" if corpo is not None else "GET",
+                                        data=None if corpo is None else json.dumps(corpo).encode(), headers=cabecalhos)
+        with urllib.request.urlopen(pedido, timeout=10) as resposta:
+            if resposta.status not in (200, 202):
+                raise SystemExit(f"HTTP {resposta.status} em {caminho}")
+            return json.load(resposta)
+
+    def decidido(caminho, prazo=20.0):
+        limite = time.monotonic() + prazo
+        while time.monotonic() < limite:
+            corpo = chamar(caminho)
+            ordens = corpo.get("ordens", [corpo])
+            if all(o["estado"] != "RECEBIDA" for o in ordens):
+                return ordens
+            time.sleep(0.2)
+        raise SystemExit(f"Risco sem resposta em {prazo:.0f} s para {caminho} (MO, Kafka ou tópicos indisponíveis?).")
+
+    def limit(ticker, lado, quantidade, preco):
+        return {"ticker": ticker, "lado": lado, "tipo": "LIMIT", "validade": "DIA", "quantidade": quantidade,
+                "precoLimite": preco}
+
+    falhas = []
+    # 2 × 60.000 × 10,00 = 1.200.000,00 sobre 1.000.000,00 semeados: a linha de controle admite só uma.
+    with concurrent.futures.ThreadPoolExecutor(2) as executor:
+        ids = list(executor.map(lambda _: chamar("/api/v1/ordens", limit("ALFA3", "COMPRA", 60000, "10.00"))["id"],
+                                range(2)))
+    estados = sorted((o["estado"], o["motivoRejeicao"]) for i in ids for o in decidido(f"/api/v1/ordens/{i}"))
+    if estados != [("REJEITADA", "SALDO_INSUFICIENTE"), ("RESERVADA", None)]:
+        falhas.append(f"compras concorrentes acima do saldo: esperado uma reserva e uma rejeição, obtido {estados}")
+    casos = [
+        ("venda acima da custódia", "/api/v1/ordens", limit("GAMA3", "VENDA", 1001, "30.00"),
+         [("REJEITADA", "CUSTODIA_INSUFICIENTE")]),
+        ("quantidade máxima por ordem", "/api/v1/ordens", limit("BETA3", "COMPRA", 100001, "20.00"),
+         [("REJEITADA", "QUANTIDADE_MAXIMA_EXCEDIDA")]),
+        ("compra Market pelo teto do túnel", "/api/v1/ordens",
+         {"ticker": "BETA3", "lado": "COMPRA", "tipo": "MARKET", "validade": "IOC", "quantidade": 10},
+         [("RESERVADA", None)]),
+        ("OCO com reserva única", "/api/v1/ordens-oco",
+         {"ticker": "DELTA3", "lado": "VENDA", "quantidade": 5, "validade": "DIA",
+          "takeProfit": {"precoLimite": "42.00"}, "stopLoss": {"tipo": "STOP", "precoGatilho": "38.00"}},
+         [("RESERVADA", None), ("RESERVADA", None)]),
+    ]
+    for nome, caminho, corpo, esperado in casos:
+        criado = chamar(caminho, corpo)
+        alvo = f"/api/v1/ordens-oco/{criado['grupoOco']}" if "grupoOco" in criado and caminho.endswith("oco") \
+            else f"/api/v1/ordens/{criado['id']}"
+        obtido = [(o["estado"], o["motivoRejeicao"]) for o in decidido(alvo)]
+        if obtido != esperado:
+            falhas.append(f"{nome}: esperado {esperado}, obtido {obtido}")
+    if falhas:
+        raise SystemExit("Falha na verificação de risco: " + "; ".join(falhas))
+    print("Risco: reserva concorrente, custódia, quantidade máxima, Market e OCO verificados pela SAGA FO→MO.")
+
+
 def escrever_config(destino, conteudo):
     # 0644 para o UID do container ler via bind individual: o destino deve estar em diretório privado (0700).
     fd = os.open(destino, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
@@ -128,15 +192,18 @@ def main():
                    help="Menor privilégio: cada workbook recebe só os tokens de que precisa.")
     v = sub.add_parser("verificar-ordens", help="Verifica idempotência concorrente no PostgreSQL real (CONTA-003).")
     v.add_argument("--origem", default="http://127.0.0.1:8081")
+    r = sub.add_parser("verificar-risco", help="Verifica reservas pela SAGA FO→MO (CONTA-002, carteira semeada).")
+    r.add_argument("--origem", default="http://127.0.0.1:8081")
     d = sub.add_parser("preparar-demo", help="Prepara o namespace principal com dados sintéticos.")
     d.add_argument("--origem", default="http://127.0.0.1:8081")
     args = parser.parse_args()
-    if args.comando in {"preparar-demo", "verificar-ordens"}:
+    if args.comando in {"preparar-demo", "verificar-ordens", "verificar-risco"}:
         partes = urlsplit(args.origem)
         if (partes.scheme != "http" or partes.hostname not in {"127.0.0.1", "localhost"} or partes.username
                 or partes.password or partes.path not in {"", "/"} or partes.query or partes.fragment):
             raise SystemExit("Origem deve ser http local (loopback), sem credenciais nem caminho.")
-        (preparar_demo if args.comando == "preparar-demo" else verificar_ordens)(args.origem)
+        {"preparar-demo": preparar_demo, "verificar-ordens": verificar_ordens,
+         "verificar-risco": verificar_risco}[args.comando](args.origem)
         return
     if args.comando == "token":
         print(token(args.escopo, args.validade, args.conta))
