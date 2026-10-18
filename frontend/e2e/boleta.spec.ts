@@ -50,6 +50,9 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
   await boleta.getByLabel('Preço limite (R$)').fill('1e3');
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
   await expect(page.getByRole('alert')).toContainText('Preço inválido');
+  await boleta.getByLabel('Preço limite (R$)').fill('12,00');
+  await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  await expect(page.getByRole('alert')).toContainText('Faixa aceita: 9,00 a 11,00.');
 
   await page.getByRole('button', { name: 'OCO (Take Profit + Stop Loss)' }).click();
   const oco = page.getByRole('form', { name: 'Ordem OCO' });
@@ -82,7 +85,7 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
 
   await boleta.getByLabel('Tipo').selectOption('STOP_LIMIT');
   await expect(boleta.getByLabel('Validade').locator('option')).toHaveText(['Dia']);
-  await boleta.getByLabel('Preço limite (R$)').fill('9,45');
+  await boleta.getByLabel('Preço limite (R$)').fill('9,55');
   await boleta.getByLabel('Preço de disparo (R$)').fill('9,50');
   let falhou = false;
   await page.route('**/servicos/front-office/api/v1/ordens', (rota) => {

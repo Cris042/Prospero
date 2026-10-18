@@ -3,12 +3,14 @@ package br.prospero.fo.ordens;
 import br.prospero.fo.comum.dominio.Categoria;
 import br.prospero.fo.comum.dominio.RegraNegocioException;
 import br.prospero.fo.ordens.dominio.Ordem;
+import br.prospero.fo.ordens.dominio.ParametrosAtivo;
 import br.prospero.fo.ordens.dominio.RepositorioOrdens;
 import br.prospero.fo.ordens.dominio.ResultadoRegistro;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -37,9 +39,30 @@ public class RepositorioOrdensMemoria implements RepositorioOrdens {
         return CONTAS.contains(conta);
     }
 
+    static final Map<String, ParametrosAtivo> ATIVOS = Map.of(
+            "ALFA3", new ParametrosAtivo("ALFA3", new BigDecimal("0.01"), 1, new BigDecimal("10.00")),
+            "BETA3", new ParametrosAtivo("BETA3", new BigDecimal("0.01"), 1, new BigDecimal("20.00")),
+            "GAMA3", new ParametrosAtivo("GAMA3", new BigDecimal("0.01"), 1, new BigDecimal("30.00")),
+            "DELTA3", new ParametrosAtivo("DELTA3", new BigDecimal("0.01"), 1, new BigDecimal("40.00")),
+            "OMEGA3", new ParametrosAtivo("OMEGA3", new BigDecimal("0.05"), 100, new BigDecimal("50.00")));
+
     @Override
-    public boolean ativoExiste(String ticker) {
-        return Set.of("ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3").contains(ticker);
+    public Optional<ParametrosAtivo> parametros(String ticker) {
+        return Optional.ofNullable(ATIVOS.get(ticker));
+    }
+
+    @Override
+    public synchronized Optional<ResultadoRegistro> repeticao(String conta, String chave, String hash, Instant agora) {
+        Object[] existente = chaves.get(conta + "|" + chave);
+        if (existente == null || !((Instant) existente[2]).isAfter(agora.minus(Duration.ofHours(24)))) {
+            return Optional.empty();
+        }
+        if (!existente[0].equals(hash)) {
+            return Optional.of(new ResultadoRegistro.Conflito());
+        }
+        UUID referencia = (UUID) existente[1];
+        return Optional.of(new ResultadoRegistro.Repetido(ordens.stream()
+                .filter(o -> o.conta().equals(conta) && o.grupoEnvio().equals(referencia)).toList()));
     }
 
     @Override
@@ -88,7 +111,7 @@ public class RepositorioOrdensMemoria implements RepositorioOrdens {
         return new Ordem(cursor.id(), "x", "x", br.prospero.fo.ordens.dominio.LadoOrdem.COMPRA,
                 br.prospero.fo.ordens.dominio.TipoOrdem.MARKET, br.prospero.fo.ordens.dominio.Validade.IOC, 1, null, null,
                 null, null, cursor.id(), br.prospero.fo.ordens.dominio.EstadoOrdem.RECEBIDA, LocalDate.EPOCH,
-                cursor.recebidaEm());
+                cursor.recebidaEm(), null);
     }
 
     synchronized void maximoSessao(int maximo) {

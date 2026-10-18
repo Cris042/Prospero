@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Hoje implementa identidade técnica, consulta de mercado (RF01) e registro/consulta de ordens com idempotência (RF02). SAGA, outbox, consulta de trajetória e WebSocket ainda não existem.
+Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Hoje implementa identidade técnica, consulta de mercado (RF01), registro/consulta de ordens com idempotência (RF02) e validação de lote, tick e túnel (RF03, ADR-011). SAGA, outbox, consulta de trajetória e WebSocket ainda não existem.
 
 Futuro: receber/consultar ordens, persistir estados, orquestrar validação/reserva/execução e expor projeções. Risco pertence ao MO; livro ao ME; contabilidade ao BO. Angular apresenta estados sem coordenar SAGA.
 
@@ -30,13 +30,13 @@ RF01 implementada conforme [ADR-009](../adrs/ADR-009-projecao-mercado-fo.md): pr
 
 Persistir SAGA, timeout e próximos passos; definir janela de publicação, reentrega e reinício sem duplicar submissão. Antes de compensar, conhecer resultado efetivo: negócio executado exige recuperação para frente, sem desfazê-lo. Definir concorrência de cancelamento/execução/timeout e idempotência dos comandos.
 
-Pendentes: transições após `RECEBIDA` (RF03–RF05); expiração efetiva da validade Dia (sessão já definida no ADR-010); ativação de OCO e dimensionamento após parciais; correlação ordem/outbox ausente na tabela histórica; referência antes do primeiro negócio e cotação defasada; bootstrap de projeção por eventos, sem acessar bancos alheios. Contas sintéticas e escopos definidos no ADR-010; identidade real permanece futura.
+Pendentes: transições após `RECEBIDA` (RF03–RF05); expiração efetiva da validade Dia (sessão já definida no ADR-010); ativação de OCO e dimensionamento após parciais; correlação ordem/outbox ausente na tabela histórica; bootstrap de projeção por eventos, sem acessar bancos alheios. Contas sintéticas e escopos definidos no ADR-010; identidade real permanece futura.
 
 Aceite futuro: duplicação, reentrega, indisponibilidade e consulta de estados consistentes, WebSocket/reconexão e planilha com polling limitado. [Roadmap FO](../../front-office/ROADMAP.md); RNFs especialmente RNF05–RNF08. Não há meta própria nova de latência.
 
 ## Modelo de dados de referência
 
-Dicionário migrado da proposta histórica. **Superado nas tabelas já implementadas**: `ativo` (V2, ADR-009) e `conta`, `ordem`, `idempotencia_envio`, `limite_ordens` (V3, ADR-010) usam `NUMERIC(12,2)` para preços; as migrações Flyway são a fonte. O restante é planejado e incompleto, não schema aprovado. Tipos bigint não definem escala financeira; ausência de marcação não decide nulabilidade/índice/constraint. Referências a IDs externos não criam FK entre bancos. `ativo` representa referência local a distribuir por contrato, sem tabela compartilhada. Refinar antes de migrações.
+Dicionário migrado da proposta histórica. **Superado nas tabelas já implementadas**: `ativo` (V2, ADR-009) e `conta`, `ordem`, `idempotencia_envio`, `limite_ordens` (V3, ADR-010) e a base do túnel `preco_base_tunel`/`origem_base` com OMEGA3 em lote 100/tick 0,05 (V4, ADR-011) usam `NUMERIC(12,2)` para preços; as migrações Flyway são a fonte. O restante é planejado e incompleto, não schema aprovado. Tipos bigint não definem escala financeira; ausência de marcação não decide nulabilidade/índice/constraint. Referências a IDs externos não criam FK entre bancos. `ativo` representa referência local a distribuir por contrato, sem tabela compartilhada. Refinar antes de migrações.
 
 ### `ativo` — referência preliminar
 | Coluna | Tipo | Chave |

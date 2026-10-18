@@ -54,10 +54,12 @@ python3 scripts/verificar-ambiente.py --projeto "$project"
 "${compose[@]}" run --rm --no-deps -T runner-planilhas
 # RF01/RF02: workbooks com tokens curtos (preparação e contas de teste) em arquivo temporário fora do Git e da imagem.
 runner_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-runner.XXXXXX")"
-for perfil in mercado ordens; do
-  python3 scripts/mercado.py config-runner "$runner_cfg/$perfil.json" --perfil "$perfil"
-  "${compose[@]}" run --rm --no-deps -T -v "$runner_cfg/$perfil.json:/config/runner.json:ro" \
-    runner-planilhas "runner/exemplos/$perfil.xlsx" --config /config/runner.json
+# workbook:perfil — cada planilha recebe só os tokens do seu perfil.
+for item in mercado:mercado ordens:ordens validacao:ordens; do
+  workbook="${item%%:*}" perfil="${item##*:}"
+  python3 scripts/mercado.py config-runner "$runner_cfg/$workbook.json" --perfil "$perfil"
+  "${compose[@]}" run --rm --no-deps -T -v "$runner_cfg/$workbook.json:/config/runner.json:ro" \
+    runner-planilhas "runner/exemplos/$workbook.xlsx" --config /config/runner.json
 done
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
 python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"

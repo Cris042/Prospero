@@ -16,7 +16,8 @@ import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 public class MapeadoresProblema {
     @ServerExceptionMapper
     public Response regra(RegraNegocioException erro, ContainerRequestContext pedido) {
-        return Problemas.resposta(pedido, Problemas.status(erro.categoria()), erro.codigo(), erro.getMessage());
+        return Problemas.resposta(pedido, Problemas.status(erro.categoria()), erro.codigo(), erro.getMessage(),
+                erro.detalhes());
     }
 
     @ServerExceptionMapper

@@ -28,7 +28,7 @@ public class RepositorioMercadoMemoria implements RepositorioMercado {
             new Ativo("BETA3", "Beta Indústria", new BigDecimal("20.00"), new BigDecimal("0.01"), 1),
             new Ativo("GAMA3", "Gama Energia", new BigDecimal("30.00"), new BigDecimal("0.01"), 1),
             new Ativo("DELTA3", "Delta Logística", new BigDecimal("40.00"), new BigDecimal("0.01"), 1),
-            new Ativo("OMEGA3", "Ômega Varejo", new BigDecimal("50.00"), new BigDecimal("0.01"), 1));
+            new Ativo("OMEGA3", "Ômega Varejo", new BigDecimal("50.00"), new BigDecimal("0.05"), 100));
     private final Map<UUID, Map<String, SnapshotMercado>> dados = new ConcurrentHashMap<>();
 
     @Override

@@ -14,6 +14,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-008](ADR-008-politicas-risco.md) | Parâmetros versionados versus DSL de risco no MO | Proposta; sem implementação |
 | [ADR-009](ADR-009-projecao-mercado-fo.md) | Projeção de mercado no PostgreSQL do FO e JWT local da RF01 | Aceita e implementada |
 | [ADR-010](ADR-010-ordens-contas-idempotencia.md) | Ordens, contas sintéticas, idempotência e 202 da RF02 | Aceita e implementada (RF02a e RF02c) |
+| [ADR-011](ADR-011-validacao-preco-ordens.md) | Lote, tick e túnel de ±10% no FO (RF03) | Aceita e implementada |
 
 ## Relação com a proposta original
 

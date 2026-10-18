@@ -5,6 +5,7 @@ import br.prospero.fo.comum.dto.ProblemaDTO;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Response;
 
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -18,6 +19,11 @@ public final class Problemas {
     }
 
     public static Response resposta(ContainerRequestContext pedido, int status, String codigo, String detalhe) {
+        return resposta(pedido, status, codigo, detalhe, Map.of());
+    }
+
+    public static Response resposta(ContainerRequestContext pedido, int status, String codigo, String detalhe,
+                                    Map<String, String> detalhes) {
         // instance é o caminho já validado pelo roteador; correlação só se for um request id seguro.
         String correlacao = pedido.getHeaderString("X-Request-ID");
         if (correlacao == null || !CORRELACAO.matcher(correlacao).matches()) {
@@ -26,7 +32,8 @@ public final class Problemas {
         return Response.status(status).type(PROBLEM_JSON).header("Cache-Control", "no-store")
                 .header("X-Request-ID", correlacao)
                 .entity(new ProblemaDTO("about:blank", titulo(status), status, codigo, detalhe,
-                        instancia(pedido.getUriInfo().getPath()), correlacao)).build();
+                        instancia(pedido.getUriInfo().getPath()), correlacao, detalhes.isEmpty() ? null : detalhes))
+                .build();
     }
 
     public static int status(Categoria categoria) {

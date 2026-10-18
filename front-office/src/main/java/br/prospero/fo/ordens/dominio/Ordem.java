@@ -8,12 +8,13 @@ import java.util.UUID;
 
 /**
  * Intenção do investidor registrada pelo FO. Preços ausentes são null conforme o tipo;
- * grupoEnvio liga a ordem (ou o par OCO) à chave de idempotência que a criou.
+ * grupoEnvio liga a ordem (ou o par OCO) à chave de idempotência que a criou;
+ * baseTunel é null para Market, cuja proteção de preço é feita no matching (RF05).
  */
 public record Ordem(UUID id, String conta, String ticker, LadoOrdem lado, TipoOrdem tipo, Validade validade,
                     long quantidade, BigDecimal precoLimite, BigDecimal precoGatilho, UUID grupoOco,
                     PapelOco papelOco, UUID grupoEnvio, EstadoOrdem estado, LocalDate dataSessao,
-                    Instant recebidaEm) {
+                    Instant recebidaEm, BaseTunel baseTunel) {
     public Ordem {
         Objects.requireNonNull(id);
         Objects.requireNonNull(conta);

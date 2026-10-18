@@ -1,6 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, timeout } from 'rxjs';
+import { formatarDecimal } from '../mercado/mercado.service';
 
 export type Lado = 'COMPRA' | 'VENDA';
 export type Tipo = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT';
@@ -72,6 +73,11 @@ const MENSAGENS: Record<string, string> = {
   ATIVO_DESCONHECIDO: 'Ativo não cadastrado.',
   OCO_PRECOS_INCOERENTES: 'No OCO de venda o alvo deve ficar acima do stop; na compra, abaixo.',
   OCO_TIPO_INVALIDO: 'O Stop Loss do OCO deve ser Stop ou Stop Limit.',
+  QUANTIDADE_FORA_DO_LOTE: 'Quantidade deve ser múltipla do lote do ativo.',
+  PRECO_FORA_DO_TICK: 'Preço deve ser múltiplo do tick do ativo.',
+  STOP_LIMIT_INCOERENTE:
+    'No Stop Limit de venda o limite não pode passar do disparo; na compra, não pode ficar abaixo.',
+  PRECO_FORA_DO_TUNEL: 'Preço fora do túnel permitido para o ativo.',
   IDEMPOTENCIA_CONFLITO: 'Este envio já foi usado com outros dados. Revise e envie de novo.',
   LIMITE_ORDENS: 'Limite de 1.000 ordens por sessão atingido.',
   JSON_INVALIDO: 'Dados da ordem em formato inválido.',
@@ -81,6 +87,17 @@ const MENSAGENS: Record<string, string> = {
 /** Aceita vírgula decimal (pt-BR) convertendo para o decimal textual da API. */
 export function normalizarPreco(texto: string): string {
   return texto.trim().replace(',', '.');
+}
+
+/** Detalhes públicos do Problem Details (faixa do túnel, lote, tick) formatados em pt-BR. */
+function complemento(detalhes: Record<string, string> | undefined): string {
+  if (!detalhes) return '';
+  if (detalhes['minimo'] && detalhes['maximo']) {
+    return ` Faixa aceita: ${formatarDecimal(detalhes['minimo'])} a ${formatarDecimal(detalhes['maximo'])}.`;
+  }
+  if (detalhes['lote']) return ` Lote: ${detalhes['lote']}.`;
+  if (detalhes['tick']) return ` Tick: ${formatarDecimal(detalhes['tick'])}.`;
+  return '';
 }
 
 /** Traduz Problem Details em mensagem; distingue erro de rede (repetível com a mesma chave). */
@@ -99,11 +116,10 @@ export function mensagemErro(erro: unknown): { texto: string; repetivel: boolean
     };
   }
   if (erro instanceof HttpErrorResponse && erro.status > 0 && erro.status < 500) {
-    const codigo = (erro.error as { codigo?: string } | null)?.codigo;
-    return {
-      texto: (codigo && MENSAGENS[codigo]) ?? 'Não foi possível registrar a ordem.',
-      repetivel: false,
-    };
+    const problema = erro.error as { codigo?: string; detalhes?: Record<string, string> } | null;
+    const base =
+      (problema?.codigo && MENSAGENS[problema.codigo]) ?? 'Não foi possível registrar a ordem.';
+    return { texto: base + complemento(problema?.detalhes), repetivel: false };
   }
   return {
     texto: 'Falha de comunicação. Tente novamente: o reenvio não duplica a ordem.',
