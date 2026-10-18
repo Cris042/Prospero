@@ -32,9 +32,13 @@ class OrdensResourceTest {
     @Inject
     RepositorioOrdensMemoria repositorio;
 
+    @Inject
+    FonteUltimoPrecoControlada ultimos;
+
     @BeforeEach
     void limpar() {
         repositorio.limparTudo();
+        ultimos.limpar();
     }
 
     private static String token(String conta, String... grupos) {
@@ -223,5 +227,75 @@ class OrdensResourceTest {
         given().auth().oauth2(conta("CONTA-999")).when().get("/api/v1/ordens/" + UUID.randomUUID()).then().statusCode(403);
         given().auth().oauth2(conta("CONTA-002")).header("X-Idempotency-Key", "auth-00005").contentType(ContentType.TEXT)
                 .body("x").when().post("/api/v1/ordens").then().statusCode(415);
+    }
+
+    private static Map<String, Object> ordem(String ticker, String lado, String tipo, String validade, long quantidade,
+                                             String limite, String gatilho) {
+        Map<String, Object> corpo = new HashMap<>(Map.of("ticker", ticker, "lado", lado, "tipo", tipo,
+                "validade", validade, "quantidade", quantidade));
+        if (limite != null) {
+            corpo.put("precoLimite", limite);
+        }
+        if (gatilho != null) {
+            corpo.put("precoGatilho", gatilho);
+        }
+        return corpo;
+    }
+
+    @Test
+    void tunelNasFronteirasComDetalhes() {
+        String t = conta("CONTA-002");
+        enviar(t, "tunel-0001", limit("9.00")).then().statusCode(202)
+                .body("precoBaseTunel", equalTo("10.00")).body("origemBase", equalTo("REFERENCIA"));
+        enviar(t, "tunel-0002", limit("11.00")).then().statusCode(202);
+        enviar(t, "tunel-0003", limit("8.99")).then().statusCode(422).body("codigo", equalTo("PRECO_FORA_DO_TUNEL"))
+                .body("detalhes.minimo", equalTo("9.00")).body("detalhes.maximo", equalTo("11.00"))
+                .body("detalhes.base", equalTo("10.00")).body("detalhes.origemBase", equalTo("REFERENCIA"));
+        enviar(t, "tunel-0004", limit("11.01")).then().statusCode(422).body("codigo", equalTo("PRECO_FORA_DO_TUNEL"));
+        enviar(t, "tunel-0005", ordem("ALFA3", "VENDA", "STOP", "DIA", 10, null, "8.99")).then().statusCode(422)
+                .body("codigo", equalTo("PRECO_FORA_DO_TUNEL"));
+        enviar(t, "tunel-0006", ordem("ALFA3", "VENDA", "STOP_LIMIT", "DIA", 10, "8.99", "9.00")).then().statusCode(422)
+                .body("codigo", equalTo("PRECO_FORA_DO_TUNEL"));
+        enviar(t, "tunel-0007", ordem("ALFA3", "COMPRA", "MARKET", "IOC", 10, null, null)).then().statusCode(202)
+                .body("precoBaseTunel", nullValue()).body("origemBase", nullValue());
+    }
+
+    @Test
+    void loteTickEStopLimitNoCatalogo() {
+        String t = conta("CONTA-002");
+        enviar(t, "omega-0001", ordem("OMEGA3", "COMPRA", "LIMIT", "DIA", 150, "50.05", null)).then().statusCode(422)
+                .body("codigo", equalTo("QUANTIDADE_FORA_DO_LOTE")).body("detalhes.lote", equalTo("100"));
+        enviar(t, "omega-0002", ordem("OMEGA3", "COMPRA", "LIMIT", "DIA", 100, "50.03", null)).then().statusCode(422)
+                .body("codigo", equalTo("PRECO_FORA_DO_TICK")).body("detalhes.tick", equalTo("0.05"));
+        enviar(t, "omega-0003", ordem("OMEGA3", "COMPRA", "LIMIT", "DIA", 200, "50.05", null)).then().statusCode(202);
+        enviar(t, "omega-0004", ordem("ALFA3", "VENDA", "STOP_LIMIT", "DIA", 10, "9.60", "9.50")).then().statusCode(422)
+                .body("codigo", equalTo("STOP_LIMIT_INCOERENTE"));
+        enviar(t, "omega-0005", ordem("ALFA3", "COMPRA", "STOP_LIMIT", "DIA", 10, "9.55", "9.50")).then().statusCode(202);
+    }
+
+    @Test
+    void ultimoDaSessaoMudaABaseERepeticaoDevolveOriginal() {
+        String t = conta("CONTA-002");
+        ultimos.definir("ALFA3", "10.50");
+        enviar(t, "base-00001", limit("11.55")).then().statusCode(202)
+                .body("precoBaseTunel", equalTo("10.50")).body("origemBase", equalTo("ULTIMO"));
+        ultimos.definir("ALFA3", "9.00");
+        // Mesmo pedido aceito antes continua 202 repetido, mesmo fora do túnel da nova base.
+        enviar(t, "base-00001", limit("11.55")).then().statusCode(202).header("X-Idempotencia-Repetida", "true")
+                .body("precoBaseTunel", equalTo("10.50"));
+        enviar(t, "base-00002", limit("11.55")).then().statusCode(422).body("detalhes.maximo", equalTo("9.90"))
+                .body("detalhes.origemBase", equalTo("ULTIMO"));
+    }
+
+    @Test
+    void recusaNaoConsomeChaveNemGravaOco() {
+        String t = conta("CONTA-002");
+        enviar(t, "recusa-001", limit("12.00")).then().statusCode(422);
+        enviar(t, "recusa-001", limit("10.50")).then().statusCode(202).header("X-Idempotencia-Repetida", "false");
+        Map<String, Object> oco = Map.of("ticker", "ALFA3", "lado", "VENDA", "quantidade", 10, "validade", "DIA",
+                "takeProfit", Map.of("precoLimite", "11.50"), "stopLoss", Map.of("tipo", "STOP", "precoGatilho", "9.50"));
+        given().auth().oauth2(t).header("X-Idempotency-Key", "recusa-oco1").contentType(ContentType.JSON).body(oco)
+                .when().post("/api/v1/ordens-oco").then().statusCode(422).body("codigo", equalTo("PRECO_FORA_DO_TUNEL"));
+        given().auth().oauth2(t).when().get("/api/v1/ordens").then().body("ordens", hasSize(1));
     }
 }

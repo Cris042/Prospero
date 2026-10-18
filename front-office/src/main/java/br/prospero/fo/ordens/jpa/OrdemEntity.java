@@ -44,6 +44,10 @@ public class OrdemEntity {
     public LocalDate dataSessao;
     @Column(name = "recebida_em", nullable = false)
     public Instant recebidaEm;
+    @Column(name = "preco_base_tunel", precision = 12, scale = 2)
+    public BigDecimal precoBaseTunel;
+    @Column(name = "origem_base", length = 10)
+    public String origemBase;
     @Version
     public long versao;
 }

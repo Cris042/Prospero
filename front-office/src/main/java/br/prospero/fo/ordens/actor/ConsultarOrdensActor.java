@@ -64,7 +64,9 @@ public class ConsultarOrdensActor {
     public static OrdemResponseDTO dto(Ordem o) {
         return new OrdemResponseDTO(o.id(), o.ticker(), o.lado().name(), o.tipo().name(), o.validade().name(),
                 o.quantidade(), texto(o.precoLimite()), texto(o.precoGatilho()), o.grupoOco(),
-                o.papelOco() == null ? null : o.papelOco().name(), o.estado().name(), o.dataSessao(), o.recebidaEm());
+                o.papelOco() == null ? null : o.papelOco().name(), o.estado().name(), o.dataSessao(), o.recebidaEm(),
+                o.baseTunel() == null ? null : o.baseTunel().preco().toPlainString(),
+                o.baseTunel() == null ? null : o.baseTunel().origem().name());
     }
 
     private static String texto(BigDecimal valor) {

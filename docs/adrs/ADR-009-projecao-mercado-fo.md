@@ -13,7 +13,7 @@ O [HLD-002](../hlds/HLD-002-front-office.md) previa Redis como projeção futura
 
 | Tema | Decisão aceita |
 | --- | --- |
-| Ativos | ALFA3/BETA3/GAMA3/DELTA3/OMEGA3; referência BRL 10/20/30/40/50; tick 0,01; lote 1; quantidades inteiras (migração Flyway V2). |
+| Ativos | ALFA3/BETA3/GAMA3/DELTA3/OMEGA3; referência BRL 10/20/30/40/50; tick 0,01; lote 1; quantidades inteiras (migração Flyway V2). Desde a RF03 ([ADR-011](ADR-011-validacao-preco-ordens.md), V4), OMEGA3 usa lote 100 e tick 0,05. |
 | Indicadores | Último = último negócio da sessão. Variação absoluta (último − referência) **e** percentual (÷ referência × 100, duas casas HALF_EVEN). Volume em quantidade **e** financeiro (Σ preço × quantidade). Sem negócio: último, variação e volumes `null`, nunca zero. |
 | Projeção | PostgreSQL próprio do FO, tabela `snapshot_mercado` com uma linha JSONB por namespace/ticker. Upsert atômico incrementa a revisão; leitura nunca combina revisões. Redis fica para cache futuro medido. |
 | Ausência | `SEM_DADOS` (sem snapshot; lados e metadados do livro `null`) ≠ `VAZIO` ≠ `SOMENTE_COMPRA`/`SOMENTE_VENDA` ≠ `COMPLETO`. `defasado` quando a sessão é anterior ao dia atual de São Paulo ou o snapshot excede `prospero.mercado.idade-maxima` (24 h). A resposta do livro traz revisão, sessão e origem próprias, para a tela não combinar revisões. |

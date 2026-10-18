@@ -9,7 +9,13 @@ import java.util.UUID;
 public interface RepositorioOrdens {
     boolean contaExiste(String conta);
 
-    boolean ativoExiste(String ticker);
+    Optional<ParametrosAtivo> parametros(String ticker);
+
+    /**
+     * Repetição ou conflito de uma chave ainda válida, sem gravar nada. Consultado antes das regras que
+     * dependem do mercado, para que a repetição de um envio aceito devolva sempre a resposta original.
+     */
+    Optional<ResultadoRegistro> repeticao(String conta, String chave, String hash, Instant agora);
 
     /**
      * Na mesma transação: reserva a chave (conta, chave), confere o hash em caso de repetição,

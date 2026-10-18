@@ -64,7 +64,7 @@ Definir atomicidade entre reserva e evento de confirmação, deduplicação e co
 
 Reservas de Market/Stop/Stop Limit/short, proteção de posição/exposição e limite por ordem são pendentes. Timeout não libera automaticamente recursos quando execução ainda pode ocorrer. Separar disponível/reservado/liquidado; efeitos BO chegam por eventos idempotentes.
 
-Pendentes também lote/tick, túnel ±10% para ordem sem limite, referência ausente/defasada e calendário de negociação. Testar limites, concorrência, reentrega e compensação; núcleo decimal tem evidência [P05 — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P05-testes.md). [Roadmap MO](../../middle-office/ROADMAP.md); RNF01/RNF05/RNF06 e operação RNF07/RNF08.
+Lote, tick e túnel de ±10% são validados no FO desde a RF03 ([ADR-011](../adrs/ADR-011-validacao-preco-ordens.md)); o MO pode revalidar como defesa em profundidade na RF04. Pendentes no MO: calendário de negociação e regras de risco. Testar limites, concorrência, reentrega e compensação; núcleo decimal tem evidência [P05 — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P05-testes.md). [Roadmap MO](../../middle-office/ROADMAP.md); RNF01/RNF05/RNF06 e operação RNF07/RNF08.
 
 ## Modelo de dados de referência
 

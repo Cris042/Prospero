@@ -2,10 +2,13 @@ package br.prospero.fo.ordens.jpa;
 
 import br.prospero.fo.comum.dominio.Categoria;
 import br.prospero.fo.comum.dominio.RegraNegocioException;
+import br.prospero.fo.ordens.dominio.BaseTunel;
 import br.prospero.fo.ordens.dominio.EstadoOrdem;
 import br.prospero.fo.ordens.dominio.LadoOrdem;
 import br.prospero.fo.ordens.dominio.Ordem;
+import br.prospero.fo.ordens.dominio.OrigemBase;
 import br.prospero.fo.ordens.dominio.PapelOco;
+import br.prospero.fo.ordens.dominio.ParametrosAtivo;
 import br.prospero.fo.ordens.dominio.RepositorioOrdens;
 import br.prospero.fo.ordens.dominio.ResultadoRegistro;
 import br.prospero.fo.ordens.dominio.TipoOrdem;
@@ -15,6 +18,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -43,9 +47,30 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
 
     @Override
     @Transactional
-    public boolean ativoExiste(String ticker) {
-        // Leitura própria da tabela de ativos do FO, sem depender do adaptador JPA de mercado.
-        return !em.createNativeQuery("SELECT 1 FROM ativo WHERE ticker = :t").setParameter("t", ticker).getResultList().isEmpty();
+    public Optional<ParametrosAtivo> parametros(String ticker) {
+        // Leitura própria do catálogo do FO, sem depender do adaptador JPA de mercado nem da projeção sintética.
+        List<?> linhas = em.createNativeQuery("SELECT tick, lote, preco_referencia FROM ativo WHERE ticker = :t")
+                .setParameter("t", ticker).getResultList();
+        return linhas.stream().findFirst().map(linha -> {
+            Object[] c = (Object[]) linha;
+            return new ParametrosAtivo(ticker, (BigDecimal) c[0], ((Number) c[1]).longValue(), (BigDecimal) c[2]);
+        });
+    }
+
+    @Override
+    @Transactional
+    public Optional<ResultadoRegistro> repeticao(String conta, String chave, String hash, Instant agora) {
+        List<?> linhas = em.createNativeQuery("""
+                        SELECT hash, referencia FROM idempotencia_envio
+                        WHERE conta = :c AND chave = :k AND criado_em >= :valida""")
+                .setParameter("c", conta).setParameter("k", chave)
+                .setParameter("valida", OffsetDateTime.ofInstant(agora.minus(RETENCAO_CHAVE), ZoneOffset.UTC))
+                .getResultList();
+        return linhas.stream().findFirst().map(linha -> {
+            Object[] existente = (Object[]) linha;
+            return hash.equals(existente[0]) ? new ResultadoRegistro.Repetido(porEnvio(conta, (UUID) existente[1]))
+                    : new ResultadoRegistro.Conflito();
+        });
     }
 
     @Override
@@ -141,6 +166,10 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
         e.estado = o.estado().name();
         e.dataSessao = o.dataSessao();
         e.recebidaEm = o.recebidaEm();
+        if (o.baseTunel() != null) {
+            e.precoBaseTunel = o.baseTunel().preco();
+            e.origemBase = o.baseTunel().origem().name();
+        }
         return e;
     }
 
@@ -148,6 +177,7 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
         return new Ordem(e.id, e.conta, e.ticker, LadoOrdem.valueOf(e.lado), TipoOrdem.valueOf(e.tipo),
                 Validade.valueOf(e.validade), e.quantidade, e.precoLimite, e.precoGatilho, e.grupoOco,
                 e.papelOco == null ? null : PapelOco.valueOf(e.papelOco), e.grupoEnvio, EstadoOrdem.valueOf(e.estado),
-                e.dataSessao, e.recebidaEm);
+                e.dataSessao, e.recebidaEm,
+                e.precoBaseTunel == null ? null : new BaseTunel(e.precoBaseTunel, OrigemBase.valueOf(e.origemBase)));
     }
 }

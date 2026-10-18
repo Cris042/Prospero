@@ -111,6 +111,14 @@ describe('Boleta', () => {
     ).toEqual({ texto: expect.stringContaining('outros dados'), repetivel: false });
     expect(mensagemErro(new HttpErrorResponse({ status: 503 })).repetivel).toBe(true);
     expect(mensagemErro(new TimeoutError()).repetivel).toBe(true);
+    expect(
+      mensagemErro(
+        new HttpErrorResponse({
+          status: 422,
+          error: { codigo: 'PRECO_FORA_DO_TUNEL', detalhes: { minimo: '9.00', maximo: '11.00' } },
+        }),
+      ).texto,
+    ).toBe('Preço fora do túnel de ±10% do ativo. Faixa aceita: 9,00 a 11,00.');
     expect(mensagemErro(new HttpErrorResponse({ status: 401 })).texto).toContain(
       'preparar-ambiente',
     );
