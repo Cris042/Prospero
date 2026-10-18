@@ -133,6 +133,12 @@ class OrdensResourceTest {
         semTipo.remove("tipo");
         enviar(t, "envio-0106", semTipo).then().statusCode(400).body("codigo", equalTo("CORPO_INVALIDO"));
         enviar(t, "envio-0107", limit("1e3")).then().statusCode(422).body("codigo", equalTo("PRECO_INVALIDO"));
+        enviar(t, "envio-0108", "{\"ticker\":\"ALFA3\",\"ticker\":\"BETA3\",\"lado\":\"COMPRA\",\"tipo\":\"LIMIT\","
+                + "\"validade\":\"DIA\",\"quantidade\":1,\"precoLimite\":\"10.00\"}").then().statusCode(400)
+                .body("codigo", equalTo("JSON_INVALIDO"));
+        Map<String, Object> tickerLongo = limit("10.00");
+        tickerLongo.put("ticker", "A".repeat(9));
+        enviar(t, "envio-0109", tickerLongo).then().statusCode(400).body("codigo", equalTo("CORPO_INVALIDO"));
         for (String chave : new String[]{null, "curta", "com espaço!", "x".repeat(65)}) {
             var pedido = given().auth().oauth2(t).contentType(ContentType.JSON).body(limit("10.00"));
             if (chave != null) {
@@ -212,6 +218,9 @@ class OrdensResourceTest {
         given().header("X-Idempotency-Key", "auth-00004").contentType(ContentType.JSON).body(limit("10.00"))
                 .when().post("/api/v1/ordens").then().statusCode(401);
         given().auth().oauth2(token("CONTA-002", "ordens:enviar")).when().get("/api/v1/ordens").then().statusCode(403);
+        given().auth().oauth2(conta("CONTA-999")).when().get("/api/v1/ordens").then().statusCode(403)
+                .body("codigo", equalTo("CONTA_DESCONHECIDA"));
+        given().auth().oauth2(conta("CONTA-999")).when().get("/api/v1/ordens/" + UUID.randomUUID()).then().statusCode(403);
         given().auth().oauth2(conta("CONTA-002")).header("X-Idempotency-Key", "auth-00005").contentType(ContentType.TEXT)
                 .body("x").when().post("/api/v1/ordens").then().statusCode(415);
     }

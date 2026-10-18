@@ -28,11 +28,13 @@ public class ConsultarOrdensActor {
     }
 
     public OrdemResponseDTO buscar(String conta, UUID id) {
+        exigirConta(conta);
         return repositorio.buscar(conta, id).map(ConsultarOrdensActor::dto)
                 .orElseThrow(() -> naoEncontrado("ORDEM_NAO_ENCONTRADA"));
     }
 
     public OcoResponseDTO buscarOco(String conta, UUID grupo) {
+        exigirConta(conta);
         List<Ordem> ordens = repositorio.buscarGrupoOco(conta, grupo);
         if (ordens.isEmpty()) {
             throw naoEncontrado("GRUPO_OCO_NAO_ENCONTRADO");
@@ -41,6 +43,7 @@ public class ConsultarOrdensActor {
     }
 
     public PaginaOrdensDTO listar(String conta, String cursor, Integer limite) {
+        exigirConta(conta);
         int tamanho = limite == null ? LIMITE_PADRAO : limite;
         if (tamanho < 1 || tamanho > LIMITE_MAXIMO) {
             throw new RegraNegocioException(Categoria.ENTRADA_INVALIDA, "LIMITE_PAGINA_INVALIDO",
@@ -66,6 +69,12 @@ public class ConsultarOrdensActor {
 
     private static String texto(BigDecimal valor) {
         return valor == null ? null : valor.toPlainString();
+    }
+
+    private void exigirConta(String conta) {
+        if (conta == null || !repositorio.contaExiste(conta)) {
+            throw new RegraNegocioException(Categoria.PROIBIDO, "CONTA_DESCONHECIDA", "Token sem conta cadastrada.");
+        }
     }
 
     private static RegraNegocioException naoEncontrado(String codigo) {

@@ -52,9 +52,10 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
     @Transactional
     public ResultadoRegistro registrar(String conta, String chave, String hash, Instant agora, List<Ordem> ordens) {
         OffsetDateTime expirado = OffsetDateTime.ofInstant(agora.minus(RETENCAO_CHAVE), ZoneOffset.UTC);
+        // SKIP LOCKED: envios concorrentes não esperam o expurgo uns dos outros.
         em.createNativeQuery("""
                         DELETE FROM idempotencia_envio WHERE ctid IN (
-                            SELECT ctid FROM idempotencia_envio WHERE criado_em < :expirado LIMIT :lote)""")
+                            SELECT ctid FROM idempotencia_envio WHERE criado_em < :expirado LIMIT :lote FOR UPDATE SKIP LOCKED)""")
                 .setParameter("expirado", expirado).setParameter("lote", EXPURGO_LOTE).executeUpdate();
         em.createNativeQuery("DELETE FROM idempotencia_envio WHERE conta = :c AND chave = :k AND criado_em < :expirado")
                 .setParameter("c", conta).setParameter("k", chave).setParameter("expirado", expirado).executeUpdate();

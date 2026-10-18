@@ -48,6 +48,24 @@ public class EnviarOrdemActor {
     }
 
     public Envio enviar(String conta, String chave, OrdemRequestDTO pedido) {
+        try {
+            return registrarSimples(conta, chave, pedido);
+        } catch (RegraNegocioException recusa) {
+            contarRecusa(pedido.tipo().name(), pedido.validade(), recusa);
+            throw recusa;
+        }
+    }
+
+    public Envio enviarOco(String conta, String chave, OcoRequestDTO pedido) {
+        try {
+            return registrarOco(conta, chave, pedido);
+        } catch (RegraNegocioException recusa) {
+            contarRecusa("OCO", pedido.validade(), recusa);
+            throw recusa;
+        }
+    }
+
+    private Envio registrarSimples(String conta, String chave, OrdemRequestDTO pedido) {
         exigirConta(conta);
         exigirAtivo(pedido.ticker());
         long quantidade = EntradaOrdem.quantidade(pedido.quantidade());
@@ -63,7 +81,7 @@ public class EnviarOrdemActor {
         return registrar(conta, chave, hash, agora, List.of(ordem), pedido.tipo().name(), pedido.validade());
     }
 
-    public Envio enviarOco(String conta, String chave, OcoRequestDTO pedido) {
+    private Envio registrarOco(String conta, String chave, OcoRequestDTO pedido) {
         exigirConta(conta);
         exigirAtivo(pedido.ticker());
         if (pedido.validade() != Validade.DIA) {
@@ -99,9 +117,17 @@ public class EnviarOrdemActor {
         };
         metricas.counter("prospero.ordens.recebidas", "tipo", tipo, "validade", validade.name(),
                 "resultado", envio.repetido() ? "REPETIDA" : "NOVA").increment();
-        LOG.infof("Ordem registrada: id=%s conta=%s repetida=%s", envio.ordens().getFirst().grupoEnvio(), conta,
-                envio.repetido());
+        if (!envio.repetido()) {
+            LOG.infof("Ordem registrada: envio=%s conta=%s pernas=%d", envio.ordens().getFirst().grupoEnvio(), conta,
+                    envio.ordens().size());
+        }
         return envio;
+    }
+
+    /** Recusas também são observáveis; o código é enumerado e estável, sem dados do pedido. */
+    private void contarRecusa(String tipo, Validade validade, RegraNegocioException recusa) {
+        metricas.counter("prospero.ordens.recebidas", "tipo", tipo, "validade", validade.name(),
+                "resultado", recusa.codigo()).increment();
     }
 
     private void exigirConta(String conta) {

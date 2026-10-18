@@ -60,6 +60,7 @@ public class OrdensOcoResource {
     @APIResponse(responseCode = "403", description = "Sem escopo ordens:enviar ou conta desconhecida.")
     @APIResponse(responseCode = "409", description = "Chave já usada com outro pedido.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
+    @APIResponse(responseCode = "415", description = "Content-Type diferente de application/json.")
     @APIResponse(responseCode = "422", description = "Validade, tipo do Stop Loss, preços incoerentes ou ativo.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "429", description = "Limite de ordens da sessão atingido.",

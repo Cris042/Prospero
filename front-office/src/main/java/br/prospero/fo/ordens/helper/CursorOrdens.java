@@ -26,9 +26,12 @@ public final class CursorOrdens {
         if (opaco == null) {
             return null;
         }
+        if (opaco.length() > 120) {
+            throw invalido();
+        }
         try {
             String texto = new String(Base64.getUrlDecoder().decode(opaco), StandardCharsets.UTF_8);
-            if (opaco.length() > 120 || !FORMA.matcher(texto).matches()) {
+            if (!FORMA.matcher(texto).matches()) {
                 throw invalido();
             }
             String[] partes = texto.split("\\.", 3);
