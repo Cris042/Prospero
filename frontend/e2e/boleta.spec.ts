@@ -27,11 +27,27 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
     (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
   );
   await boleta.getByRole('button', { name: 'Registrar ordem' }).dblclick();
-  expect((await resposta).status()).toBe(202);
+  const respostaRegistro = await resposta;
+  expect(respostaRegistro.status()).toBe(202);
+  const registrada = await respostaRegistro.json();
   const status = page.getByRole('status');
-  await expect(status).toContainText(/Ordem registrada — estado (Recebida|Reservada)\./);
-  // RF04: o risco do MO reserva o recurso de forma assíncrona e a boleta acompanha o resultado.
-  await expect(status).toContainText('Ordem registrada — estado Reservada.', { timeout: 15000 });
+  await expect(status).toContainText(/Ordem registrada — estado (Recebida|Reservada|Aberta)\./);
+  // A boleta acompanha o risco; o ME pode já ter aberto a ordem antes dessa consulta.
+  await expect(status).toContainText(/Ordem registrada — estado (Reservada|Aberta)\./, {
+    timeout: 15000,
+  });
+  await expect
+    .poll(
+      async () => {
+        const consulta = await page.request.get(
+          `/servicos/front-office/api/v1/ordens/${registrada.id}`,
+        );
+        expect(consulta.status()).toBe(200);
+        return (await consulta.json()).estado;
+      },
+      { timeout: 15000 },
+    )
+    .toBe('ABERTA');
   await expect(status).toContainText('Compra 25 BETA3');
   await expect(page.getByRole('region', { name: 'Minhas ordens' })).toContainText('19,75');
   expect(posts).toHaveLength(1);
