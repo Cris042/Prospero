@@ -22,6 +22,17 @@ class ArquiteturaTest {
                     "jakarta.enterprise..", "org.hibernate..", "org.apache.kafka..", "java.sql..", "java.net..")
             .allowEmptyShould(true);
 
+    /** RNF02 (ADR-013): o núcleo do matching não lê relógio nem sorteia; tempo e IDs vêm dos comandos. */
+    @ArchTest
+    static final ArchRule nucleoDeterministico = noClasses().that().resideInAPackage("..livro..")
+            .should().callMethod(java.util.UUID.class, "randomUUID")
+            .orShould().callMethod(java.time.Instant.class, "now")
+            .orShould().callMethod(java.time.LocalDate.class, "now")
+            .orShould().callMethod(System.class, "currentTimeMillis")
+            .orShould().callMethod(System.class, "nanoTime")
+            .orShould().dependOnClassesThat().areAssignableTo(java.util.Random.class)
+            .orShould().dependOnClassesThat().areAssignableTo(java.time.Clock.class);
+
     @ArchTest
     static final ArchRule naoDependeDeOutrosContextos = noClasses()
             .should().dependOnClassesThat().resideInAnyPackage("br.prospero.fo..", "br.prospero.mo..", "br.prospero.bo..");
