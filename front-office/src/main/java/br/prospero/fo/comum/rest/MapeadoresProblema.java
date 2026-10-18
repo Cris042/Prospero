@@ -1,6 +1,6 @@
-package br.prospero.fo.mercado.rest;
+package br.prospero.fo.comum.rest;
 
-import br.prospero.fo.mercado.dominio.RegraMercadoException;
+import br.prospero.fo.comum.dominio.RegraNegocioException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import io.quarkus.security.AuthenticationFailedException;
@@ -15,8 +15,8 @@ import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 /** Erros viram Problem Details com ocorrência e correlação, sem refletir conteúdo enviado. */
 public class MapeadoresProblema {
     @ServerExceptionMapper
-    public Response regra(RegraMercadoException erro, ContainerRequestContext pedido) {
-        return Problemas.resposta(pedido, Problemas.status(erro.codigo()), erro.codigo(), erro.getMessage());
+    public Response regra(RegraNegocioException erro, ContainerRequestContext pedido) {
+        return Problemas.resposta(pedido, Problemas.status(erro.categoria()), erro.codigo(), erro.getMessage());
     }
 
     @ServerExceptionMapper

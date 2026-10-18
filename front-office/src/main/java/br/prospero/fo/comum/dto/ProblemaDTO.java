@@ -1,4 +1,4 @@
-package br.prospero.fo.mercado.dto;
+package br.prospero.fo.comum.dto;
 
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 

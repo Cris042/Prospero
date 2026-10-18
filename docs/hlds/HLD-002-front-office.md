@@ -22,7 +22,7 @@ Organização por funcionalidade sob `br.prospero.fo`: REST → Actor; Actor coo
 
 ## Fluxo futuro e dados
 
-Receber DTO → validar estrutura → Actor registra ordem e intenção de publicação na mesma transação local → publisher recuperável Kafka → respostas/eventos avançam a máquina de estados persistida. Estratégia exata de idempotência de submissão, contratos e `201`/`202` deve ser definida na RF02, sem confirmar execução ao aceitar processamento.
+Receber DTO → validar estrutura → Actor registra ordem e intenção de publicação na mesma transação local → publisher recuperável Kafka → respostas/eventos avançam a máquina de estados persistida. RF02a implementada conforme [ADR-010](../adrs/ADR-010-ordens-contas-idempotencia.md): `POST/GET /api/v1/ordens` e `/api/v1/ordens-oco`, `202` com `Location`, idempotência `(conta, X-Idempotency-Key)` com hash na mesma transação, contas sintéticas por `sub`, estado único `RECEBIDA`. A intenção de publicação (outbox) entra na RF04, quando houver consumidor; até lá o registro é apenas local.
 
 RF01 implementada conforme [ADR-009](../adrs/ADR-009-projecao-mercado-fo.md): projeção de leitura no PostgreSQL do FO (`snapshot_mercado`, uma linha JSONB por namespace/ticker), consulta `GET /api/v1/ativos` e `/api/v1/ativos/{ticker}/livro` e preparação sintética local por namespace, todas com JWT. Redis permanece opção de cache futuro, sem uso atual. Atualização por negócios entra na RF06. Negócio não usa HTTP entre MS. Nomes de comandos, envelopes e tópicos dependem do catálogo transversal do HLD-001.
 
@@ -30,13 +30,13 @@ RF01 implementada conforme [ADR-009](../adrs/ADR-009-projecao-mercado-fo.md): pr
 
 Persistir SAGA, timeout e próximos passos; definir janela de publicação, reentrega e reinício sem duplicar submissão. Antes de compensar, conhecer resultado efetivo: negócio executado exige recuperação para frente, sem desfazê-lo. Definir concorrência de cancelamento/execução/timeout e idempotência dos comandos.
 
-Pendentes: estados/transições; expiração Dia e fuso; tipos/validades aceitos; ativação de OCO e dimensionamento após parciais; correlação ordem/outbox ausente na tabela histórica; referência antes do primeiro negócio e cotação defasada; bootstrap de projeção por eventos, sem acessar bancos alheios. Configuração de contas, atores e autorização precede endpoints de negócio.
+Pendentes: transições após `RECEBIDA` (RF03–RF05); expiração efetiva da validade Dia (sessão já definida no ADR-010); ativação de OCO e dimensionamento após parciais; correlação ordem/outbox ausente na tabela histórica; referência antes do primeiro negócio e cotação defasada; bootstrap de projeção por eventos, sem acessar bancos alheios. Contas sintéticas e escopos definidos no ADR-010; identidade real permanece futura.
 
 Aceite futuro: duplicação, reentrega, indisponibilidade e consulta de estados consistentes, WebSocket/reconexão e planilha com polling limitado. [Roadmap FO](../../front-office/ROADMAP.md); RNFs especialmente RNF05–RNF08. Não há meta própria nova de latência.
 
 ## Modelo de dados de referência
 
-Dicionário migrado da proposta histórica. **Planejado e incompleto**, não schema aprovado nem tabelas existentes. Tipos bigint não definem escala financeira; ausência de marcação não decide nulabilidade/índice/constraint. Referências a IDs externos não criam FK entre bancos. `ativo` representa referência local a distribuir por contrato, sem tabela compartilhada. Refinar antes de migrações.
+Dicionário migrado da proposta histórica. **Superado nas tabelas já implementadas**: `ativo` (V2, ADR-009) e `conta`, `ordem`, `idempotencia_envio`, `limite_ordens` (V3, ADR-010) usam `NUMERIC(12,2)` para preços; as migrações Flyway são a fonte. O restante é planejado e incompleto, não schema aprovado. Tipos bigint não definem escala financeira; ausência de marcação não decide nulabilidade/índice/constraint. Referências a IDs externos não criam FK entre bancos. `ativo` representa referência local a distribuir por contrato, sem tabela compartilhada. Refinar antes de migrações.
 
 ### `ativo` — referência preliminar
 | Coluna | Tipo | Chave |

@@ -3,7 +3,8 @@ package br.prospero.fo.mercado.rest;
 import br.prospero.fo.mercado.actor.PrepararMercadoActor;
 import br.prospero.fo.mercado.dominio.RegraMercadoException;
 import br.prospero.fo.mercado.dto.PreparacaoResponseDTO;
-import br.prospero.fo.mercado.dto.ProblemaDTO;
+import br.prospero.fo.comum.dto.ProblemaDTO;
+import br.prospero.fo.comum.rest.Problemas;
 import br.prospero.fo.mercado.dto.SnapshotRequestDTO;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
@@ -58,7 +59,7 @@ public class PreparacaoMercadoResource {
     public Response preparar(@PathParam("namespace") String namespace, @PathParam("ticker") String ticker,
                              @NotNull @Valid SnapshotRequestDTO pedido) {
         exigirHabilitada();
-        PreparacaoResponseDTO resposta = actor.preparar(Problemas.namespace(namespace, true), Problemas.ticker(ticker), pedido);
+        PreparacaoResponseDTO resposta = actor.preparar(ParametrosMercado.namespace(namespace, true), ParametrosMercado.ticker(ticker), pedido);
         LOG.infof("Snapshot sintético preparado: ticker=%s revisao=%d", resposta.ticker(), resposta.revisao());
         return Response.ok(resposta).header("Cache-Control", "no-store").build();
     }
@@ -74,7 +75,7 @@ public class PreparacaoMercadoResource {
     @APIResponse(responseCode = "403", description = "Token sem escopo mercado:preparacao.")
     public Response limpar(@PathParam("namespace") String namespace) {
         exigirHabilitada();
-        actor.limpar(Problemas.namespace(namespace, true));
+        actor.limpar(ParametrosMercado.namespace(namespace, true));
         return Response.noContent().header("Cache-Control", "no-store").build();
     }
 
