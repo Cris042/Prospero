@@ -220,6 +220,7 @@ class MotorMatchingTest {
     void sessaoNovaReiniciaIdsEBaseESessaoAnteriorERecusada() {
         motor.processar(vendaLimit(1, "10.50"));
         motor.processar(compraLimit(1, "10.50"));
+        EncerramentoSessaoTest.fechar(motor, "ALFA3", SESSAO);
         LocalDate seguinte = SESSAO.plusDays(1);
         Admissao venda = new Admissao(UUID.randomUUID(), UUID.randomUUID(), "CONTA-003", "ALFA3", Lado.VENDA,
                 TipoOrdem.LIMIT, Validade.DIA, 1, d("11.10"), null, seguinte);

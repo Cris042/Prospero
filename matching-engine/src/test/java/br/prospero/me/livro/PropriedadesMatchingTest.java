@@ -146,15 +146,17 @@ class PropriedadesMatchingTest {
 
     /** Impressão digital dos eventos de uma semente: muda se o comportamento observável mudar (RNF02). */
     @Test
-    void eventosDeReferenciaNaoMudam() throws Exception {
+    void eventosDeReferenciaDaSessaoUnicaNaoMudam() throws Exception {
         StringBuilder texto = new StringBuilder();
-        executar(gerar(42)).forEach(e -> texto.append(e).append('\n'));
+        // A impressão digital cobre uma sessão válida; viradas agora exigem comando explícito.
+        executar(gerar(42).stream().filter(a -> a.sessao().equals(D1)).toList()).forEach(e -> texto.append(e).append('\n'));
         String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(texto.toString().getBytes(StandardCharsets.UTF_8)));
         assertEquals(REFERENCIA_SEMENTE_42, hash);
     }
 
-    static final String REFERENCIA_SEMENTE_42 = "413807830e7af96b64a8ca5122da863ef1391d9226be0128da8ad341349c4f7c";
+    // Baseline da mesma fixture D1 executada no motor anterior à RF05c.1a (log local do ciclo RED).
+    static final String REFERENCIA_SEMENTE_42 = "0f6f876278c526b357ef67ba2249f425f469eed5b3fdeedfa324cefe2c486ef2";
 
     static List<Evento> executar(List<Admissao> admissoes) {
         MotorMatching motor = new MotorMatching(ATIVOS);
@@ -168,6 +170,11 @@ class PropriedadesMatchingTest {
         Map<String, Modelo> modelos = new HashMap<>();
         Set<UUID> vistas = new HashSet<>();
         Set<String> ids = new HashSet<>();
+        verificar(admissoes, motor, modelos, vistas, ids);
+    }
+
+    private static void verificar(List<Admissao> admissoes, MotorMatching motor, Map<String, Modelo> modelos,
+                                  Set<UUID> vistas, Set<String> ids) {
         for (Admissao a : admissoes) {
             List<Evento> eventos = motor.processar(a);
             if (!vistas.add(a.ordem())) {
@@ -180,6 +187,11 @@ class PropriedadesMatchingTest {
                         eventos);
                 continue;
             }
+            if (m.sessao != null && a.sessao().isAfter(m.sessao)) {
+                assertEquals(List.of(new Evento.OrdemRejeitada(a.ordem(), a.ticker(),
+                        MotivoRejeicao.SESSAO_NAO_ENCERRADA)), eventos);
+                continue;
+            }
             if (!a.sessao().equals(m.sessao)) {
                 m.sessao = a.sessao();
                 m.negocios = 0;
@@ -187,6 +199,50 @@ class PropriedadesMatchingTest {
             }
             esperar(a, m, ATIVOS.get(a.ticker()), eventos, ids);
             naoCruzado(m);
+        }
+    }
+
+    @Test
+    void tresSessoesConservamSaldosExpiramEmSequenciaEPreservamDeduplicacao() {
+        for (long semente = 1; semente <= 50; semente++) {
+            MotorMatching motor = new MotorMatching(ATIVOS);
+            Set<UUID> vistas = new HashSet<>();
+            Set<String> ids = new HashSet<>();
+            Admissao primeira = null;
+            for (int dia = 0; dia < 3; dia++) {
+                LocalDate data = D1.plusDays(dia);
+                Map<String, Modelo> modelos = new HashMap<>();
+                List<Admissao> lote = gerar(semente + dia * 1000).stream()
+                        .filter(a -> a.sessao().equals(D1)).limit(80)
+                        .map(a -> new Admissao(a.ordem(), a.intencao(), a.conta(), a.ticker(), a.lado(), a.tipo(),
+                                a.validade(), a.quantidade(), a.precoLimite(), a.precoMaximo(), data)).toList();
+                lote = new ArrayList<>(lote);
+                for (String ticker : List.of("ALFA3", "OMEGA3")) {
+                    final String ativo = ticker;
+                    if (lote.stream().noneMatch(a -> a.ticker().equals(ativo))) {
+                        lote.add(admissao(semente + dia * 1000, ticker.equals("ALFA3") ? -1 : -2, ticker,
+                                Lado.VENDA, TipoOrdem.LIMIT, Validade.DIA, 1, ATIVOS.get(ticker).referencia(),
+                                null, data, "CONTA-003"));
+                    }
+                }
+                verificar(lote, motor, modelos, vistas, ids);
+                if (primeira == null) {
+                    primeira = lote.getFirst();
+                }
+                assertEquals(List.of(), motor.processar(primeira), "reentrega sobrevive à mudança de sessão");
+                for (String ticker : List.of("ALFA3", "OMEGA3")) {
+                    Modelo modelo = modelos.get(ticker);
+                    List<Evento> esperados = modelo == null ? List.of() : modelo.livro.stream()
+                            .sorted(Comparator.comparingLong(v -> v.sequencia))
+                            .<Evento>map(v -> new Evento.OrdemEncerrada(v.ordem, ticker,
+                                    MotivoEncerramento.EXPIRADA_DIA, v.quantidade - v.restante, v.restante))
+                            .toList();
+                    assertEquals(esperados, EncerramentoSessaoTest.fechar(motor, ticker, data),
+                            "semente " + semente + ", sessão " + data + ", ativo " + ticker);
+                    assertEquals(List.of(), EncerramentoSessaoTest.fechar(motor, ticker, D1));
+                    assertEquals(List.of(), EncerramentoSessaoTest.fechar(motor, ticker, data));
+                }
+            }
         }
     }
 

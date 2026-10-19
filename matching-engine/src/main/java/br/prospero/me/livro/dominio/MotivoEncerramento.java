@@ -8,5 +8,6 @@ public enum MotivoEncerramento {
     FORA_DA_FAIXA,
     LIMITADA_PELA_RESERVA,
     SEM_LIQUIDEZ,
-    LIMITE_NEGOCIOS
+    LIMITE_NEGOCIOS,
+    EXPIRADA_DIA
 }
