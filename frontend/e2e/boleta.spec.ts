@@ -23,13 +23,31 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   await boleta.getByLabel('Ativo').selectOption('BETA3');
   await boleta.getByLabel('Quantidade').fill('25');
   await boleta.getByLabel('Preço limite (R$)').fill('19.75');
+  const urlInicial = page.url();
+  const navegacoes: string[] = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navegacoes.push(frame.url());
+  });
   const resposta = page.waitForResponse(
     (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
   );
-  await boleta.getByRole('button', { name: 'Registrar ordem' }).dblclick();
+  const liberacao = Promise.withResolvers<void>();
+  let registrada!: { id: string };
+  await page.route('**/servicos/front-office/api/v1/ordens', async (rota) => {
+    if (rota.request().method() !== 'POST') return rota.fallback();
+    const respostaReal = await rota.fetch();
+    // Captura o corpo real antes de entregá-lo ao navegador; o duplo clique ocorre com envio pendente.
+    registrada = await respostaReal.json();
+    await liberacao.promise;
+    await rota.fulfill({ response: respostaReal });
+  });
+  try {
+    await boleta.getByRole('button', { name: 'Registrar ordem' }).dblclick();
+  } finally {
+    liberacao.resolve();
+  }
   const respostaRegistro = await resposta;
   expect(respostaRegistro.status()).toBe(202);
-  const registrada = await respostaRegistro.json();
   const status = page.getByRole('status');
   await expect(status).toContainText(/Ordem registrada — estado (Recebida|Reservada|Aberta)\./);
   // A boleta acompanha o risco; o ME pode já ter aberto a ordem antes dessa consulta.
@@ -51,6 +69,8 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   await expect(status).toContainText('Compra 25 BETA3');
   await expect(page.getByRole('region', { name: 'Minhas ordens' })).toContainText('19,75');
   expect(posts).toHaveLength(1);
+  await expect(page).toHaveURL(urlInicial);
+  expect(navegacoes).toEqual([]);
   expect(posts[0].autorizacao).toBeUndefined();
   expect(posts[0].chave).toMatch(/^[0-9a-f-]{36}$/);
   expect((await page.content()).toLowerCase()).not.toContain('executada');
