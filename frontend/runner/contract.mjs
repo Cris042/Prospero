@@ -16,6 +16,21 @@ export const STEP_COLUMNS = [
 export const RESULT_COLUMNS = ['cenario', 'passo', 'status', 'headers', 'corpo'];
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
 const REF = /\$\{([A-Za-z][A-Za-z0-9_-]{0,63})\}/g;
+const RISK_PREPARATION_PATHS = new Set([
+  '/api/v1/preparacoes-risco/contas/CONTA-002',
+  '/api/v1/preparacoes-risco/contas/CONTA-003',
+]);
+
+// A recusa RESERVA_VIVA desta preparação ocorre antes de qualquer mutação no MO.
+// Caminho estático: não estender a exceção a outras mutações, contas ou referências.
+export function riskPreparation(step) {
+  return (
+    step.method === 'PUT' &&
+    step.service === 'preparacao-risco' &&
+    RISK_PREPARATION_PATHS.has(step.path) &&
+    step.expected?.status === 200
+  );
+}
 
 export function validateJson(value, depth = 0) {
   ensure(depth <= 20, 'JSON_PROFUNDO');
@@ -275,7 +290,13 @@ function compilePlan(sheets, config, locate) {
         interval = row.intervaloMs;
         deadline = row.prazoMs;
         ensure(
-          row.metodo === 'GET' &&
+          (row.metodo === 'GET' ||
+            riskPreparation({
+              method: row.metodo,
+              service: row.servico,
+              path: row.caminho,
+              expected,
+            })) &&
             Number.isInteger(interval) &&
             interval >= 50 &&
             interval <= 5000 &&
