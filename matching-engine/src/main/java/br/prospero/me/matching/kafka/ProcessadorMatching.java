@@ -220,9 +220,10 @@ public class ProcessadorMatching implements HealthCheck {
         return PARTICOES.stream().allMatch(p -> proximos.get(p.partition()) >= highwater.get(p));
     }
 
-    private Properties adminConfig() {
+    Properties adminConfig() {
         Properties p = new Properties(); p.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, servidores);
         p.put(AdminClientConfig.CLIENT_ID_CONFIG, "matching-controle");
+        p.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "5000");
         p.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, "5000"); return p;
     }
 

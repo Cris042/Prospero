@@ -4,6 +4,7 @@ ambiente real; sem exibir a chave."""
 import argparse
 import concurrent.futures
 import datetime
+import hashlib
 import json
 import os
 import queue
@@ -126,10 +127,25 @@ def http(metodo, url, tok, corpo=None, cabecalhos=None):
         return json.load(resposta)
 
 
-def preparar_carteira(origem_mo, conta, saldo, custodia):
-    """Redefine carteira sem reservas vivas; a API preserva histórico e recusa ATIVA/PARCIAL com 409."""
-    return http("PUT", f"{origem_mo}/api/v1/preparacoes-risco/contas/{conta}", token("risco-preparacao", 60),
-                {"saldo": saldo, "custodia": custodia})
+def preparar_carteira(origem_mo, conta, saldo, custodia, prazo=0):
+    """Redefine carteira sem reservas vivas. Após limpeza conhecida, pode esperar os terminais do MO."""
+    limite = time.monotonic() + prazo
+    tok = token("risco-preparacao", 60)
+    while True:
+        try:
+            return http("PUT", f"{origem_mo}/api/v1/preparacoes-risco/contas/{conta}", tok,
+                        {"saldo": saldo, "custodia": custodia})
+        except urllib.error.HTTPError as erro:
+            if erro.code != 409 or time.monotonic() >= limite:
+                raise
+            try:
+                problema = json.load(erro)
+            except (ValueError, UnicodeError):
+                raise erro
+            if not isinstance(problema, dict) or problema.get("codigo") != "RESERVA_VIVA":
+                raise
+            erro.close()
+            time.sleep(min(0.2, max(0, limite - time.monotonic())))
 
 
 def carteira(origem_mo, conta):
@@ -153,7 +169,7 @@ def verificar_risco(origem, origem_mo):
     Executar após as provas que preparam CONTA-002 e antes das provas sem preparação."""
     conta = "CONTA-002"
     sem_pendencias(origem, conta)
-    preparar_carteira(origem_mo, conta, "1000000.00", {t: 60000 if t == "ALFA3" else 1000 for t in ATIVOS})
+    preparar_carteira(origem_mo, conta, "1000000.00", {t: 60000 if t == "ALFA3" else 1000 for t in ATIVOS}, prazo=30)
     tok = token("ordens", 300, conta)
 
     def enviar(corpo, caminho="/api/v1/ordens"):
@@ -265,7 +281,7 @@ def _verificar_concorrencia(origem_mo, projeto):
     conta = "CONTA-003"
     filtro = f"conta = '{conta}'"
     # RED: sem proteção, as duas sessões leem 100, ambas concedem 70 e gravam o valor calculado na leitura.
-    preparar_carteira(origem_mo, conta, "100.00", {})
+    preparar_carteira(origem_mo, conta, "100.00", {}, prazo=30)
     a, b = Sessao(), Sessao()
     concedidas = 0
     for s in (a, b):
@@ -321,7 +337,7 @@ def verificar_recuperacao(origem, origem_mo, projeto):
     base = compose(projeto)
     conta = "CONTA-003"
     sem_pendencias(origem, conta)
-    preparar_carteira(origem_mo, conta, "1000.00", {"ALFA3": 15})
+    preparar_carteira(origem_mo, conta, "1000.00", {"ALFA3": 15}, prazo=30)
     tok = token("ordens", 300, conta)
     ordem = {"ticker": "ALFA3", "lado": "COMPRA", "tipo": "LIMIT", "validade": "DIA", "quantidade": 10,
              "precoLimite": "10.00"}
@@ -353,7 +369,10 @@ def verificar_recuperacao(origem, origem_mo, projeto):
     intencao = str(uuid.UUID(criada["id"]))
     linhas = subprocess.check_output(base + [
         "exec", "-T", "postgres-front-office", "psql", "-X", "-A", "-t", "-U", "prospero_fo", "-d", "prospero_fo",
-        "-c", f"SELECT payload FROM outbox WHERE payload LIKE '%\"correlacao\":\"{intencao}\"%'"],
+        # Harness interno sobre a pequena outbox efêmera CI: igualdade exata, sem busca por substring.
+        # O JSON legado não tem índice de correlação; esta leitura pontual não entra no caminho das APIs.
+        "-c", f"SELECT payload FROM outbox WHERE topico = 'risco.comandos.v1' "
+              f"AND payload::jsonb->>'correlacao' = '{intencao}' LIMIT 2"],
         text=True, stderr=subprocess.DEVNULL).strip().splitlines()
     if len(linhas) != 1 or not linhas[0].startswith("{"):
         raise SystemExit("Recuperação: comando original não encontrado na outbox do FO para a reentrega.")
@@ -381,7 +400,7 @@ def verificar_recuperacao(origem, origem_mo, projeto):
                    {"X-Idempotency-Key": "recup-limpeza-" + uuid.uuid4().hex})
     aguardar_campos(origem, tok, f"/api/v1/ordens/{limpeza['id']}", {"estado": "EXECUTADA"})
     aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira", {"saldoReservado": "0.00"})
-    preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS})
+    preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS}, prazo=30)
     if (reservado, decisoes, rejeitados) != ("150.00", "1", 1):
         raise SystemExit(f"Recuperação: esperado 150.00 reservado, 1 decisão e 1 rejeitada; obtido {reservado}, "
                          f"{decisoes} e {rejeitados}.")
@@ -412,7 +431,7 @@ def verificar_matching(origem, origem_mo, projeto):
     base = compose(projeto)
     for conta in ("CONTA-002", "CONTA-003"):
         sem_pendencias(origem, conta)
-        preparar_carteira(origem_mo, conta, "1000.00", {"ALFA3": 100})
+        preparar_carteira(origem_mo, conta, "1000.00", {"ALFA3": 100}, prazo=30)
     tokens = {c: token("ordens", 600, c) for c in ("CONTA-002", "CONTA-003")}
 
     def enviar(conta, lado, quantidade, validade="DIA"):
@@ -440,8 +459,9 @@ def verificar_matching(origem, origem_mo, projeto):
     aguardar_campos(origem_me, "x", "/q/health/ready", {"status": "UP"}, 180)
     # Mesma admissão após restart precisa ser deduplicada: não pode restaurar quantidade já executada.
     intencao = str(uuid.UUID(venda["id"]))
-    consulta = ("SELECT payload FROM outbox WHERE topico = 'matching.comandos.v1' "
-                f"AND payload::jsonb->>'correlacao' = '{intencao}'")
+    # Mesmo UUID v3 de UUID.nameUUIDFromBytes no MO; busca pela PK, sem varrer payloads.
+    admissao = uuid.UUID(bytes=hashlib.md5(("admissao:" + intencao).encode(), usedforsecurity=False).digest(), version=3)
+    consulta = f"SELECT payload FROM outbox WHERE id = '{admissao}'"
     linhas = subprocess.check_output(base + ["exec", "-T", "postgres-middle-office", "psql", "-X", "-A", "-t",
         "-U", "prospero_mo", "-d", "prospero_mo", "-c", consulta], text=True,
         stderr=subprocess.DEVNULL).strip().splitlines()
