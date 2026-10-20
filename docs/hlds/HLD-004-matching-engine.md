@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. RF05a ([ADR-013](../adrs/ADR-013-matching-execucao.md)) implementou o núcleo puro `livro/dominio/MotorMatching`: livro por ativo, FIFO, Limit/Market, DIA/IOC/FOK, preço passivo, faixa/reserva e IDs determinísticos. A RF05b acrescenta adaptador Kafka, posse e replay; stops/OCO/sessão seguem na RF05c. Estado das evidências no roadmap; metas RNF04 continuam sem medição financeira final.
+Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. RF05a ([ADR-013](../adrs/ADR-013-matching-execucao.md)) implementou o núcleo puro `livro/dominio/MotorMatching`: livro por ativo, FIFO, Limit/Market, DIA/IOC/FOK, preço passivo, faixa/reserva e IDs determinísticos. A RF05b acrescenta adaptador Kafka, posse e replay; RF05c.1a/1b acrescentam encerramento e Stop/Stop Limit no núcleo, em validação/revisão. Integração dos stops/fechamento e OCO seguem futuros. Estado das evidências no roadmap; metas RNF04 continuam sem medição financeira final.
 
 Desenho de integração: um escritor por ativo, sequenciado pela partição Kafka; no núcleo atual, um escritor por instância de `MotorMatching`, mesmo quando contém vários ativos. O núcleo puro recebe comando e produz eventos. Não consulta JPA/banco por ordem nem decide poder de compra. Stops ficam no ME como simplificação já descrita no domínio; risco e reservas precedem admissão ao matching.
 
@@ -22,9 +22,9 @@ Organização por funcionalidade sob `br.prospero.me`: REST → Actor; Actor coo
 
 ## Livro e processamento planejados
 
-Na RF05a, `Livro` usa `TreeMap` por preço, `ArrayDeque` FIFO por nível, índice por ID e contagem de ativas por conta. `MotorMatching` recebe `Admissao` e devolve records de `Evento`; stops por gatilho e o processador de partição permanecem planejados. Não prometer cancelamento O(1) sem definir fila/índice; medir antes de otimizar.
+`Livro` usa `TreeMap` por preço, `ArrayDeque` FIFO por nível e índice por ID. Desde a RF05c.1b, a contagem única de ativas pertence ao estado do ativo no motor e inclui livro, pendentes, agressor e selecionadas aguardando na fila. `MotorMatching` recebe `Admissao` e devolve records de `Evento`; RF05b acrescenta processador de partição e RF05c.1b acrescenta stops somente ao núcleo. Não prometer cancelamento O(1) sem definir fila/índice; medir antes de otimizar.
 
-Comando autorizado → prioridade preço-tempo → negócios a preço passivo, parciais e eventos de estado → publicação recuperável. Definir Market/Limit/Stop/Stop Limit, Dia/IOC/FOK, verificação integral FOK, falta de liquidez, cascatas e OCO após parciais. Inserção e cancelamento sem negócio também alteram bid/ask/profundidade.
+Comando autorizado → prioridade preço-tempo → negócios a preço passivo, parciais e eventos de estado → publicação recuperável. Market/Limit/Stop/Stop Limit, Dia/IOC/FOK, verificação integral FOK, falta de liquidez e cascatas seguem ADR-013, com stops ainda internos. OCO após parciais e integração dos stops continuam futuros. Inserção e cancelamento sem negócio também alterarão bid/ask/profundidade na RF06/RF10.
 
 ## Persistência, recuperação e pendências
 
@@ -82,7 +82,15 @@ Fechar novamente uma data já encerrada é inócuo, inclusive depois de abrir um
 
 Esta fatia é interna. O contrato Kafka v1 continua admitindo somente ordens simples Limit/Market, sem fechamento, Stop ou OCO. Não publica `EXPIRADA_DIA` no ambiente integrado e não comprova liberação real de reservas. Fechamento integrado ainda exige comando de controle com autoridade/correlação próprias, roteado por ativo no mesmo log, evolução coordenada MO/FO e provas de publicação parcial/replay. Encerramento global não é atômico entre partições. Mantêm-se uma sessão por log, retenção integral e limites atuais; nenhuma migração ou limpeza de dados nesta fatia.
 
-`[DOC-GAP]` A RF05c seguinte depende da regra para a 33ª ativação de stop e do momento de interleaving com o agressor, ainda aguardando decisão do usuário. OCO exige admissão atômica do par, saldo compartilhado e progresso por perna; reduzir a irmã não é executar nem liberar toda a reserva. Esses fluxos permanecem planejados.
+As duas lacunas de stops foram resolvidas pelo usuário em 2026-10-20: cancelar excesso além32 e executar após o agressor, conforme ADR-013. OCO exige admissão atômica do par, saldo compartilhado e progresso por perna; reduzir a irmã não é executar nem liberar toda a reserva. OCO e integração dos stops permanecem planejados.
+
+## Stops no núcleo — RF05c.1b
+
+Desenho aprovado antes do código e implementado na RF05c.1b: pendentes por ativo, ordenados por chegada; consulta de gatilhos a cada negócio, sem usar referência quando ainda não há negócio. Captura remove a pendência irrevogavelmente e enfileira até32 ativações acumuladas por comando raiz; excedentes recebem terminal `LIMITE_CASCATA`. Fila limitada e iterativa, executada após o agressor terminar ou repousar, preserva acionamentos transitórios, ordem de ocorrência/chegada e liquidez da FOK. Os256 negócios são orçamento único compartilhado; seleção já realizada com orçamento esgotado termina `LIMITE_NEGOCIOS`. Ao gastar o último negócio permitido, qualquer saldo restante também recebe esse motivo, mesmo sem contraparte restante; execução integral conserva `EXECUTADA`.
+
+Stop DIA converte internamente para Market IOC e Stop Limit DIA para Limit DIA com nova prioridade; identidade, intenção e máximo reservado são preservados. `Admissao` recebe gatilho com as mesmas guardas numéricas; mantém construtor anterior para Limit/Market. Eventos puros `StopPendente` e `StopAcionado` tornam a transição observável sem ampliar Kafka. Recusar no adaptador tipos fora da allowlist Market/Limit, mesmo com enum ampliado; novos eventos internos não possuem serialização no contrato v1.
+
+Até500 pendentes por ativo e1000 ativas por conta/ativo incluindo livro e pendentes; transferência para execução não ocupa duas vagas. A varredura em memória de até500 pendentes por negócio é limitada e determinística, sem nova estrutura otimizada ou promessa de latência. Fechamento ordena conjuntamente ofertas pela prioridade corrente e stops pela chegada original, limpa contagens e mantém identidades históricas. Nenhuma API, migração, liberação financeira integrada ou mudança de operação nesta fatia. Evidências e estado real da implementação no roadmap.
 
 ## Segurança, observabilidade e testes
 

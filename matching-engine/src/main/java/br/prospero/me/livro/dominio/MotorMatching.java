@@ -4,12 +4,14 @@ import br.prospero.me.livro.helper.FaixaPreco;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -22,6 +24,8 @@ import java.util.UUID;
 public final class MotorMatching {
     public static final int MAX_NEGOCIOS_POR_COMANDO = 256;
     public static final int MAX_ORDENS_ATIVAS_POR_CONTA = 1000;
+    public static final int MAX_STOPS_PENDENTES = 500;
+    public static final int MAX_ATIVACOES_POR_COMANDO = 32;
     public static final long MAX_QUANTIDADE = 1_000_000;
     private static final BigDecimal PRECO_MAXIMO = new BigDecimal("1000000.00");
     private final Map<String, ParametrosAtivo> parametros;
@@ -36,11 +40,39 @@ public final class MotorMatching {
     /** Estado do escritor único de um ativo: livro, último negócio da sessão e sequências. */
     private static final class EstadoAtivo {
         final Livro livro = new Livro();
+        final StopsPendentes stops = new StopsPendentes();
+        // Uma contagem cobre livro, pendentes, agressor e selecionadas aguardando na fila.
+        final Map<String, Integer> ativasPorConta = new HashMap<>();
         BigDecimal ultimo;
         LocalDate sessao;
         LocalDate ultimaEncerrada;
         long negocios;
         long chegada;
+
+        int ativas(String conta) {
+            return ativasPorConta.getOrDefault(conta, 0);
+        }
+
+        void ativar(String conta) {
+            ativasPorConta.merge(conta, 1, Integer::sum);
+        }
+
+        void desativar(String conta) {
+            ativasPorConta.compute(conta, (chave, total) -> {
+                if (total == null || total <= 0) {
+                    throw new IllegalStateException("Ordem terminal fora da contagem ativa.");
+                }
+                return total == 1 ? null : total - 1;
+            });
+        }
+    }
+
+    /** Orçamento do comando raiz; a fila drenada não renova ativações nem negócios. */
+    private static final class ContextoComando {
+        final List<Evento> eventos = new ArrayList<>();
+        final ArrayDeque<Admissao> acionadas = new ArrayDeque<>();
+        int selecionadas;
+        int negocios;
     }
 
     public List<Evento> processar(Admissao a) {
@@ -63,17 +95,66 @@ public final class MotorMatching {
             e.ultimo = null;
             e.chegada = 0;
         }
-        List<Evento> eventos = new ArrayList<>();
-        eventos.add(new Evento.OrdemAceita(a.ordem(), a.ticker(), ++e.chegada));
+        ContextoComando contexto = new ContextoComando();
+        long sequencia = ++e.chegada;
+        e.ativar(a.conta());
+        contexto.eventos.add(new Evento.OrdemAceita(a.ordem(), a.ticker(), sequencia));
+        if (stop(a)) {
+            receberStop(a, sequencia, e, contexto);
+        } else {
+            negociar(a, sequencia, e, p, contexto);
+        }
+        drenarAcionadas(e, p, contexto);
+        return List.copyOf(contexto.eventos);
+    }
+
+    private static boolean stop(Admissao a) {
+        return a.tipo() == TipoOrdem.STOP || a.tipo() == TipoOrdem.STOP_LIMIT;
+    }
+
+    private static void receberStop(Admissao a, long sequencia, EstadoAtivo e, ContextoComando contexto) {
+        if (StopsPendentes.acionavel(a, e.ultimo)) {
+            selecionar(a, e, contexto);
+            return;
+        }
+        e.stops.guardar(a, sequencia);
+        contexto.eventos.add(new Evento.StopPendente(a.ordem(), a.ticker(), a.precoGatilho()));
+    }
+
+    private void negociar(Admissao a, long sequencia, EstadoAtivo e, ParametrosAtivo p, ContextoComando contexto) {
         Limites limites = limites(a, e, p);
         if (a.validade() == Validade.FOK && disponivel(e.livro, a, limites) < a.quantidade()) {
-            eventos.add(new Evento.OrdemEncerrada(a.ordem(), a.ticker(), MotivoEncerramento.FOK_SEM_LIQUIDEZ, 0,
-                    a.quantidade()));
-            return eventos;
+            encerrar(a, e, MotivoEncerramento.FOK_SEM_LIQUIDEZ, 0, contexto.eventos);
+            return;
         }
-        long executada = executar(a, e, limites, eventos);
-        encerrarOuRepousar(a, e, limites, executada, eventos);
-        return eventos;
+        long executada = executar(a, e, limites, contexto);
+        encerrarOuRepousar(a, sequencia, e, limites, executada, contexto);
+    }
+
+    private static void selecionar(Admissao stop, EstadoAtivo e, ContextoComando contexto) {
+        if (contexto.selecionadas == MAX_ATIVACOES_POR_COMANDO) {
+            encerrar(stop, e, MotivoEncerramento.LIMITE_CASCATA, 0, contexto.eventos);
+            return;
+        }
+        contexto.selecionadas++;
+        contexto.acionadas.addLast(stop);
+    }
+
+    private void drenarAcionadas(EstadoAtivo e, ParametrosAtivo p, ContextoComando contexto) {
+        while (!contexto.acionadas.isEmpty()) {
+            Admissao stop = contexto.acionadas.removeFirst();
+            TipoOrdem tipo = stop.tipo() == TipoOrdem.STOP ? TipoOrdem.MARKET : TipoOrdem.LIMIT;
+            Admissao convertida = new Admissao(stop.ordem(), stop.intencao(), stop.conta(), stop.ticker(), stop.lado(),
+                    tipo, tipo == TipoOrdem.MARKET ? Validade.IOC : Validade.DIA, stop.quantidade(),
+                    stop.precoLimite(), stop.precoMaximo(), stop.sessao());
+            long sequencia = ++e.chegada;
+            contexto.eventos.add(new Evento.StopAcionado(stop.ordem(), stop.ticker(), tipo, sequencia));
+            if (contexto.negocios == MAX_NEGOCIOS_POR_COMANDO) {
+                encerrar(convertida, e, MotivoEncerramento.LIMITE_NEGOCIOS, 0, contexto.eventos);
+                continue;
+            }
+            negociar(convertida, sequencia, e, p, contexto);
+        }
     }
 
     /**
@@ -97,13 +178,19 @@ public final class MotorMatching {
             estados.put(ticker, e);
         }
         e.sessao = sessao;
-        List<Evento> eventos = new ArrayList<>();
+        Map<Long, Evento> eventos = new TreeMap<>();
         for (OfertaViva oferta : e.livro.retirarTodas()) {
-            eventos.add(new Evento.OrdemEncerrada(oferta.ordem, ticker, MotivoEncerramento.EXPIRADA_DIA,
+            eventos.put(oferta.sequencia, new Evento.OrdemEncerrada(oferta.ordem, ticker, MotivoEncerramento.EXPIRADA_DIA,
                     oferta.executada, oferta.restante()));
         }
+        for (StopsPendentes.Pendente pendente : e.stops.retirarTodas()) {
+            Admissao ordem = pendente.admissao();
+            eventos.put(pendente.sequencia(), new Evento.OrdemEncerrada(ordem.ordem(), ticker,
+                    MotivoEncerramento.EXPIRADA_DIA, 0, ordem.quantidade()));
+        }
+        e.ativasPorConta.clear();
         e.ultimaEncerrada = sessao;
-        return List.copyOf(eventos);
+        return List.copyOf(eventos.values());
     }
 
     private static MotivoRejeicao recusa(Admissao a, EstadoAtivo e, ParametrosAtivo p) {
@@ -119,20 +206,32 @@ public final class MotorMatching {
         if (a.quantidade() > MAX_QUANTIDADE) {
             return MotivoRejeicao.QUANTIDADE_INVALIDA;
         }
-        if (!precoValido(a.precoLimite(), p) || !precoValido(a.precoMaximo(), p)) {
+        if (!precoValido(a.precoLimite(), p) || !precoValido(a.precoMaximo(), p)
+                || !precoValido(a.precoGatilho(), p)) {
             return MotivoRejeicao.PRECO_INVALIDO;
         }
         boolean market = a.tipo() == TipoOrdem.MARKET;
+        boolean stop = stop(a);
+        boolean limit = a.tipo() == TipoOrdem.LIMIT || a.tipo() == TipoOrdem.STOP_LIMIT;
         boolean compra = a.lado() == Lado.COMPRA;
-        if ((market && (a.validade() == Validade.DIA || a.precoLimite() != null))
-                || (!market && a.precoLimite() == null) || (compra != (a.precoMaximo() != null))) {
+        if ((market && a.validade() == Validade.DIA) || (stop && a.validade() != Validade.DIA)
+                || limit != (a.precoLimite() != null) || stop != (a.precoGatilho() != null)
+                || compra != (a.precoMaximo() != null)) {
             return MotivoRejeicao.COMBINACAO_INVALIDA;
         }
-        if (compra && !market && a.precoLimite().compareTo(a.precoMaximo()) > 0) {
+        if (a.tipo() == TipoOrdem.STOP_LIMIT && (compra
+                ? a.precoLimite().compareTo(a.precoGatilho()) < 0
+                : a.precoLimite().compareTo(a.precoGatilho()) > 0)) {
+            return MotivoRejeicao.COMBINACAO_INVALIDA;
+        }
+        if (compra && limit && a.precoLimite().compareTo(a.precoMaximo()) > 0) {
             return MotivoRejeicao.PRECO_ACIMA_DA_RESERVA;
         }
-        if (e.livro.ativas(a.conta()) >= MAX_ORDENS_ATIVAS_POR_CONTA) {
+        if (e.ativas(a.conta()) >= MAX_ORDENS_ATIVAS_POR_CONTA) {
             return MotivoRejeicao.LIMITE_ORDENS_ATIVAS;
+        }
+        if (stop && !StopsPendentes.acionavel(a, e.ultimo) && e.stops.quantidade() >= MAX_STOPS_PENDENTES) {
+            return MotivoRejeicao.LIMITE_STOPS_PENDENTES;
         }
         return null;
     }
@@ -188,11 +287,11 @@ public final class MotorMatching {
         return total;
     }
 
-    private long executar(Admissao a, EstadoAtivo e, Limites limites, List<Evento> eventos) {
+    private long executar(Admissao a, EstadoAtivo e, Limites limites, ContextoComando contexto) {
         long executada = 0;
-        int negocios = 0;
+        List<Evento> eventos = contexto.eventos;
         Lado oposto = a.lado().oposto();
-        while (executada < a.quantidade() && negocios < MAX_NEGOCIOS_POR_COMANDO) {
+        while (executada < a.quantidade() && contexto.negocios < MAX_NEGOCIOS_POR_COMANDO) {
             OfertaViva passiva = e.livro.melhor(oposto);
             if (passiva == null || !aceitavel(a.lado(), passiva.preco, limites)) {
                 break;
@@ -200,7 +299,7 @@ public final class MotorMatching {
             long quantidade = Math.min(a.quantidade() - executada, passiva.restante());
             executada += quantidade;
             passiva.executada += quantidade;
-            negocios++;
+            contexto.negocios++;
             e.ultimo = passiva.preco;
             boolean compra = a.lado() == Lado.COMPRA;
             eventos.add(new Evento.Negocio(a.ticker() + "-" + e.sessao + "-" + (++e.negocios), a.ticker(), passiva.preco,
@@ -208,35 +307,48 @@ public final class MotorMatching {
                     compra ? passiva.ordem : a.ordem(), compra ? passiva.conta : a.conta(), a.lado()));
             if (passiva.restante() == 0) {
                 e.livro.removerCabeca(passiva);
+                e.desativar(passiva.conta);
                 eventos.add(new Evento.OrdemEncerrada(passiva.ordem, a.ticker(), MotivoEncerramento.EXECUTADA,
                         passiva.quantidade, 0));
             }
+            capturarStops(e, contexto);
         }
         return executada;
     }
 
-    private static void encerrarOuRepousar(Admissao a, EstadoAtivo e, Limites limites, long executada,
-                                           List<Evento> eventos) {
+    private static void capturarStops(EstadoAtivo e, ContextoComando contexto) {
+        for (Admissao acionada : e.stops.retirarAcionados(e.ultimo)) {
+            selecionar(acionada, e, contexto);
+        }
+    }
+
+    private static void encerrar(Admissao a, EstadoAtivo e, MotivoEncerramento motivo, long executada,
+                                 List<Evento> eventos) {
+        e.desativar(a.conta());
+        eventos.add(new Evento.OrdemEncerrada(a.ordem(), a.ticker(), motivo, executada, a.quantidade() - executada));
+    }
+
+    private static void encerrarOuRepousar(Admissao a, long sequencia, EstadoAtivo e, Limites limites, long executada,
+                                           ContextoComando contexto) {
+        List<Evento> eventos = contexto.eventos;
         long restante = a.quantidade() - executada;
         if (restante == 0) {
-            eventos.add(new Evento.OrdemEncerrada(a.ordem(), a.ticker(), MotivoEncerramento.EXECUTADA, executada, 0));
+            encerrar(a, e, MotivoEncerramento.EXECUTADA, executada, eventos);
             return;
         }
-        OfertaViva contraparte = e.livro.melhor(a.lado().oposto());
-        boolean interrompidaPorLimite = contraparte != null && aceitavel(a.lado(), contraparte.preco, limites);
-        if (interrompidaPorLimite) {
-            eventos.add(new Evento.OrdemEncerrada(a.ordem(), a.ticker(), MotivoEncerramento.LIMITE_NEGOCIOS, executada,
-                    restante));
+        if (contexto.negocios == MAX_NEGOCIOS_POR_COMANDO) {
+            encerrar(a, e, MotivoEncerramento.LIMITE_NEGOCIOS, executada, eventos);
             return;
         }
         if (a.tipo() == TipoOrdem.LIMIT && a.validade() == Validade.DIA) {
-            e.livro.repousar(new OfertaViva(a.ordem(), a.conta(), a.lado(), a.precoLimite(), e.chegada, a.quantidade(),
+            e.livro.repousar(new OfertaViva(a.ordem(), a.conta(), a.lado(), a.precoLimite(), sequencia, a.quantidade(),
                     executada));
             eventos.add(new Evento.OfertaNoLivro(a.ordem(), a.ticker(), a.lado(), a.precoLimite(), restante));
             return;
         }
+        OfertaViva contraparte = e.livro.melhor(a.lado().oposto());
         MotivoEncerramento motivo = a.tipo() == TipoOrdem.LIMIT || contraparte != null ? limites.motivoCorte()
                 : MotivoEncerramento.SEM_LIQUIDEZ;
-        eventos.add(new Evento.OrdemEncerrada(a.ordem(), a.ticker(), motivo, executada, restante));
+        encerrar(a, e, motivo, executada, eventos);
     }
 }

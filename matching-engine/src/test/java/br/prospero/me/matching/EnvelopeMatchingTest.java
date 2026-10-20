@@ -2,10 +2,14 @@ package br.prospero.me.matching;
 
 import br.prospero.me.matching.helper.EnvelopeMatching;
 import br.prospero.me.matching.helper.SessaoMatching;
+import br.prospero.me.livro.dominio.Evento;
+import br.prospero.me.livro.dominio.TipoOrdem;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,6 +36,30 @@ class EnvelopeMatchingTest {
                 original.replace("\"versao\":1", "\"versao\":1,\"versao\":1"),
                 original.replace("10.00", "10.0"), original + " {}"}) {
             assertThrows(IllegalArgumentException.class, () -> EnvelopeMatching.comando(invalido.getBytes(StandardCharsets.UTF_8), "ALFA3"));
+        }
+    }
+
+    @Test
+    void tiposNovosDoNucleoNaoAmpliamAdmissaoKafka() {
+        String original = new String(comando(UUID.randomUUID(), UUID.randomUUID(), "VENDA", "10.00", "2026-10-18"), StandardCharsets.UTF_8);
+        // Formato Market válido torna a rejeição dependente da allowlist, não de campo/validade incompatível.
+        for (String tipo : new String[]{"STOP", "STOP_LIMIT"}) {
+            String corpo = original.replace("\"tipo\":\"LIMIT\"", "\"tipo\":\"" + tipo + "\"")
+                    .replace("\"validade\":\"DIA\"", "\"validade\":\"IOC\"")
+                    .replace("\"precoLimite\":\"10.00\"", "\"precoLimite\":null");
+            assertThrows(IllegalArgumentException.class,
+                    () -> EnvelopeMatching.comando(corpo.getBytes(StandardCharsets.UTF_8), "ALFA3"), tipo);
+        }
+    }
+
+    @Test
+    void eventosDeStopDoNucleoNaoPossuemSerializacaoKafkaV1() {
+        UUID ordem = UUID.randomUUID();
+        var comando = EnvelopeMatching.comando(comando(ordem, UUID.randomUUID(), "VENDA", "10.00", "2026-10-18"), "ALFA3");
+        for (Evento evento : new Evento[]{new Evento.StopPendente(ordem, "ALFA3", new BigDecimal("10.00")),
+                new Evento.StopAcionado(ordem, "ALFA3", TipoOrdem.MARKET, 2)}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> EnvelopeMatching.evento(comando, evento, 0, Map.of(ordem, comando)));
         }
     }
 
