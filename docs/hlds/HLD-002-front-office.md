@@ -18,7 +18,7 @@ Organização por funcionalidade sob `br.prospero.fo`: REST → Actor; Actor coo
 
 `GET /api/v1/sistema` retorna identidade técnica. Porta externa `8081` em loopback → `8080` no container; `/q/health/ready`, `/q/openapi`, `/q/swagger-ui/` e `/q/metrics` são técnicos. Configuração usa variáveis locais fora do Git. Banco/container exclusivo `postgres-front-office`, banco `prospero_fo`, rede de dados própria. Não acessar tabelas de outro serviço.
 
-`src/main/resources/db/migration/V1__identificar_schema.sql` só identifica o schema. Flyway mantém histórico, sem tabelas financeiras. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Processo pode iniciar sem outro MS Java, mas depende de sua infraestrutura para ficar pronto; não confundir autonomia com conclusão de negócio sem participantes.
+`src/main/resources/db/migration/V1__identificar_schema.sql` identifica o schema; as migrações seguintes acrescentam mercado, ordens, outbox e projeção de matching descritos abaixo. Flyway mantém o histórico das versões aplicadas. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Processo pode iniciar sem outro MS Java, mas depende de sua infraestrutura para ficar pronto; não confundir autonomia com conclusão de negócio sem participantes.
 
 ## Fluxo futuro e dados
 
@@ -32,7 +32,7 @@ RF05b: `AVALIAR_RISCO` versão2 inclui sessão e validade. `matching.eventos.v1`
 
 Persistir SAGA, timeout e próximos passos; definir janela de publicação, reentrega e reinício sem duplicar submissão. Antes de compensar, conhecer resultado efetivo: negócio executado exige recuperação para frente, sem desfazê-lo. Definir concorrência de cancelamento/execução/timeout e idempotência dos comandos.
 
-Pendentes: transições após `RECEBIDA` (RF03–RF05); expiração efetiva da validade Dia (sessão já definida no ADR-010); ativação de OCO e dimensionamento após parciais; correlação ordem/outbox ausente na tabela histórica; bootstrap de projeção por eventos, sem acessar bancos alheios. Contas sintéticas e escopos definidos no ADR-010; identidade real permanece futura.
+Pendentes: expiração integrada da validade Dia (sessão já definida no ADR-010, fechamento interno do ME na RF05c.1a); ativação de OCO e dimensionamento após parciais; correlação ordem/outbox ausente na tabela histórica; bootstrap de projeção de mercado por eventos, sem acessar bancos alheios. As transições de risco e execução estão descritas acima e a espera/ativação de stops na RF05c.2 abaixo. Contas sintéticas e escopos definidos no ADR-010; identidade real permanece futura.
 
 Aceite futuro: duplicação, reentrega, indisponibilidade e consulta de estados consistentes, WebSocket/reconexão e planilha com polling limitado. [Roadmap FO](../../front-office/ROADMAP.md); RNFs especialmente RNF05–RNF08. Não há meta própria nova de latência.
 
@@ -91,3 +91,7 @@ Fundação: saúde de banco/Kafka, métricas técnicas, logs com correlação e 
 ## Decisões e rastreabilidade
 
 [ADR-001](../adrs/ADR-001-arquitetura-backend.md) define fronteiras/backend; [ADR-002](../adrs/ADR-002-padroes-dominio.md), padrões; [ADR-003](../adrs/ADR-003-contratos-api.md), contratos; [ADR-004](../adrs/ADR-004-testes-planilha.md), testes; [ADR-005](../adrs/ADR-005-versoes-fundacao.md), stack. [PRD-001](../prds/PRD-001-simulador-prospero.md) é a fonte dos requisitos. Este HLD detalha o [ecossistema](HLD-001-arquitetura-prospero.md), sem alterar decisões.
+
+## Projeção de stops — RF05c.2
+
+`V7__estado_aguardando_gatilho.sql` amplia a constraint de `ordem.estado` com `AGUARDANDO_GATILHO`, sem transformar ordens antigas. Aceite de novo stop põe a ordem em espera; `STOP_PENDENTE` confirma o gatilho original; `STOP_ACIONADO` valida conversão e abre execução (`ABERTA`). Tipo/validade públicos permanecem Stop/Stop Limit DIA. Negócio/oferta antes de acionamento é incoerente; resultado de risco tardio continua alterando somente `RECEBIDA`. Consulta/boleta distinguem espera e execução sem nova API. Market/Limit v1 continuam compatíveis. Eventos v2 validam `causacao` raiz e `correlacao` alvo/agressor, conforme [ADR-013](../adrs/ADR-013-matching-execucao.md#contrato-da-integração-de-stops--rf05c2-2026-10-20). OCO e fechamento integrado permanecem futuros; migração e serviços exigem atualização coordenada antes da emissão v2.

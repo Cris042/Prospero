@@ -192,7 +192,8 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
         e.grupoOco = o.grupoOco();
         e.papelOco = o.papelOco() == null ? null : o.papelOco().name();
         e.grupoEnvio = o.grupoEnvio();
-        if (o.grupoOco() == null && (o.tipo() == TipoOrdem.LIMIT || o.tipo() == TipoOrdem.MARKET)) {
+        if (o.grupoOco() == null && (o.tipo() == TipoOrdem.LIMIT || o.tipo() == TipoOrdem.MARKET
+                || o.tipo() == TipoOrdem.STOP || o.tipo() == TipoOrdem.STOP_LIMIT)) {
             e.admissaoMatching = UUID.nameUUIDFromBytes(("admissao:" + o.grupoEnvio())
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }

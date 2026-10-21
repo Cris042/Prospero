@@ -174,12 +174,12 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
         nativa("""
                 UPDATE reserva SET ordem=:o, admissao=:a, tipo=:t, validade=:v, data_sessao=:s,
                 quantidade_inicial=:q, quantidade_restante=:q, preco_limite=:l, preco_maximo=:m,
-                valor_restante=:r WHERE intencao=:i
+                valor_restante=:r, preco_gatilho=:g WHERE intencao=:i
                 """).setParameter("o", p.id()).setParameter("a", br.prospero.mo.risco.helper.EnvelopeAdmissao.id(c.intencao())).setParameter("t", p.tipo().name())
                 .setParameter("v", p.validade().name()).setParameter("s", c.dataSessao())
                 .setParameter("q", p.quantidade()).setParameter("l", p.precoLimite(), BigDecimal.class)
                 .setParameter("m", d.valorReservado() == null ? null : d.valorReservado().divide(BigDecimal.valueOf(p.quantidade())), BigDecimal.class)
-                .setParameter("r", d.valorReservado(), BigDecimal.class).setParameter("i", c.intencao()).executeUpdate();
+                .setParameter("r", d.valorReservado(), BigDecimal.class).setParameter("g", p.precoGatilho(), BigDecimal.class).setParameter("i", c.intencao()).executeUpdate();
     }
 
     /** Nulos tipados: sem o tipo, o PostgreSQL recebe o parâmetro nulo como bytea. */

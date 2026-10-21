@@ -61,6 +61,18 @@ describe('Boleta', () => {
     ).toBe('Rejeitada (saldo insuficiente)');
   });
 
+  it('identifica stop aguardando gatilho e rejeição pelo teto de pendentes', async () => {
+    const boleta = TestBed.createComponent(Boleta).componentInstance;
+    expect(boleta.estadoRegistro([{ ...ORDEM, tipo: 'STOP', estado: 'AGUARDANDO_GATILHO' }])).toBe(
+      'Aguardando gatilho',
+    );
+    expect(
+      boleta.estadoRegistro([
+        { ...ORDEM, tipo: 'STOP', estado: 'REJEITADA', motivoRejeicao: 'LIMITE_STOPS_PENDENTES' },
+      ]),
+    ).toContain('limite');
+  });
+
   it('oferece só as validades da matriz e os preços exigidos pelo tipo', async () => {
     const fixture = TestBed.createComponent(Boleta);
     await fixture.whenStable();

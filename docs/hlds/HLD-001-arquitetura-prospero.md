@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho baseado no [PRD-001](../prds/PRD-001-simulador-prosper
 
 ## Objetivo técnico e estado atual
 
-Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam mercado, ordens/validação e SAGA de risco/reserva FO ↔ MO. RF05a implementou o núcleo puro do livro; RF05b conecta MO → ME → MO/FO com publicação recuperável, consumo/liberação e progresso das ordens, em validação. Posições, liquidação e WebSocket permanecem planejados. O roadmap registra PRs e evidências.
+Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam mercado, ordens/validação e SAGA de risco/reserva FO ↔ MO. RF05a implementou o núcleo puro do livro; RF05b conecta MO → ME → MO/FO com publicação recuperável, consumo/liberação e progresso das ordens, em validação. RF05c.2 integra Stop/Stop Limit simples nesse fluxo, com espera pelo gatilho e acionamento persistido antes do consumo. OCO, fechamento integrado, posições, liquidação e WebSocket permanecem planejados. O roadmap registra PRs e evidências.
 
 A P05 adicionou a conversão decimal técnica pura no MO, integrada pelo PR #3. Validação financeira, risco e reservas vieram depois, nas RF03–RF04 (ADR-011 e ADR-012).
 

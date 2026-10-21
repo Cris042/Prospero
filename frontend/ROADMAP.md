@@ -4,7 +4,7 @@
 
 Apresentar dados e operações do investidor, consumindo APIs versionadas. O projeto também hospeda o runner de planilhas, sem transformá-lo em funcionalidade de importação pela interface. Este documento detalha a participação nas tarefas do [roadmap global](../docs/roadmap.md).
 
-A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3, TypeScript estrito, painel responsivo, consulta real de identidade/readiness dos quatro serviços, estados de falha independentes e container Nginx. RF01 acrescentou a consulta de ativos e livro; RF02 a boleta de registro de ordens (simples e OCO) com lista da conta demo. Execução, reservas e posições continuam não implementadas.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3, TypeScript estrito, painel responsivo, consulta real de identidade/readiness dos quatro serviços, estados de falha independentes e container Nginx. RF01 acrescentou a consulta de ativos e livro; RF02 a boleta de registro de ordens (simples e OCO) com lista da conta demo. RF03/RF04 exibem recusas de validação/risco e reserva; RF05 acompanha execução e, na RF05c.2, espera pelo gatilho de stops. Evidências e PRs no roadmap global; OCO executável, posições e liquidação permanecem pendentes.
 
 ## Entregas
 
@@ -14,8 +14,8 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Angular 22.2.3,
 | UI01 | P03 | Runner CLI `.xlsx`, exemplos e relatório via API | Concluída — PR #9 integrado em 2026-10-17; 49 testes runner + exemplo real validados |
 | UI02 | RF01 | Lista dos cinco ativos, cotações e profundidade | Concluída — PR #17 integrado |
 | UI03 | RF02 | Boleta, tipos/validades e acompanhamento de submissão | Concluída — PR #19 integrado |
-| UI04 | RF03, RF04 | Exibir validações, rejeições, reservas e poder de compra | RF03 em revisão (recusas com faixa do túnel na boleta); reservas na RF04 |
-| UI05 | RF05, RF06 | Livro, parciais e atualizações de mercado | Planejada |
+| UI04 | RF03, RF04 | Exibir validações, rejeições, reservas e poder de compra | RF03/RF04 integradas (recusas e estado reservado); carteira do MO disponível por API, sem tela de poder de compra |
+| UI05 | RF05, RF06 | Livro, parciais e atualizações de mercado | Progresso de ordens e espera pelo gatilho na RF05 em validação; mercado por eventos na RF06 |
 | UI06 | RF07, RF08 | Posições, resultados, histórico e liquidação | Planejada |
 | UI07 | RF09 | WebSocket, reconexão e trajetória da ordem | Planejada |
 | UI08 | RF10 | Cancelamento e confirmação do saldo elegível | Planejada |

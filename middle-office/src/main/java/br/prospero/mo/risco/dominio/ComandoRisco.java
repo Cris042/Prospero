@@ -18,7 +18,9 @@ public record ComandoRisco(UUID evento, UUID intencao, String conta, String tick
 
     public boolean admissivel() {
         return dataSessao != null && pernas.size() == 1 && pernas.getFirst().validade() != null
-                && (pernas.getFirst().tipo() == TipoOrdem.LIMIT || pernas.getFirst().tipo() == TipoOrdem.MARKET);
+                && (pernas.getFirst().tipo() == TipoOrdem.LIMIT || pernas.getFirst().tipo() == TipoOrdem.MARKET
+                    || (pernas.getFirst().tipo() == TipoOrdem.STOP || pernas.getFirst().tipo() == TipoOrdem.STOP_LIMIT)
+                        && pernas.getFirst().validade() == Validade.DIA && pernas.getFirst().precoGatilho() != null);
     }
 
     public ComandoRisco {

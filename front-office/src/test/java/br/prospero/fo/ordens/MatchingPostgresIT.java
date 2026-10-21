@@ -67,6 +67,7 @@ class MatchingPostgresIT {
 
     @Inject RepositorioMatchingJpa repositorio;
     @Inject EntityManager em;
+    @Inject br.prospero.fo.ordens.jpa.RepositorioOrdensJpa ordens;
 
     private UUID criar(String conta, String lado) {
         UUID id = UUID.randomUUID();
@@ -128,4 +129,101 @@ class MatchingPostgresIT {
         assertEquals("RECEBIDA", estado(venda)[0]);
         assertTrue(repositorio.aplicar(correto), "falha não consome identidade do evento");
     }
+    private UUID criarStop(String tipo) {
+        UUID id=criar("CONTA-002","COMPRA");
+        QuarkusTransaction.requiringNew().run(()->em.createNativeQuery("UPDATE ordem SET tipo=:t,validade='DIA',preco_gatilho=10,preco_limite=:p WHERE id=:i")
+                .unwrap(org.hibernate.query.NativeQuery.class).setParameter("t",tipo)
+                .setParameter("p",tipo.equals("STOP")?null:new BigDecimal("10.00"),BigDecimal.class).setParameter("i",id).executeUpdate());
+        return id;
+    }
+    private UUID admissao(UUID intencao) {
+        return UUID.nameUUIDFromBytes(("admissao:"+intencao).getBytes(StandardCharsets.UTF_8));
+    }
+    private EventoMatching eventoStop(UUID ordem,UUID raiz,String tipo,String campos) throws Exception {
+        String s="""
+                {"id":"%s","tipo":"%s","versao":2,"origem":"matching-engine","correlacao":"%s","causacao":"%s",
+                "ocorridoEm":"2026-10-18T12:00:00Z","ticker":"ALFA3","dataSessao":"2026-10-18","traceparent":null,
+                "dados":{"ordem":"%s","intencao":"%s","conta":"CONTA-002",%s}}
+                """.formatted(UUID.randomUUID(),tipo,admissao(ordem),admissao(raiz),ordem,ordem,campos);
+        return EnvelopeMatching.evento(s.getBytes(StandardCharsets.UTF_8),"ALFA3");
+    }
+    @Test void stopAtualizaEstadoPersistidoAntesDoRiscoEDeduplicaCascata() throws Exception {
+        UUID compra=criarStop("STOP"),venda=criar("CONTA-003","VENDA");
+        repositorio.aplicar(eventoStop(compra,compra,"ORDEM_ACEITA","\"sequencia\":1"));
+        assertEquals("AGUARDANDO_GATILHO",estado(compra)[0]);
+        var pendente=eventoStop(compra,compra,"STOP_PENDENTE","\"precoGatilho\":\"10.00\"");
+        assertTrue(repositorio.aplicar(pendente)); assertFalse(repositorio.aplicar(pendente));
+        repositorio.aplicar(eventoStop(compra,venda,"STOP_ACIONADO","\"tipoExecutavel\":\"MARKET\",\"sequencia\":3"));
+        assertEquals("ABERTA",estado(compra)[0]);
+        var original=negocio(compra,venda,"CONTA-003","201",UUID.randomUUID());
+        var n=new EventoMatching(original.id(),original.correlacao(),original.ticker(),original.sessao(),original.assinatura(),original.detalhe(),admissao(venda));
+        assertTrue(repositorio.aplicar(n)); assertFalse(repositorio.aplicar(n));
+        assertEquals("PARCIALMENTE_EXECUTADA",estado(compra)[0]);
+        var terminal=eventoStop(compra,venda,"ORDEM_ENCERRADA","\"motivo\":\"SALDO_CANCELADO_IOC\",\"executada\":4,\"cancelada\":6");
+        assertTrue(repositorio.aplicar(terminal)); assertFalse(repositorio.aplicar(terminal));
+        assertEquals("CANCELADA",estado(compra)[0]); assertEquals(4,((Number)estado(compra)[1]).longValue());
+        repositorio.aplicar(eventoStop(compra,compra,"ORDEM_ACEITA","\"sequencia\":1"));
+        assertEquals("CANCELADA",estado(compra)[0]);
+        assertEquals(0,QuarkusTransaction.requiringNew().call(()->((BigDecimal)em.createNativeQuery("SELECT preco_gatilho FROM ordem WHERE id=:i").setParameter("i",compra).getSingleResult()).compareTo(new BigDecimal("10.00"))));
+    }
+    @Test void stopLimitPassivaAceitaV2EValidaCausacaoComMesmoAtivoESessao() throws Exception {
+        UUID compra=criarStop("STOP_LIMIT"),venda=criar("CONTA-003","VENDA");
+        var acionamento=eventoStop(compra,venda,"STOP_ACIONADO","\"tipoExecutavel\":\"LIMIT\",\"sequencia\":3");
+        for(String update:new String[]{"ticker='BETA3'","data_sessao='2026-10-19'"}) {
+            QuarkusTransaction.requiringNew().run(()->em.createNativeQuery("UPDATE ordem SET "+update+" WHERE id=:i").setParameter("i",venda).executeUpdate());
+            assertThrows(MatchingIncoerenteException.class,()->repositorio.aplicar(acionamento));
+            QuarkusTransaction.requiringNew().run(()->em.createNativeQuery("UPDATE ordem SET ticker='ALFA3',data_sessao='2026-10-18' WHERE id=:i").setParameter("i",venda).executeUpdate());
+        }
+        assertTrue(repositorio.aplicar(acionamento),"falhas de causacao nao gravam dedup");
+        repositorio.aplicar(eventoStop(compra,venda,"OFERTA_NO_LIVRO","\"lado\":\"COMPRA\",\"preco\":\"10.00\",\"restante\":10"));
+        var original=negocio(compra,venda,"CONTA-003","202",UUID.randomUUID());
+        var detalhe=(EventoMatching.Negocio)original.detalhe();
+        var passiva=new EventoMatching.Negocio(detalhe.id(),detalhe.preco(),detalhe.quantidade(),detalhe.compra(),detalhe.venda(),LadoOrdem.VENDA);
+        var e=new EventoMatching(original.id(),admissao(venda),original.ticker(),original.sessao(),"hash-passiva",passiva,admissao(venda));
+        assertTrue(repositorio.aplicar(e)); assertEquals("PARCIALMENTE_EXECUTADA",estado(compra)[0]);
+    }
+
+    @Test void migracaoAditivaPreservaLegadoReservaEDeduplicacaoSemAdmitir() throws Exception {
+        String proprio="upgrade_stops_"+UUID.randomUUID().toString().replace("-", "");
+        UUID id=UUID.randomUUID();
+        var configuracao=org.flywaydb.core.Flyway.configure().dataSource(System.getenv("MATCHING_TEST_DB_URL"),System.getenv("MATCHING_TEST_DB_USER"),System.getenv("MATCHING_TEST_DB_PASSWORD"))
+                .schemas(proprio).defaultSchema(proprio).locations("classpath:db/migration");
+        try {
+            configuracao.target("6").load().migrate();
+            try(var c=conexao();var s=c.createStatement()) {
+                c.setSchema(proprio);
+                s.execute("INSERT INTO ordem(id,conta,ticker,lado,tipo,validade,quantidade,preco_gatilho,grupo_envio,estado,data_sessao,recebida_em) VALUES('"+id+"','CONTA-002','ALFA3','COMPRA','STOP','DIA',2,10,'"+id+"','RESERVADA','2026-10-18',now())");
+                s.execute("INSERT INTO matching_evento(id,assinatura) VALUES('"+id+"','"+"a".repeat(64)+"')");
+
+            }
+            configuracao.target("latest").load().migrate();
+            try(var c=conexao();var s=c.createStatement()) {
+                c.setSchema(proprio);
+                try(var r=s.executeQuery("SELECT estado,preco_gatilho,admissao_matching,quantidade_executada,quantidade_cancelada FROM ordem WHERE id='"+id+"'")) {
+                    assertTrue(r.next()); assertEquals("RESERVADA",r.getString(1)); assertEquals(0,new BigDecimal("10").compareTo(r.getBigDecimal(2)));
+                    assertNull(r.getObject(3)); assertEquals(0,r.getLong(4)); assertEquals(0,r.getLong(5));
+                }
+                assertEquals(1,s.executeUpdate("UPDATE ordem SET estado='AGUARDANDO_GATILHO' WHERE id='"+id+"'"));
+
+                try(var r=s.executeQuery("SELECT count(*) FROM matching_evento WHERE id='"+id+"' AND assinatura='"+"a".repeat(64)+"'")){ assertTrue(r.next()); assertEquals(1,r.getInt(1)); }
+            }
+        } finally { try(var c=conexao();var s=c.createStatement()){ s.execute("DROP SCHEMA IF EXISTS "+proprio+" CASCADE"); } }
+    }
+
+    @Test void registroRealStopPersisteAdmissaoEEstadoNaoRegridePorRiscoTardio() throws Exception {
+        UUID id=UUID.randomUUID(); var agora=java.time.Instant.parse("2026-10-18T12:00:00Z");
+        var ordem=new br.prospero.fo.ordens.dominio.Ordem(id,"CONTA-002","ALFA3",LadoOrdem.COMPRA,
+                br.prospero.fo.ordens.dominio.TipoOrdem.STOP,br.prospero.fo.ordens.dominio.Validade.DIA,2,null,new BigDecimal("10.00"),null,null,id,
+                br.prospero.fo.ordens.dominio.EstadoOrdem.RECEBIDA,LocalDate.of(2026,10,18),agora,null);
+        var mensagem=new br.prospero.fo.comum.dominio.MensagemSaida(UUID.randomUUID(),"risco.comandos.v1","CONTA-002","AVALIAR_RISCO","{}",null,agora);
+        ordens.registrar("CONTA-002","it-stop-"+id,"b".repeat(64),agora,java.util.List.of(ordem),mensagem);
+        var registro=QuarkusTransaction.requiringNew().call(()->em.createNativeQuery("SELECT admissao_matching FROM ordem WHERE id=:i").setParameter("i",id).getSingleResult());
+        assertEquals(admissao(id),registro,"caminho real persiste metadado que fixtures manuais nao comprovariam");
+        repositorio.aplicar(eventoStop(id,id,"ORDEM_ACEITA","\"sequencia\":1"));
+        assertEquals("AGUARDANDO_GATILHO",estado(id)[0]);
+        var resultado=new br.prospero.fo.ordens.dominio.ResultadoRisco(UUID.randomUUID(),id,"CONTA-002",
+                br.prospero.fo.ordens.dominio.EstadoOrdem.RESERVADA,null);
+        assertEquals(0,ordens.aplicarRisco(resultado)); assertEquals("AGUARDANDO_GATILHO",estado(id)[0]);
+    }
+
 }

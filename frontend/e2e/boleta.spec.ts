@@ -166,3 +166,86 @@ test('proxy recusa escrita de origem externa, método indevido e Host externo', 
   expect((await request.delete(url)).status()).toBe(403);
   expect((await request.get(url, { headers: { Host: 'evil.example' } })).status()).toBe(421);
 });
+
+test('mostra Stop aguardando gatilho e execução preservando tipo e validade', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/');
+  const enviar = async (
+    lado: string,
+    quantidade: number,
+    validade: string,
+    precoLimite = '21.80',
+  ) => {
+    const r = await page.request.post('/servicos/front-office/api/v1/ordens', {
+      headers: { Origin: new URL(page.url()).origin, 'X-Idempotency-Key': crypto.randomUUID() },
+      data: { ticker: 'BETA3', lado, tipo: 'LIMIT', quantidade, validade, precoLimite },
+    });
+    expect(r.status()).toBe(202);
+    return r.json();
+  };
+  const esperarEstado = async (id: string, estado: string) => {
+    await expect
+      .poll(
+        async () => {
+          const r = await page.request.get(`/servicos/front-office/api/v1/ordens/${id}`);
+          expect(r.status()).toBe(200);
+          return (await r.json()).estado;
+        },
+        { timeout: 15000 },
+      )
+      .toBe(estado);
+  };
+  // Estabelece último negócio abaixo do gatilho também em execuções repetidas.
+  const seed = await enviar('VENDA', 1, 'DIA', '20.00');
+  await esperarEstado(seed.id, 'ABERTA');
+  const compraSeed = await enviar('COMPRA', 1, 'IOC', '20.00');
+  await esperarEstado(compraSeed.id, 'EXECUTADA');
+  const boleta = page.getByRole('form', { name: 'Ordem simples' });
+  await boleta.getByLabel('Ativo').selectOption('BETA3');
+  await boleta.getByLabel('Tipo').selectOption('STOP');
+  await boleta.getByLabel('Quantidade').fill('2');
+  await boleta.getByLabel('Preço de disparo (R$)').fill('21.80');
+  const resposta = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
+  );
+  await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  const registrada = await (await resposta).json();
+  const consultar = async () => {
+    const r = await page.request.get(`/servicos/front-office/api/v1/ordens/${registrada.id}`);
+    expect(r.status()).toBe(200);
+    return r.json();
+  };
+  await expect
+    .poll(async () => (await consultar()).estado, { timeout: 15000 })
+    .toBe('AGUARDANDO_GATILHO');
+  await page.getByRole('button', { name: 'Atualizar ordens' }).click();
+  const linha = page
+    .getByRole('row')
+    .filter({ hasText: 'BETA3' })
+    .filter({ hasText: 'Stop' })
+    .first();
+  await expect(linha).toContainText('Aguardando gatilho');
+  await page.screenshot({ path: testInfo.outputPath('stop-pendente.png'), fullPage: true });
+
+  const oferta = await enviar('VENDA', 3, 'DIA');
+  await expect
+    .poll(
+      async () => {
+        const r = await page.request.get(`/servicos/front-office/api/v1/ordens/${oferta.id}`);
+        return (await r.json()).estado;
+      },
+      { timeout: 15000 },
+    )
+    .toBe('ABERTA');
+  await enviar('COMPRA', 1, 'IOC');
+  await expect.poll(async () => (await consultar()).estado, { timeout: 15000 }).toBe('EXECUTADA');
+  expect(await consultar()).toMatchObject({
+    tipo: 'STOP',
+    validade: 'DIA',
+    quantidadeExecutada: 2,
+  });
+  await page.getByRole('button', { name: 'Atualizar ordens' }).click();
+  await expect(linha).toContainText('Executada');
+  await page.screenshot({ path: testInfo.outputPath('stop-executada.png'), fullPage: true });
+});

@@ -25,7 +25,7 @@ public class RepositorioMatchingJpa {
 
     public record Reserva(UUID intencao, UUID ordem, String conta, String ticker, String recurso, String tipo,
                           String validade, LocalDate sessao, long inicial, long restante,
-                          BigDecimal limite, BigDecimal teto, BigDecimal valor, String estado) { }
+                          BigDecimal limite, BigDecimal teto, BigDecimal valor, String estado, BigDecimal gatilho, boolean acionada) { }
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void aplicar(JsonNode evento) {
@@ -39,6 +39,10 @@ public class RepositorioMatchingJpa {
         exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
                 .setParameter("a",uuid(evento,"correlacao")).setParameter("t",texto(evento,"ticker"))
                 .setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList().isEmpty(),"correlacao");
+        boolean v2 = evento.get("versao").intValue() == 2;
+        if (v2) exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
+                .setParameter("a",uuid(evento,"causacao")).setParameter("t",texto(evento,"ticker"))
+                .setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList().isEmpty(),"causacao");
         if (negocio) {
             // A assinatura do negócio ignora envelope/id; nomes e valores dos dados são o contrato financeiro.
             String assinaturaNegocio=assinatura(d);
@@ -47,9 +51,11 @@ public class RepositorioMatchingJpa {
             if (!duplicado("matching_negocio","negocio",texto(d,"negocio"),assinaturaNegocio)) {
                 Reserva compra=reserva(uuid(d,"intencaoCompra"));
                 Reserva venda=reserva(uuid(d,"intencaoVenda"));
+                validarVersao(evento,compra,venda);
                 exigir(!compra.ordem().equals(venda.ordem()),"ordens distintas");
                 validar(compra,evento,d,"Compra"); validar(venda,evento,d,"Venda");
                 long q=inteiro(d,"quantidade",1,1000000); BigDecimal p=preco(d,"preco");
+                exigir((!stop(compra) || v2 && compra.acionada()) && (!stop(venda) || v2 && venda.acionada()),"stop nao acionado");
                 exigir(q<=compra.restante() && q<=venda.restante(),"restante");
                 exigir(p.compareTo(compra.teto())<=0,"teto compra");
                 exigir(compra.limite()==null || p.compareTo(compra.limite())<=0,"limite compra");
@@ -60,22 +66,39 @@ public class RepositorioMatchingJpa {
             }
         } else {
             Reserva r=reserva(uuid(d,"intencao"));
+            validarVersao(evento,r);
             validar(r,evento,d,"");
+            exigir(!stop(r) || v2,"versao stop");
+            if (v2) exigir(uuid(evento,"correlacao").equals(br.prospero.mo.risco.helper.EnvelopeAdmissao.id(r.intencao())),"alvo correlacao");
             switch(texto(evento,"tipo")) {
-                case "ORDEM_REJEITADA" -> { exigir(uuid(evento,"correlacao").equals(br.prospero.mo.risco.helper.EnvelopeAdmissao.id(r.intencao())),"rejeicao correlacao"); exigir(r.inicial()==r.restante(),"rejeicao executada"); encerrar(r); }
+                case "STOP_PENDENTE" -> {
+                    exigir(stop(r) && !r.acionada() && r.estado().equals("ATIVA"),"stop pendente");
+                    exigir(r.gatilho()!=null && r.gatilho().compareTo(preco(d,"precoGatilho"))==0,"gatilho");
+                }
+                case "STOP_ACIONADO" -> {
+                    exigir(stop(r) && !r.acionada() && r.estado().equals("ATIVA") && r.gatilho()!=null,"stop acionamento");
+                    exigir(texto(d,"tipoExecutavel").equals(r.tipo().equals("STOP")?"MARKET":"LIMIT"),"tipo executavel");
+                    em().createNativeQuery("UPDATE reserva SET stop_acionado=TRUE WHERE intencao=:i")
+                            .setParameter("i",r.intencao()).executeUpdate();
+                }
+                case "ORDEM_REJEITADA" -> { exigir(uuid(evento,"correlacao").equals(br.prospero.mo.risco.helper.EnvelopeAdmissao.id(r.intencao())),"rejeicao correlacao"); exigir(r.inicial()==r.restante(),"rejeicao executada"); exigir(!stop(r) || !r.acionada(),"rejeicao apos acionamento");
+                    exigir(!texto(d,"motivo").equals("LIMITE_STOPS_PENDENTES") || stop(r) && !r.acionada(),"rejeicao stop"); encerrar(r); }
                 case "ORDEM_ENCERRADA" -> {
                     exigir(inteiro(d,"executada",0,1000000)==r.inicial()-r.restante(),"executada");
                     exigir(inteiro(d,"cancelada",0,1000000)==r.restante(),"cancelada");
                     String motivo=texto(d,"motivo");
+                    boolean excesso=motivo.equals("LIMITE_CASCATA");
+                    exigir(!excesso || stop(r) && !r.acionada() && r.inicial()==r.restante(),"cascata");
+                    exigir(!stop(r) || excesso || r.acionada(),"terminal stop nao acionado");
                     exigir(!motivo.equals("FOK_SEM_LIQUIDEZ") || r.validade().equals("FOK") && r.inicial()==r.restante(),"terminal FOK");
-                    exigir(!motivo.equals("SALDO_CANCELADO_IOC") || r.validade().equals("IOC"),"terminal IOC");
+                    exigir(!motivo.equals("SALDO_CANCELADO_IOC") || (r.validade().equals("IOC") || r.tipo().equals("STOP") && r.acionada()),"terminal IOC");
                     exigir(texto(d,"motivo").equals("EXECUTADA") == (r.restante()==0),"execucao terminal");
                     encerrar(r);
                 }
                 case "OFERTA_NO_LIVRO" -> {
                     exigir(r.estado().equals("ATIVA") || r.estado().equals("PARCIAL"),"reserva encerrada");
                     exigir(inteiro(d,"restante",1,1000000)==r.restante(),"oferta restante");
-                    exigir(r.tipo().equals("LIMIT") && r.validade().equals("DIA"),"oferta tipo");
+                    exigir((r.tipo().equals("LIMIT") || r.tipo().equals("STOP_LIMIT") && r.acionada()) && r.validade().equals("DIA"),"oferta tipo");
                     exigir(r.limite()!=null && r.limite().compareTo(preco(d,"preco"))==0,"oferta preco");
                     exigir(texto(d,"lado").equals(r.recurso().equals("CAIXA")?"COMPRA":"VENDA"),"oferta lado");
                 }
@@ -87,6 +110,18 @@ public class RepositorioMatchingJpa {
         }
         inserir("matching_evento","id",uuid(evento,"id"),hash);
     }
+
+    private void validarVersao(JsonNode evento, Reserva... alvos) {
+        boolean v2 = evento.get("versao").intValue() == 2;
+        List<?> tipos = em().createNativeQuery("SELECT tipo FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
+                .setParameter("a",uuid(evento,v2?"causacao":"correlacao"))
+                .setParameter("t",texto(evento,"ticker")).setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList();
+        boolean envolveStop = tipos.stream().anyMatch(t -> "STOP".equals(t) || "STOP_LIMIT".equals(t))
+                || java.util.Arrays.stream(alvos).anyMatch(RepositorioMatchingJpa::stop);
+        exigir(v2 == envolveStop,"versao stop");
+    }
+
+    private static boolean stop(Reserva r) { return r.tipo().equals("STOP") || r.tipo().equals("STOP_LIMIT"); }
 
     private void validar(Reserva r, JsonNode e,JsonNode d,String lado) {
         exigir(r.ordem()!=null && r.ordem().equals(uuid(d,"ordem"+lado)) && r.conta().equals(texto(d,"conta"+lado)),"identidade reserva");
@@ -103,13 +138,13 @@ public class RepositorioMatchingJpa {
     private Reserva reserva(UUID i) {
         List<?> linhas=em().createNativeQuery("""
                 SELECT intencao,ordem,conta,ticker,recurso,tipo,validade,data_sessao,quantidade_inicial,
-                quantidade_restante,preco_limite,preco_maximo,valor_restante,estado FROM reserva WHERE intencao=:i FOR UPDATE
+                quantidade_restante,preco_limite,preco_maximo,valor_restante,estado,preco_gatilho,stop_acionado FROM reserva WHERE intencao=:i FOR UPDATE
                 """).setParameter("i",i).getResultList();
         exigir(linhas.size()==1,"reserva ausente"); Object[] c=(Object[])linhas.getFirst();
         exigir(c[1]!=null && c[7]!=null && c[8]!=null && c[9]!=null,"reserva legada");
         LocalDate data=c[7] instanceof LocalDate l ? l : ((java.sql.Date)c[7]).toLocalDate();
         return new Reserva((UUID)c[0],(UUID)c[1],(String)c[2],(String)c[3],(String)c[4],(String)c[5],(String)c[6],data,
-                ((Number)c[8]).longValue(),((Number)c[9]).longValue(),(BigDecimal)c[10],(BigDecimal)c[11],(BigDecimal)c[12],(String)c[13]);
+                ((Number)c[8]).longValue(),((Number)c[9]).longValue(),(BigDecimal)c[10],(BigDecimal)c[11],(BigDecimal)c[12],(String)c[13],(BigDecimal)c[14],(Boolean)c[15]);
     }
     private boolean duplicado(String tabela,String coluna,Object id,String hash) {
         List<?> existentes=em().createNativeQuery("SELECT assinatura FROM "+tabela+" WHERE "+coluna+"=:i").setParameter("i",id).getResultList();

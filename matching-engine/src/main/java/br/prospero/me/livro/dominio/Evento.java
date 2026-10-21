@@ -13,7 +13,7 @@ public sealed interface Evento {
     record OrdemRejeitada(UUID ordem, String ticker, MotivoRejeicao motivo) implements Evento {
     }
 
-    /** Stop aceito aguardando negócio gatilho; não é oferta nem evento do contrato Kafka v1. */
+    /** Stop aceito aguardando negócio gatilho; não é oferta; integra o contrato Kafka v2. */
     record StopPendente(UUID ordem, String ticker, BigDecimal precoGatilho) implements Evento {
     }
 
