@@ -4,7 +4,8 @@
   <p class="aviso">
     A ordem é <strong>registrada</strong> após conferir formato, tipo, validade, lote, tick e o
     túnel de preço do ativo. Ordens aprovadas pelo risco podem executar após a reserva de recursos.
-    Stop e Stop Limit aguardam o preço de gatilho antes de executar. OCO ainda não executa.
+    Stop e Stop Limit aguardam o preço de gatilho antes de executar. No OCO, cada execução do Take
+    Profit reduz o Stop Loss e o disparo do Stop Loss encerra o Take Profit.
   </p>
 
   <div class="modos" role="group" aria-label="Tipo de envio">
@@ -167,11 +168,17 @@
             <td>{{ rotulo(o.lado) }}</td>
             <td>{{ rotulo(o.tipo) }}{{ o.papelOco ? ' · ' + rotulo(o.papelOco) : '' }}</td>
             <td>{{ rotulo(o.validade) }}</td>
-            <td>{{ o.quantidade }}</td>
+            <td>
+              {{ o.quantidade
+              }}{{ o.quantidadeReduzida ? ' (reduzida em ' + o.quantidadeReduzida + ')' : '' }}
+            </td>
             <td>{{ decimal(o.precoLimite) }}</td>
             <td>{{ decimal(o.precoGatilho) }}</td>
             <td>
-              {{ rotulo(o.estado) }}{{ o.motivoRejeicao ? ' · ' + rotulo(o.motivoRejeicao) : '' }}
+              {{ rotulo(o.estado) }}{{ o.motivoRejeicao ? ' · ' + rotulo(o.motivoRejeicao) : ''
+              }}{{
+                o.motivoEncerramento === 'CANCELADA_OCO' ? ' · ' + rotulo(o.motivoEncerramento) : ''
+              }}
             </td>
           </tr>
         } @empty {

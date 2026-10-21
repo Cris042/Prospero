@@ -73,6 +73,10 @@ export interface Ordem {
     | 'EXECUTADA'
     | 'CANCELADA';
   readonly motivoRejeicao: MotivoRejeicao | null;
+  /** Motivo terminal do matching, por exemplo CANCELADA_OCO na perna irmã (RF05c.3b). */
+  readonly motivoEncerramento?: string | null;
+  /** Quantidade retirada do Stop Loss OCO pela execução do Take Profit. */
+  readonly quantidadeReduzida?: number;
   readonly dataSessao: string;
   readonly recebidaEm: string;
 }

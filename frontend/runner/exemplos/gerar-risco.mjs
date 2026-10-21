@@ -212,19 +212,20 @@ const limit = (ticker, lado, quantidade, precoLimite) => ({
   );
 }
 
-// 4. OCO de compra: uma reserva pelo maior custo (Stop 21,00 → teto 23,10 × 10 = 231,00 > alvo 19,00 × 10).
+// 4. OCO de compra: uma reserva pelo maior custo (Stop 42,00 → teto 46,20 × 10 = 462,00 > alvo 38,00 × 10).
+// RF05c.3b: o par é admitido e fica vivo em DELTA3, ativo em que nenhuma prova posterior negocia.
 {
   const c = 'OcoReservaUnica';
   preparar(c, '1000.00', {}, 'CONTA-003');
   passo(passos, c, 'Enviar', 'ordens-b', 'POST', '/api/v1/ordens-oco', {
     chave: '${cenario}-1',
     corpo: {
-      ticker: 'BETA3',
+      ticker: 'DELTA3',
       lado: 'COMPRA',
       quantidade: 10,
       validade: 'DIA',
-      takeProfit: { precoLimite: '19.00' },
-      stopLoss: { tipo: 'STOP', precoGatilho: '21.00' },
+      takeProfit: { precoLimite: '38.00' },
+      stopLoss: { tipo: 'STOP', precoGatilho: '42.00' },
     },
     status: 202,
     captura: { grupo: '/grupoOco' },
@@ -232,12 +233,12 @@ const limit = (ticker, lado, quantidade, precoLimite) => ({
   passo(passos, c, 'ParReservado', 'ordens-b', 'GET', '/api/v1/ordens-oco/${grupo}', {
     status: 200,
     polling: true,
-    esperado: { '/ordens/0/estado': 'RESERVADA', '/ordens/1/estado': 'RESERVADA' },
+    esperado: { '/ordens/0/estado': 'ABERTA', '/ordens/1/estado': 'AGUARDANDO_GATILHO' },
   });
   carteira(
     c,
     'ReservaUnica',
-    { '/saldoDisponivel': '769.00', '/saldoReservado': '231.00' },
+    { '/saldoDisponivel': '538.00', '/saldoReservado': '462.00' },
     'risco-b',
   );
 }

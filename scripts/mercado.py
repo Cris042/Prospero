@@ -165,7 +165,7 @@ def aguardar_decisao(origem, tok, caminho, prazo=20.0):
 
 def verificar_risco(origem, origem_mo):
     """RF04/RF05b: concorrência acima do saldo, rejeições, Market sem livro e OCO final.
-    Limpa a Limit vencedora por negócio real na mesma conta; OCO permanece reservada até RF05c.
+    Limpa a Limit vencedora por negócio real na mesma conta; o OCO final fica vivo no livro com reserva única.
     Executar após as provas que preparam CONTA-002 e antes das provas sem preparação."""
     conta = "CONTA-002"
     sem_pendencias(origem, conta)
@@ -204,14 +204,21 @@ def verificar_risco(origem, origem_mo):
     oco = enviar({"ticker": "DELTA3", "lado": "VENDA", "quantidade": 5, "validade": "DIA",
                    "takeProfit": {"precoLimite": "42.00"}, "stopLoss": {"tipo": "STOP", "precoGatilho": "38.00"}},
                   "/api/v1/ordens-oco")
-    par = aguardar_decisao(origem, tok, f"/api/v1/ordens-oco/{oco['grupoOco']}")
-    if [o["estado"] for o in par] != ["RESERVADA", "RESERVADA"]:
-        raise SystemExit("Risco: OCO não preservou duas pernas reservadas sem admissão parcial.")
+    # RF05c.3b: o par é admitido inteiro; TP repousa e SL aguarda o gatilho (DELTA3 sem negócio que o acione).
+    limite = time.monotonic() + 20.0
+    while True:
+        par = aguardar_decisao(origem, tok, f"/api/v1/ordens-oco/{oco['grupoOco']}")
+        estados = [o["estado"] for o in par]
+        if estados == ["ABERTA", "AGUARDANDO_GATILHO"]:
+            break
+        if time.monotonic() > limite or "REJEITADA" in estados:
+            raise SystemExit(f"Risco: OCO não admitiu as duas pernas juntas ({estados}).")
+        time.sleep(0.2)
     final = carteira(origem_mo, conta)
     delta = next(c for c in final["custodias"] if c["ticker"] == "DELTA3")
     if final["saldoReservado"] != "0.00" or delta["reservado"] != 5:
         raise SystemExit("Risco: reserva única OCO divergente.")
-    print("Risco: concorrência, rejeições, Market terminal, limpeza real e OCO com reserva única verificados; OCO permanece até RF05c.")
+    print("Risco: concorrência, rejeições, Market terminal, limpeza real e OCO admitido com reserva única verificados.")
 
 
 RAIZ = Path(__file__).resolve().parent.parent

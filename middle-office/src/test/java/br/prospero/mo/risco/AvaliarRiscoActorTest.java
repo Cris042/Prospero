@@ -69,6 +69,43 @@ class AvaliarRiscoActorTest {
     }
 
     @Test
+    void parOcoReservadoEAdmitidoEmV3ComPernasNaOrdemEPrecoMaximoComum() throws Exception {
+        var dia = br.prospero.mo.risco.dominio.Validade.DIA;
+        var tp = new br.prospero.mo.risco.dominio.Perna(UUID.randomUUID(), TipoOrdem.LIMIT, 2, new BigDecimal("9.80"), null, dia);
+        var sl = new br.prospero.mo.risco.dominio.Perna(UUID.randomUUID(), TipoOrdem.STOP, 2, null, new BigDecimal("10.20"), dia);
+        var par = new ComandoRisco(UUID.randomUUID(), UUID.randomUUID(), "CONTA-002", "ALFA3", Lado.COMPRA,
+                new BigDecimal("10.00"), List.of(tp, sl), null, java.time.LocalDate.of(2026, 10, 18));
+        assertTrue(par.admissivel());
+        actor.avaliar(par, null);
+        var admissao = outbox.stream().filter(m -> m.topico().equals("matching.comandos.v1")).toList();
+        assertEquals(1, admissao.size());
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().readTree(admissao.getFirst().payload());
+        assertEquals(3, json.get("versao").intValue());
+        var dados = json.get("dados");
+        // Teto do Stop sobre o gatilho 10,20 com túnel de 10%: 11,22, maior que o alvo 9,80.
+        assertEquals("11.22", dados.get("precoMaximo").textValue());
+        assertEquals("TAKE_PROFIT", dados.get("pernas").get(0).get("papel").textValue());
+        assertEquals(tp.id().toString(), dados.get("pernas").get(0).get("ordem").textValue());
+        assertEquals("STOP_LOSS", dados.get("pernas").get(1).get("papel").textValue());
+        assertEquals("10.20", dados.get("pernas").get(1).get("precoGatilho").textValue());
+        assertTrue(dados.get("pernas").get(1).get("precoLimite").isNull());
+        var legado = new ComandoRisco(par.evento(), par.intencao(), par.conta(), par.ticker(), par.lado(), par.precoBase(),
+                par.pernas(), null);
+        assertFalse(legado.admissivel(), "risco v1 sem sessão continua sem admissão");
+        var invertido = new ComandoRisco(par.evento(), par.intencao(), par.conta(), par.ticker(), par.lado(), par.precoBase(),
+                List.of(sl, tp), null, par.dataSessao());
+        assertFalse(invertido.admissivel());
+        var alvoAcimaDoGatilho = new br.prospero.mo.risco.dominio.Perna(tp.id(), TipoOrdem.LIMIT, 2,
+                new BigDecimal("10.30"), null, dia);
+        assertFalse(new ComandoRisco(par.evento(), par.intencao(), par.conta(), par.ticker(), par.lado(), par.precoBase(),
+                List.of(alvoAcimaDoGatilho, sl), null, par.dataSessao()).admissivel(), "compra exige alvo abaixo do gatilho");
+        var stopLimitIncoerente = new br.prospero.mo.risco.dominio.Perna(sl.id(), TipoOrdem.STOP_LIMIT, 2,
+                new BigDecimal("10.10"), new BigDecimal("10.20"), dia);
+        assertFalse(new ComandoRisco(par.evento(), par.intencao(), par.conta(), par.ticker(), par.lado(), par.precoBase(),
+                List.of(tp, stopLimitIncoerente), null, par.dataSessao()).admissivel(), "Stop Limit de compra abaixo do gatilho");
+    }
+
+    @Test
     void preparacaoRecusaReservaLegadaSemAlterarCarteira() {
         var comando=compra("CONTA-002",7,"10.00");
         actor.avaliar(comando,null);
