@@ -175,7 +175,7 @@ public final class MotorMatching {
         if (!tp.conta().equals(sl.conta()) || !tp.intencao().equals(sl.intencao()) || !tp.ticker().equals(sl.ticker())
                 || tp.lado() != sl.lado() || tp.quantidade() != sl.quantidade() || !tp.sessao().equals(sl.sessao())
                 || tp.tipo() != TipoOrdem.LIMIT || tp.validade() != Validade.DIA || !stop(sl)
-                || !java.util.Objects.equals(tp.precoMaximo(), sl.precoMaximo())
+                || !mesmoPreco(tp.precoMaximo(), sl.precoMaximo())
                 || tp.precoLimite() == null || sl.precoGatilho() == null
                 || (venda ? tp.precoLimite().compareTo(sl.precoGatilho()) <= 0
                           : tp.precoLimite().compareTo(sl.precoGatilho()) >= 0)) {
@@ -194,16 +194,23 @@ public final class MotorMatching {
         return recusa;
     }
 
+    /** Igualdade numérica, independente da escala do texto decimal recebido. */
+    private static boolean mesmoPreco(BigDecimal a, BigDecimal b) {
+        return a == null ? b == null : b != null && a.compareTo(b) == 0;
+    }
+
     /** Captura irrevogável do Stop Loss: o saldo do Take Profit sai do livro antes de o Stop Loss entrar na fila. */
     private static void cancelarTakeProfit(UUID stopLoss, EstadoAtivo e, List<Evento> eventos) {
-        ParesOco.Par par = e.pares.dissolverPorStopLoss(stopLoss);
+        ParesOco.Par par = e.pares.stopLoss(stopLoss);
         if (par == null) {
             return;
         }
-        OfertaViva tp = e.livro.remover(par.takeProfit.ordem());
-        if (tp == null) {
+        // Verifica a invariante antes de mutar: par vivo com SL capturável implica TP repousado.
+        if (!e.livro.contem(par.takeProfit.ordem())) {
             throw new IllegalStateException("Take Profit vivo fora do livro.");
         }
+        e.pares.dissolverPorStopLoss(stopLoss);
+        OfertaViva tp = e.livro.remover(par.takeProfit.ordem());
         e.desativar(tp.conta);
         eventos.add(new Evento.OrdemEncerrada(tp.ordem, par.takeProfit.ticker(), MotivoEncerramento.CANCELADA_OCO,
                 tp.executada, tp.restante()));

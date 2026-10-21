@@ -31,6 +31,10 @@ final class ParesOco {
         return porTakeProfit.get(ordem);
     }
 
+    Par stopLoss(UUID ordem) {
+        return porStopLoss.get(ordem);
+    }
+
     boolean vivo(Par par) {
         return porTakeProfit.get(par.takeProfit.ordem()) == par;
     }

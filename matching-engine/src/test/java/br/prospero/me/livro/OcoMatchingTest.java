@@ -271,6 +271,17 @@ class OcoMatchingTest {
     }
 
     @Test
+    void mesmaReservaComEscalaDiferenteNaoTornaParIncoerente() {
+        MotorMatching m = new MotorMatching(ATIVOS);
+        AdmissaoOco par = oco("INVESTIDOR", Lado.COMPRA, 5, "8.00", TipoOrdem.STOP, null, "11.00", "12.00");
+        Admissao sl = par.stopLoss();
+        List<Evento> eventos = m.processarOco(new AdmissaoOco(par.takeProfit(), new Admissao(sl.ordem(), sl.intencao(),
+                sl.conta(), sl.ticker(), sl.lado(), sl.tipo(), sl.validade(), sl.quantidade(), null, d("12.0"),
+                sl.precoGatilho(), DIA)));
+        assertTrue(tipos(eventos, Evento.OrdemRejeitada.class).isEmpty(), eventos::toString);
+    }
+
+    @Test
     void reentregaComUmaPernaJaVistaRejeitaSoAInedita() {
         MotorMatching m = new MotorMatching(ATIVOS);
         AdmissaoOco par = oco(Lado.VENDA, 10, "12.00", TipoOrdem.STOP, null, "9.00");

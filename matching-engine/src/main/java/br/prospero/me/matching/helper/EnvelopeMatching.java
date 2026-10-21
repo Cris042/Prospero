@@ -87,7 +87,9 @@ public final class EnvelopeMatching {
         };
         // Fatos OCO ficam fora do contrato Kafka até a RF05c.3b definir a liberação por grupo no MO.
         if (evento instanceof Evento.OrdemReduzida || (evento instanceof Evento.OrdemEncerrada fim
-                && fim.motivo() == MotivoEncerramento.CANCELADA_OCO)) throw new IllegalArgumentException("Evento OCO fora do contrato.");
+                && fim.motivo() == MotivoEncerramento.CANCELADA_OCO)) {
+            throw new IllegalArgumentException("Evento OCO fora do contrato.");
+        }
         if ((evento instanceof Evento.StopPendente || evento instanceof Evento.StopAcionado)
                 && !stop(ordens.get(alvo))) throw new IllegalArgumentException("Evento stop sem admissão stop.");
         ObjectNode raiz = JSON.createObjectNode();
