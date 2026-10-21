@@ -206,11 +206,19 @@ test('mostra Stop aguardando gatilho e execução preservando tipo e validade', 
   await boleta.getByLabel('Tipo').selectOption('STOP');
   await boleta.getByLabel('Quantidade').fill('2');
   await boleta.getByLabel('Preço de disparo (R$)').fill('21.80');
+  let registrada!: { id: string };
+  await page.route('**/servicos/front-office/api/v1/ordens', async (rota) => {
+    if (rota.request().method() !== 'POST') return rota.fallback();
+    const respostaReal = await rota.fetch();
+    // Guarda o ID da resposta real antes de entregá-la ao navegador, como no caso Limit.
+    registrada = await respostaReal.json();
+    await rota.fulfill({ response: respostaReal });
+  });
   const resposta = page.waitForResponse(
     (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
   );
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
-  const registrada = await (await resposta).json();
+  expect((await resposta).status()).toBe(202);
   const consultar = async () => {
     const r = await page.request.get(`/servicos/front-office/api/v1/ordens/${registrada.id}`);
     expect(r.status()).toBe(200);
