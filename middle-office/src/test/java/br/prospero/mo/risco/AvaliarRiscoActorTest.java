@@ -95,6 +95,14 @@ class AvaliarRiscoActorTest {
         var invertido = new ComandoRisco(par.evento(), par.intencao(), par.conta(), par.ticker(), par.lado(), par.precoBase(),
                 List.of(sl, tp), null, par.dataSessao());
         assertFalse(invertido.admissivel());
+        var alvoAcimaDoGatilho = new br.prospero.mo.risco.dominio.Perna(tp.id(), TipoOrdem.LIMIT, 2,
+                new BigDecimal("10.30"), null, dia);
+        assertFalse(new ComandoRisco(par.evento(), par.intencao(), par.conta(), par.ticker(), par.lado(), par.precoBase(),
+                List.of(alvoAcimaDoGatilho, sl), null, par.dataSessao()).admissivel(), "compra exige alvo abaixo do gatilho");
+        var stopLimitIncoerente = new br.prospero.mo.risco.dominio.Perna(sl.id(), TipoOrdem.STOP_LIMIT, 2,
+                new BigDecimal("10.10"), new BigDecimal("10.20"), dia);
+        assertFalse(new ComandoRisco(par.evento(), par.intencao(), par.conta(), par.ticker(), par.lado(), par.precoBase(),
+                List.of(tp, stopLimitIncoerente), null, par.dataSessao()).admissivel(), "Stop Limit de compra abaixo do gatilho");
     }
 
     @Test

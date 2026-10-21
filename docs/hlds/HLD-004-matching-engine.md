@@ -98,7 +98,7 @@ Regras no [ADR-013](../adrs/ADR-013-matching-execucao.md#decisões-oco-no-núcle
 
 ## Integração OCO — RF05c.3b1
 
-Contrato no [ADR-013](../adrs/ADR-013-matching-execucao.md#contrato-da-integração-oco--rf05c3b-2026-10-21). O adaptador aceita `ORDEM_ADMITIDA` v3 com `pernas[2]` (TP, SL) e as mesmas guardas do núcleo antes de qualquer mutação; `SessaoMatching` registra as duas ordens sob a mesma intenção/admissão e chama `processarOco`. Eventos com raiz ou alvo OCO saem em v3 (inclui `ORDEM_REDUZIDA` e `CANCELADA_OCO`), com IDs raiz/índice e bytes reproduzíveis no replay; v1/v2 inalterados. Nesta fatia o MO ainda não emite v3, portanto nenhum par chega ao log.
+Contrato no [ADR-013](../adrs/ADR-013-matching-execucao.md#contrato-da-integração-oco--rf05c3b-2026-10-21). O adaptador aceita `ORDEM_ADMITIDA` v3 com `pernas[2]` (TP, SL) e as mesmas guardas do núcleo antes de qualquer mutação; `SessaoMatching` registra as duas ordens sob a mesma intenção/admissão e chama `processarOco`. Eventos com raiz ou alvo OCO saem em v3 (inclui `ORDEM_REDUZIDA` e `CANCELADA_OCO`), com IDs raiz/índice e bytes reproduzíveis no replay; v1/v2 inalterados. Desde a RF05c.3b2 o MO emite a admissão v3 do par, depois de repetir as mesmas guardas de coerência, de modo que um par admitido não para o escritor.
 
 ## Segurança, observabilidade e testes
 

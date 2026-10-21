@@ -18,9 +18,24 @@ public record ComandoRisco(UUID evento, UUID intencao, String conta, String tick
 
     /** Par OCO admissível (RF05c.3b): Take Profit Limit DIA seguido de Stop Loss Stop/Stop Limit DIA com gatilho. */
     public boolean oco() {
-        return pernas.size() == 2 && pernas.get(0).tipo() == TipoOrdem.LIMIT && pernas.get(0).validade() == Validade.DIA
-                && (pernas.get(1).tipo() == TipoOrdem.STOP || pernas.get(1).tipo() == TipoOrdem.STOP_LIMIT)
-                && pernas.get(1).validade() == Validade.DIA && pernas.get(1).precoGatilho() != null;
+        if (pernas.size() != 2) {
+            return false;
+        }
+        Perna alvo = pernas.get(0), stop = pernas.get(1);
+        if (alvo.tipo() != TipoOrdem.LIMIT || alvo.validade() != Validade.DIA || alvo.precoLimite() == null
+                || (stop.tipo() != TipoOrdem.STOP && stop.tipo() != TipoOrdem.STOP_LIMIT)
+                || stop.validade() != Validade.DIA || stop.precoGatilho() == null
+                || alvo.quantidade() != stop.quantidade() || alvo.id().equals(stop.id())
+                || (stop.tipo() == TipoOrdem.STOP_LIMIT) != (stop.precoLimite() != null)) {
+            return false;
+        }
+        // Mesmas guardas do parser v3 do ME: um par admitido nunca vira mensagem venenosa (ADR-013).
+        boolean compra = lado == Lado.COMPRA;
+        int alvoGatilho = alvo.precoLimite().compareTo(stop.precoGatilho());
+        boolean limiteCoerente = stop.precoLimite() == null || (compra
+                ? stop.precoLimite().compareTo(stop.precoGatilho()) >= 0
+                : stop.precoLimite().compareTo(stop.precoGatilho()) <= 0);
+        return (compra ? alvoGatilho < 0 : alvoGatilho > 0) && limiteCoerente;
     }
 
     public boolean admissivel() {

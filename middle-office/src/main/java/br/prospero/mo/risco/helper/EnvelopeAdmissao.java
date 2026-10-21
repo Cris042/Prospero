@@ -18,7 +18,8 @@ public final class EnvelopeAdmissao {
     /** Preço unitário máximo exato da compra: reserva ÷ quantidade (o par tem a mesma quantidade nas pernas). */
     public static BigDecimal precoMaximo(ComandoRisco c, Decisao d) {
         return d.valorReservado() == null ? null
-                : d.valorReservado().divide(BigDecimal.valueOf(c.pernas().getFirst().quantidade()));
+                : d.valorReservado().divide(BigDecimal.valueOf(c.pernas().getFirst().quantidade()), 2,
+                        java.math.RoundingMode.UNNECESSARY);
     }
 
     public static String serializar(ComandoRisco c, Decisao d, String traceparent) {

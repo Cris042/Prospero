@@ -175,12 +175,13 @@ const limit = (preco, extra = {}) => ({
   passo(carga, c, 'Enviar', 'ordens-a', 'POST', '/api/v1/ordens-oco', {
     chave: '${cenario}-1',
     corpo: {
-      ticker: 'BETA3',
+      // Admitido desde a RF05c.3b: fica vivo em DELTA3 para não interferir nas provas de BETA3.
+      ticker: 'DELTA3',
       lado: 'VENDA',
       quantidade: 50,
       validade: 'DIA',
-      takeProfit: { precoLimite: '21.00' },
-      stopLoss: { tipo: 'STOP', precoGatilho: '19.00' },
+      takeProfit: { precoLimite: '42.00' },
+      stopLoss: { tipo: 'STOP', precoGatilho: '38.00' },
     },
     status: 202,
     captura: { grupo: '/grupoOco' },
@@ -192,7 +193,7 @@ const limit = (preco, extra = {}) => ({
       '/grupoOco': '${grupo}',
       '/ordens/0/tipo': 'LIMIT',
       '/ordens/1/tipo': 'STOP',
-      '/ordens/1/precoGatilho': '19.00',
+      '/ordens/1/precoGatilho': '38.00',
     },
   });
   passo(passos, c, 'ConsultaDeB', 'ordens-b', 'GET', '/api/v1/ordens-oco/${grupo}', {
