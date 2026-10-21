@@ -25,6 +25,7 @@ def main():
     for servico, sigla, banco, classe in [
         ("matching-engine", "ME", "me", "CheckpointPostgresIT"),
         ("middle-office", "MO", "mo", "MatchingPostgresIT"),
+        ("middle-office", "MO", "mo", "OcoPostgresIT"),
         ("front-office", "FO", "fo", "MatchingPostgresIT"),
     ]:
         # Nome de variável em --env: o segredo viaja só no ambiente, sem entrar no argumento/log.

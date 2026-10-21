@@ -23,11 +23,13 @@ public final class EnvelopeMatching {
         try {
             exigir(bytes != null && bytes.length <= 16384, "tamanho");
             JsonNode r = JSON.readTree(bytes);
-            boolean v2 = r != null && r.path("versao").isInt() && r.get("versao").intValue() == 2;
+            int versao = r != null && r.path("versao").isInt() ? r.get("versao").intValue() : 0;
+            // v2 (stops) e v3 (OCO, RF05c.3b) acrescentam a causação raiz; v3 é a única com fatos OCO.
+            boolean v2 = versao == 2 || versao == 3, v3 = versao == 3;
             campos(r, "id,tipo,versao,origem,correlacao,ocorridoEm,ticker,dataSessao,traceparent,dados" + (v2 ? ",causacao" : ""));
             if (v2) uuid(r, "causacao");
             uuid(r, "id"); uuid(r, "correlacao");
-            exigir(r.get("versao").isInt() && (r.get("versao").intValue() == 1 || v2), "versao");
+            exigir(r.get("versao").isInt() && versao >= 1 && versao <= 3, "versao");
             exigir(texto(r,"origem").equals("matching-engine"), "origem");
             exigir(Set.of("ALFA3","BETA3","GAMA3","DELTA3","OMEGA3").contains(texto(r,"ticker")), "ticker");
             exigir(LocalDate.parse(texto(r,"dataSessao")).toString().equals(texto(r,"dataSessao")), "dataSessao");
@@ -38,9 +40,10 @@ public final class EnvelopeMatching {
                 case "ORDEM_ACEITA" -> { campos(d,"ordem,intencao,conta,sequencia"); inteiro(d,"sequencia",1,Long.MAX_VALUE); }
                 case "STOP_PENDENTE" -> { exigir(v2,"versao"); campos(d,"ordem,intencao,conta,precoGatilho"); preco(d,"precoGatilho"); }
                 case "STOP_ACIONADO" -> { exigir(v2,"versao"); campos(d,"ordem,intencao,conta,tipoExecutavel,sequencia"); exigir(Set.of("MARKET","LIMIT").contains(texto(d,"tipoExecutavel")),"tipoExecutavel"); inteiro(d,"sequencia",1,Long.MAX_VALUE); }
+                case "ORDEM_REDUZIDA" -> { exigir(v3,"versao"); campos(d,"ordem,intencao,conta,reduzida,restante"); inteiro(d,"reduzida",1,1000000); inteiro(d,"restante",1,1000000); }
                 case "OFERTA_NO_LIVRO" -> { campos(d,"ordem,intencao,conta,lado,preco,restante"); exigir(Set.of("COMPRA","VENDA").contains(texto(d,"lado")),"lado"); preco(d,"preco"); inteiro(d,"restante",1,1000000); }
                 case "ORDEM_REJEITADA" -> { campos(d,"ordem,intencao,conta,motivo"); exigir(Set.of("ATIVO_DESCONHECIDO","COMBINACAO_INVALIDA","PRECO_ACIMA_DA_RESERVA","PRECO_INVALIDO","QUANTIDADE_INVALIDA","SESSAO_ANTERIOR","LIMITE_ORDENS_ATIVAS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_STOPS_PENDENTES"),"motivo"); }
-                case "ORDEM_ENCERRADA" -> { campos(d,"ordem,intencao,conta,motivo,executada,cancelada"); exigir(Set.of("EXECUTADA","SALDO_CANCELADO_IOC","FOK_SEM_LIQUIDEZ","FORA_DA_FAIXA","LIMITADA_PELA_RESERVA","SEM_LIQUIDEZ","LIMITE_NEGOCIOS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_CASCATA"),"motivo"); inteiro(d,"executada",0,1000000); inteiro(d,"cancelada",0,1000000); }
+                case "ORDEM_ENCERRADA" -> { campos(d,"ordem,intencao,conta,motivo,executada,cancelada"); exigir(Set.of("EXECUTADA","SALDO_CANCELADO_IOC","FOK_SEM_LIQUIDEZ","FORA_DA_FAIXA","LIMITADA_PELA_RESERVA","SEM_LIQUIDEZ","LIMITE_NEGOCIOS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_CASCATA") || v3 && texto(d,"motivo").equals("CANCELADA_OCO"),"motivo"); inteiro(d,"executada",0,1000000); inteiro(d,"cancelada",0,1000000); }
                 case "NEGOCIO" -> {
                     campos(d,"negocio,preco,quantidade,ordemCompra,intencaoCompra,contaCompra,ordemVenda,intencaoVenda,contaVenda,agressor");
                     exigir(texto(d,"negocio").matches("[A-Z0-9]+-\\d{4}-\\d{2}-\\d{2}-[1-9][0-9]*"),"negocio");
