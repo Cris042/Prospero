@@ -43,7 +43,9 @@ public final class EnvelopeMatching {
 
         /** Perna do comando com a ordem informada. */
         public Admissao perna(UUID ordem) {
-            return oco() && stopLoss.ordem().equals(ordem) ? stopLoss : admissao;
+            if (admissao.ordem().equals(ordem)) return admissao;
+            if (oco() && stopLoss.ordem().equals(ordem)) return stopLoss;
+            throw new IllegalArgumentException("Ordem fora do comando.");
         }
     }
 

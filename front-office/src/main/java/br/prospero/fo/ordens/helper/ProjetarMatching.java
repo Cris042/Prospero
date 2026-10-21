@@ -36,7 +36,9 @@ public final class ProjetarMatching {
             case EventoMatching.Reduzida reduzida -> reduzir(ordem, reduzida);
             case EventoMatching.Rejeitada rejeitada -> {
                 if ((stop(ordem) && acionada(ordem))
-                        || (rejeitada.motivo() == MotivoRejeicao.LIMITE_STOPS_PENDENTES && (!stop(ordem) || acionada(ordem)))
+                        // O par rejeitado por falta de vaga pendente rejeita também o Take Profit (v3).
+                        || (rejeitada.motivo() == MotivoRejeicao.LIMITE_STOPS_PENDENTES && ordem.grupoOco() == null
+                            && (!stop(ordem) || acionada(ordem)))
                         || ordem.quantidadeExecutada() != 0 || ordem.quantidadeCancelada() != 0
                         || ordem.estado() == EstadoOrdem.EXECUTADA || ordem.estado() == EstadoOrdem.CANCELADA) {
                     throw incoerente();
@@ -110,7 +112,7 @@ public final class ProjetarMatching {
                 e.executada(), e.cancelada(), null, e.motivo());
     }
 
-    /** Só o Stop Loss pendente perde quantidade; o restante deve igualar o que o Take Profit ainda deve. */
+    /** Só o Stop Loss pendente perde quantidade; a igualdade com o que o TP ainda deve é guarda cruzada do MO. */
     private static Ordem reduzir(Ordem o, EventoMatching.Reduzida e) {
         long vigente = o.quantidadeVigente() - e.reduzida();
         if (o.papelOco() != PapelOco.STOP_LOSS || acionada(o) || o.estado() == EstadoOrdem.REJEITADA

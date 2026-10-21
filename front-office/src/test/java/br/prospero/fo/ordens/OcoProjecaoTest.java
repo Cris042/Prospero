@@ -103,6 +103,13 @@ class OcoProjecaoTest {
     }
 
     @Test
+    void rejeicaoDoParPorLimiteDePendentesAlcancaAsDuasPernas() {
+        String campos = "\"motivo\":\"LIMITE_STOPS_PENDENTES\"";
+        assertEquals(EstadoOrdem.REJEITADA, aplicar(tp(), v3("ORDEM_REJEITADA", TP, campos)).estado());
+        assertEquals(EstadoOrdem.REJEITADA, aplicar(sl(), v3("ORDEM_REJEITADA", SL, campos)).estado());
+    }
+
+    @Test
     void fronteiraRecusaFatosOcoForaDaV3() {
         assertThrows(MensagemInvalidaException.class, () -> evento(2, "ORDEM_REDUZIDA", SL, "\"reduzida\":4,\"restante\":6"));
         assertThrows(MensagemInvalidaException.class,

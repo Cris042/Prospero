@@ -26,7 +26,9 @@ def main():
         ("matching-engine", "ME", "me", "CheckpointPostgresIT"),
         ("middle-office", "MO", "mo", "MatchingPostgresIT"),
         ("middle-office", "MO", "mo", "OcoPostgresIT"),
+        ("middle-office", "MO", "mo", "OcoQaPostgresIT"),
         ("front-office", "FO", "fo", "MatchingPostgresIT"),
+        ("front-office", "FO", "fo", "OcoQaPostgresIT"),
     ]:
         # Nome de variável em --env: o segredo viaja só no ambiente, sem entrar no argumento/log.
         temporario = "matching_it_" + uuid.uuid4().hex

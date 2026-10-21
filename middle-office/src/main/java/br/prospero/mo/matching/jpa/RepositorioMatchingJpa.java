@@ -153,6 +153,10 @@ public class RepositorioMatchingJpa {
     }
 
     private Perna perna(Reserva r, UUID ordem) {
+        return perna(r.intencao(),ordem);
+    }
+
+    private Perna perna(UUID intencao, UUID ordem) {
         List<?> linhas=em().createNativeQuery("""
                 SELECT ordem,intencao,papel,tipo,preco_limite,preco_gatilho,quantidade,executada,reduzida,cancelada,
                 stop_acionado,estado FROM reserva_perna WHERE ordem=:o FOR UPDATE
@@ -161,7 +165,7 @@ public class RepositorioMatchingJpa {
         Perna p=new Perna((UUID)c[0],(UUID)c[1],(String)c[2],(String)c[3],(BigDecimal)c[4],(BigDecimal)c[5],
                 ((Number)c[6]).longValue(),((Number)c[7]).longValue(),((Number)c[8]).longValue(),((Number)c[9]).longValue(),
                 (Boolean)c[10],(String)c[11]);
-        exigir(p.intencao().equals(r.intencao()),"perna de outro grupo");
+        exigir(p.intencao().equals(intencao),"perna de outro grupo");
         return p;
     }
 
@@ -169,8 +173,7 @@ public class RepositorioMatchingJpa {
         List<?> ordens=em().createNativeQuery("SELECT ordem FROM reserva_perna WHERE intencao=:i AND ordem<>:o")
                 .setParameter("i",p.intencao()).setParameter("o",p.ordem()).getResultList();
         exigir(ordens.size()==1,"irma ausente");
-        return perna(new Reserva(p.intencao(),null,null,null,null,null,null,null,0,0,null,null,null,null,null,false,true),
-                (UUID)ordens.getFirst());
+        return perna(p.intencao(),(UUID)ordens.getFirst());
     }
 
     private void executarPerna(Perna p, long q) {
