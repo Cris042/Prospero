@@ -29,7 +29,8 @@ public final class EnvelopeMatching {
     private static final Set<String> ENCERRAMENTOS = Set.of("EXECUTADA", "SALDO_CANCELADO_IOC", "FOK_SEM_LIQUIDEZ",
             "FORA_DA_FAIXA", "LIMITADA_PELA_RESERVA", "SEM_LIQUIDEZ", "LIMITE_NEGOCIOS");
     private static final Set<String> REJEICOES = Set.of("ATIVO_DESCONHECIDO", "COMBINACAO_INVALIDA",
-            "PRECO_ACIMA_DA_RESERVA", "PRECO_INVALIDO", "QUANTIDADE_INVALIDA", "SESSAO_ANTERIOR", "LIMITE_ORDENS_ATIVAS");
+            "PRECO_ACIMA_DA_RESERVA", "PRECO_INVALIDO", "QUANTIDADE_INVALIDA", "SESSAO_ANTERIOR", "SESSAO_ENCERRADA",
+            "SESSAO_NAO_ENCERRADA", "LIMITE_ORDENS_ATIVAS");
     private static final ObjectMapper JSON = new ObjectMapper().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
@@ -47,8 +48,8 @@ public final class EnvelopeMatching {
             throw invalido("json");
         }
         int versao = r != null && r.path("versao").isInt() ? r.get("versao").intValue() : 0;
-        // v2 (stops) e v3 (OCO) acrescentam a causação raiz; somente v3 transporta fatos OCO.
-        boolean v2 = versao == 2 || versao == 3, v3 = versao == 3;
+        // v2 (stops), v3 (OCO) e v4 (encerramento) acrescentam a causação raiz; v4 só expira e marca a sessão.
+        boolean v2 = versao >= 2 && versao <= 4, v3 = versao == 3, v4 = versao == 4;
         if (v2) campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados", "causacao");
         else campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados");
         if (!r.get("versao").isInt() || (versao != 1 && !v2)
@@ -76,6 +77,11 @@ public final class EnvelopeMatching {
             throw invalido("traceparent");
         }
         JsonNode d = r.get("dados");
+        String tipoEvento = texto(r, "tipo");
+        if (v4 != ("SESSAO_ENCERRADA".equals(tipoEvento) || "ORDEM_ENCERRADA".equals(tipoEvento) && d != null
+                && d.path("motivo").isTextual() && "EXPIRADA_DIA".equals(d.path("motivo").textValue()))) {
+            throw invalido("versao");
+        }
         EventoMatching.Detalhe detalhe = switch (texto(r, "tipo")) {
             case "ORDEM_ACEITA" -> {
                 campos(d, "ordem", "intencao", "conta", "sequencia");
@@ -92,6 +98,10 @@ public final class EnvelopeMatching {
                 String tipo = texto(d, "tipoExecutavel");
                 if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido("tipoExecutavel");
                 yield new EventoMatching.StopAcionado(alvo(d, ""), TipoOrdem.valueOf(tipo), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
+            }
+            case "SESSAO_ENCERRADA" -> {
+                campos(d, "expiradas");
+                yield new EventoMatching.SessaoEncerrada(inteiro(d, "expiradas", 0, 1_000_000));
             }
             case "ORDEM_REDUZIDA" -> {
                 if (!v3) throw invalido("versao");
@@ -115,7 +125,7 @@ public final class EnvelopeMatching {
                 campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
                 String motivo = texto(d, "motivo");
                 if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))
-                        && !(v3 && "CANCELADA_OCO".equals(motivo))) {
+                        && !(v3 && "CANCELADA_OCO".equals(motivo)) && !(v4 && "EXPIRADA_DIA".equals(motivo))) {
                     throw invalido("motivo");
                 }
                 yield new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),

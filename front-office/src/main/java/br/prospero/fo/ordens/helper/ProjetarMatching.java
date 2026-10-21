@@ -21,7 +21,8 @@ public final class ProjetarMatching {
                                 BigDecimal tick, long lote) {
         if (!ordem.id().equals(alvo.ordem()) || !ordem.grupoEnvio().equals(alvo.intencao())
                 || !ordem.conta().equals(alvo.conta()) || !ordem.ticker().equals(evento.ticker())
-                || !ordem.dataSessao().equals(evento.sessao()) || (ordem.grupoOco() != null && evento.versao() != 3)
+                || !ordem.dataSessao().equals(evento.sessao()) || (ordem.grupoOco() != null && evento.versao() < 3)
+                || (evento.versao() == 4 && !EventoMatching.encerramento(evento.ticker(), evento.sessao()).equals(evento.causacao()))
                 || (stop(ordem) && evento.causacao() == null)) {
             throw incoerente();
         }
@@ -34,6 +35,7 @@ public final class ProjetarMatching {
             case EventoMatching.Negocio negocio -> negocio(ordem, negocio, alvo, tick, lote);
             case EventoMatching.Encerrada encerrada -> encerrar(ordem, encerrada);
             case EventoMatching.Reduzida reduzida -> reduzir(ordem, reduzida);
+            case EventoMatching.SessaoEncerrada marco -> throw incoerente();
             case EventoMatching.Rejeitada rejeitada -> {
                 if ((stop(ordem) && acionada(ordem))
                         // O par rejeitado por falta de vaga pendente rejeita também o Take Profit (v3).
@@ -92,9 +94,12 @@ public final class ProjetarMatching {
         boolean excesso = "LIMITE_CASCATA".equals(e.motivo());
         // Irmã OCO cancelada: SL ainda sem acionamento e sem execução; TP com a execução já projetada.
         boolean irma = "CANCELADA_OCO".equals(e.motivo());
+        // Fim da sessão: expira ofertas DIA e stops ainda pendentes (RF05c.4).
+        boolean expirada = "EXPIRADA_DIA".equals(e.motivo());
         if ((irma && (o.grupoOco() == null || stop(o) && (acionada(o) || e.executada() != 0)))
                 || (excesso && (!stop(o) || acionada(o) || e.executada() != 0))
-                || (stop(o) && !excesso && !irma && !acionada(o))
+                || (expirada && o.validade() != Validade.DIA)
+                || (stop(o) && !excesso && !irma && !expirada && !acionada(o))
                 || o.estado() == EstadoOrdem.REJEITADA || e.executada() != o.quantidadeExecutada()
                 || e.cancelada() != o.quantidadeVigente() - o.quantidadeExecutada()) {
             throw incoerente();

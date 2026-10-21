@@ -43,12 +43,24 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         if (repetida("matching_evento", e.id(), e.assinatura())) {
             return false;
         }
+        if (e.detalhe() instanceof EventoMatching.SessaoEncerrada) {
+            // Marco v4: correlação e causação são o encerramento determinístico do ativo/data.
+            UUID esperado = EventoMatching.encerramento(e.ticker(), e.sessao());
+            if (!esperado.equals(e.correlacao()) || !esperado.equals(e.causacao())) {
+                throw new MatchingIncoerenteException("MATCHING_ENCERRAMENTO");
+            }
+            registrar(e);
+            return true;
+        }
         if (em().createNativeQuery("SELECT 1 FROM ordem WHERE admissao_matching = :admissao AND ticker = :ticker AND data_sessao = :sessao")
                 .setParameter("admissao", e.correlacao()).setParameter("ticker", e.ticker())
                 .setParameter("sessao", e.sessao()).getResultList().isEmpty()) {
             throw new MatchingIncoerenteException("MATCHING_CORRELACAO");
         }
-        if (e.causacao() != null && em().createNativeQuery(
+        if (e.versao() == 4 && !EventoMatching.encerramento(e.ticker(), e.sessao()).equals(e.causacao())) {
+            throw new MatchingIncoerenteException("MATCHING_CAUSACAO");
+        }
+        if (e.causacao() != null && e.versao() != 4 && em().createNativeQuery(
                 "SELECT 1 FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s"
                         + (e.versao() == 3 ? "" : " AND grupo_oco IS NULL"))
                 .setParameter("a", e.causacao()).setParameter("t", e.ticker()).setParameter("s", e.sessao())
@@ -70,6 +82,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             case EventoMatching.Oferta o -> e.causacao() != null ? o.alvo() : null;
             case EventoMatching.Encerrada f -> e.causacao() != null ? f.alvo() : null;
             case EventoMatching.Reduzida r -> r.alvo();
+            case EventoMatching.SessaoEncerrada m -> null;
             default -> null;
         };
         if (propria != null && !e.correlacao().equals(UUID.nameUUIDFromBytes(
@@ -95,7 +108,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         boolean envolveStop = causas.stream().map(c -> ((Object[]) c)[0]).anyMatch(t -> t.equals("STOP") || t.equals("STOP_LIMIT"))
                 || entidades.stream().anyMatch(o -> o.tipo.equals("STOP") || o.tipo.equals("STOP_LIMIT"));
         // v3 exatamente quando há perna OCO; senão v2 exatamente quando há stop (ADR-013).
-        if (e.versao() != (envolveOco ? 3 : envolveStop ? 2 : 1)) {
+        if (e.versao() != 4 && e.versao() != (envolveOco ? 3 : envolveStop ? 2 : 1)) {
             throw new MatchingIncoerenteException("MATCHING_VERSAO_STOP");
         }
         if (e.detalhe() instanceof EventoMatching.Negocio n) {
@@ -164,6 +177,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             case EventoMatching.Rejeitada r -> List.of(r.alvo());
             case EventoMatching.Encerrada f -> List.of(f.alvo());
             case EventoMatching.Reduzida r -> List.of(r.alvo());
+            case EventoMatching.SessaoEncerrada m -> List.of();
         };
     }
 }
