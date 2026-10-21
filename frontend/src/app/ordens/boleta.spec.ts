@@ -50,6 +50,37 @@ describe('Boleta', () => {
     }).compileComponents();
   });
 
+  it('lista a perna OCO reduzida e a encerrada pela irmã', async () => {
+    const reduzida: Ordem = {
+      ...ORDEM,
+      id: 'sl',
+      tipo: 'STOP',
+      grupoOco: 'g',
+      papelOco: 'STOP_LOSS',
+      estado: 'AGUARDANDO_GATILHO',
+      quantidadeReduzida: 40,
+    };
+    const cancelada: Ordem = {
+      ...ORDEM,
+      id: 'tp',
+      grupoOco: 'g',
+      papelOco: 'TAKE_PROFIT',
+      estado: 'CANCELADA',
+      motivoEncerramento: 'CANCELADA_OCO',
+    };
+    TestBed.overrideProvider(OrdensService, {
+      useValue: { listar: () => of({ ordens: [reduzida, cancelada], proximoCursor: null }) },
+    });
+    const fixture = TestBed.createComponent(Boleta);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const texto = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(texto).toContain('100 (reduzida em 40)');
+    expect(texto).toContain('Cancelada · encerrada pela outra perna do OCO');
+    expect(texto).not.toContain('OCO ainda não executa');
+  });
+
   it('descreve o resultado do risco com o motivo da rejeição em pt-BR', async () => {
     const boleta = TestBed.createComponent(Boleta).componentInstance;
     expect(boleta.estadoRegistro([ORDEM])).toBe('Recebida');

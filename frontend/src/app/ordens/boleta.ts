@@ -65,6 +65,7 @@ const ROTULOS: Record<string, string> = {
   CONTA_DESCONHECIDA: 'conta desconhecida',
   PRECO_BASE_AUSENTE: 'sem preço de referência',
   LIMITE_STOPS_PENDENTES: 'limite de stops pendentes atingido',
+  CANCELADA_OCO: 'encerrada pela outra perna do OCO',
 };
 
 @Component({
