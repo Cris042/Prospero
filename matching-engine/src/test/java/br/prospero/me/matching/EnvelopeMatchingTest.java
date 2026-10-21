@@ -3,6 +3,7 @@ package br.prospero.me.matching;
 import br.prospero.me.matching.helper.EnvelopeMatching;
 import br.prospero.me.matching.helper.SessaoMatching;
 import br.prospero.me.livro.dominio.Evento;
+import br.prospero.me.livro.dominio.MotivoEncerramento;
 import br.prospero.me.livro.dominio.TipoOrdem;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -78,6 +79,19 @@ class EnvelopeMatchingTest {
         assertEquals(intencaoVenda.toString(), negocio.path("dados").path("intencaoVenda").asText());
         assertEquals(b.id().toString(), negocio.path("correlacao").asText());
         assertTrue(motor.processar(b).isEmpty());
+    }
+
+    @Test
+    void fatosOcoDoNucleoNaoPossuemSerializacaoKafka() {
+        UUID ordem = UUID.randomUUID();
+        var comando = EnvelopeMatching.comando(comando(ordem, UUID.randomUUID(), "VENDA", "10.00", "2026-10-18"), "ALFA3");
+        for (Evento evento : new Evento[]{new Evento.OrdemReduzida(ordem, "ALFA3", 4, 6),
+                new Evento.OrdemEncerrada(ordem, "ALFA3", MotivoEncerramento.CANCELADA_OCO, 0, 10)}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> EnvelopeMatching.evento(comando, evento, 0, Map.of(ordem, comando)));
+        }
+        assertDoesNotThrow(() -> EnvelopeMatching.evento(comando,
+                new Evento.OrdemEncerrada(ordem, "ALFA3", MotivoEncerramento.EXPIRADA_DIA, 0, 10), 0, Map.of(ordem, comando)));
     }
 
     @Test

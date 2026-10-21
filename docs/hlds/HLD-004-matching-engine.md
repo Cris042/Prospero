@@ -92,6 +92,10 @@ Stop DIA converte internamente para Market IOC e Stop Limit DIA para Limit DIA c
 
 Até500 pendentes por ativo e1000 ativas por conta/ativo incluindo livro e pendentes; transferência para execução não ocupa duas vagas. A varredura em memória de até500 pendentes por negócio é limitada e determinística, sem nova estrutura otimizada ou promessa de latência. Fechamento ordena conjuntamente ofertas pela prioridade corrente e stops pela chegada original, limpa contagens e mantém identidades históricas. Nenhuma API, migração, liberação financeira integrada ou mudança de operação nesta fatia. Evidências e estado real da implementação no roadmap.
 
+## OCO no núcleo — RF05c.3a
+
+Regras no [ADR-013](../adrs/ADR-013-matching-execucao.md#decisões-oco-no-núcleo--rf05c3a-2026-10-21). `processarOco` recebe o par como um comando raiz: valida as duas pernas, deduplicação e vagas (2 ativas, 1 pendente) antes de qualquer mutação; aceita TP e SL com sequências consecutivas; processa o TP como Limit DIA agressor e só então avalia o SL reduzido contra o último negócio. Um registro interno de pares liga as pernas vivas por ativo; negócios do TP (agressor ou passivo) reduzem o SL pendente, terminais encerram a irmã com `CANCELADA_OCO` e a captura do SL remove o TP do livro antes de entrar na fila. O livro ganha remoção por ordem preservando o FIFO das demais; pendentes ganham redução sem perder a sequência. Fechamento expira as pernas vivas em chegada e limpa o registro. Sem API, Kafka, migração ou dependência nova; a serialização dos fatos OCO permanece recusada até a RF05c.3b.
+
 ## Segurança, observabilidade e testes
 
 Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação e autorização por conta/papel são pendências, sem RBAC presumido. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.
