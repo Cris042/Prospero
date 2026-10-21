@@ -49,7 +49,8 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             throw new MatchingIncoerenteException("MATCHING_CORRELACAO");
         }
         if (e.causacao() != null && em().createNativeQuery(
-                "SELECT 1 FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s AND grupo_oco IS NULL")
+                "SELECT 1 FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s"
+                        + (e.versao() == 3 ? "" : " AND grupo_oco IS NULL"))
                 .setParameter("a", e.causacao()).setParameter("t", e.ticker()).setParameter("s", e.sessao())
                 .getResultList().isEmpty()) {
             throw new MatchingIncoerenteException("MATCHING_CAUSACAO");
@@ -68,6 +69,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             case EventoMatching.StopAcionado a -> a.alvo();
             case EventoMatching.Oferta o -> e.causacao() != null ? o.alvo() : null;
             case EventoMatching.Encerrada f -> e.causacao() != null ? f.alvo() : null;
+            case EventoMatching.Reduzida r -> r.alvo();
             default -> null;
         };
         if (propria != null && !e.correlacao().equals(UUID.nameUUIDFromBytes(
@@ -84,13 +86,16 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             }
             entidades.add(entidade);
         }
-        List<?> tiposCausa = em().createNativeQuery(
-                "SELECT tipo FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s")
+        List<?> causas = em().createNativeQuery(
+                "SELECT tipo, grupo_oco FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s")
                 .setParameter("a", e.causacao() == null ? e.correlacao() : e.causacao())
                 .setParameter("t", e.ticker()).setParameter("s", e.sessao()).getResultList();
-        boolean envolveStop = tiposCausa.stream().anyMatch(t -> t.equals("STOP") || t.equals("STOP_LIMIT"))
+        boolean envolveOco = causas.stream().anyMatch(c -> ((Object[]) c)[1] != null)
+                || entidades.stream().anyMatch(o -> o.grupoOco != null);
+        boolean envolveStop = causas.stream().map(c -> ((Object[]) c)[0]).anyMatch(t -> t.equals("STOP") || t.equals("STOP_LIMIT"))
                 || entidades.stream().anyMatch(o -> o.tipo.equals("STOP") || o.tipo.equals("STOP_LIMIT"));
-        if ((e.causacao() != null) != envolveStop) {
+        // v3 exatamente quando há perna OCO; senão v2 exatamente quando há stop (ADR-013).
+        if (e.versao() != (envolveOco ? 3 : envolveStop ? 2 : 1)) {
             throw new MatchingIncoerenteException("MATCHING_VERSAO_STOP");
         }
         if (e.detalhe() instanceof EventoMatching.Negocio n) {
@@ -119,6 +124,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             entidade.estado = nova.estado().name();
             entidade.quantidadeExecutada = nova.quantidadeExecutada();
             entidade.quantidadeCancelada = nova.quantidadeCancelada();
+            entidade.quantidadeReduzida = nova.quantidadeReduzida();
             entidade.motivoEncerramento = nova.motivoEncerramento();
             entidade.motivoRejeicao = nova.motivoRejeicao() == null ? null : nova.motivoRejeicao().name();
         }
@@ -157,6 +163,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             case EventoMatching.StopAcionado a -> List.of(a.alvo());
             case EventoMatching.Rejeitada r -> List.of(r.alvo());
             case EventoMatching.Encerrada f -> List.of(f.alvo());
+            case EventoMatching.Reduzida r -> List.of(r.alvo());
         };
     }
 }

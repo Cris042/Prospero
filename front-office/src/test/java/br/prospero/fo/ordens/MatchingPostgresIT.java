@@ -226,4 +226,37 @@ class MatchingPostgresIT {
         assertEquals(0,ordens.aplicarRisco(resultado)); assertEquals("AGUARDANDO_GATILHO",estado(id)[0]);
     }
 
+
+    private EventoMatching eventoOco(UUID ordem,UUID grupo,String tipo,String campos) {
+        String s="""
+                {"id":"%s","tipo":"%s","versao":3,"origem":"matching-engine","correlacao":"%s","causacao":"%s",
+                "ocorridoEm":"2026-10-18T12:00:00Z","ticker":"ALFA3","dataSessao":"2026-10-18","traceparent":null,
+                "dados":{"ordem":"%s","intencao":"%s","conta":"CONTA-003",%s}}
+                """.formatted(UUID.randomUUID(),tipo,admissao(grupo),admissao(grupo),ordem,grupo,campos);
+        return EnvelopeMatching.evento(s.getBytes(StandardCharsets.UTF_8),"ALFA3");
+    }
+    @Test void registroRealOcoGravaAdmissaoNasDuasPernasEProjetaReducaoECancelamento() throws Exception {
+        UUID grupo=UUID.randomUUID(), tp=UUID.randomUUID(), sl=UUID.randomUUID(); var agora=java.time.Instant.parse("2026-10-18T12:00:00Z");
+        var dia=LocalDate.of(2026,10,18);
+        var pernas=java.util.List.of(
+                new br.prospero.fo.ordens.dominio.Ordem(tp,"CONTA-003","ALFA3",LadoOrdem.VENDA,br.prospero.fo.ordens.dominio.TipoOrdem.LIMIT,
+                        br.prospero.fo.ordens.dominio.Validade.DIA,10,new BigDecimal("12.00"),null,grupo,br.prospero.fo.ordens.dominio.PapelOco.TAKE_PROFIT,grupo,
+                        br.prospero.fo.ordens.dominio.EstadoOrdem.RECEBIDA,dia,agora,null),
+                new br.prospero.fo.ordens.dominio.Ordem(sl,"CONTA-003","ALFA3",LadoOrdem.VENDA,br.prospero.fo.ordens.dominio.TipoOrdem.STOP,
+                        br.prospero.fo.ordens.dominio.Validade.DIA,10,null,new BigDecimal("9.00"),grupo,br.prospero.fo.ordens.dominio.PapelOco.STOP_LOSS,grupo,
+                        br.prospero.fo.ordens.dominio.EstadoOrdem.RECEBIDA,dia,agora,null));
+        var mensagem=new br.prospero.fo.comum.dominio.MensagemSaida(UUID.randomUUID(),"risco.comandos.v1","CONTA-003","AVALIAR_RISCO","{}",null,agora);
+        ordens.registrar("CONTA-003","it-oco-"+grupo,"c".repeat(64),agora,pernas,mensagem);
+        assertEquals(2L,((Number)QuarkusTransaction.requiringNew().call(()->em.createNativeQuery(
+                "SELECT count(*) FROM ordem WHERE admissao_matching=:a").setParameter("a",admissao(grupo)).getSingleResult())).longValue());
+        repositorio.aplicar(eventoOco(tp,grupo,"ORDEM_ACEITA","\"sequencia\":1"));
+        repositorio.aplicar(eventoOco(sl,grupo,"ORDEM_ACEITA","\"sequencia\":2"));
+        assertEquals("ABERTA",estado(tp)[0]); assertEquals("AGUARDANDO_GATILHO",estado(sl)[0]);
+        var reducao=eventoOco(sl,grupo,"ORDEM_REDUZIDA","\"reduzida\":4,\"restante\":6");
+        assertTrue(repositorio.aplicar(reducao)); assertFalse(repositorio.aplicar(reducao));
+        assertEquals(4L,((Number)QuarkusTransaction.requiringNew().call(()->em.createNativeQuery(
+                "SELECT quantidade_reduzida FROM ordem WHERE id=:i").setParameter("i",sl).getSingleResult())).longValue());
+        repositorio.aplicar(eventoOco(sl,grupo,"ORDEM_ENCERRADA","\"motivo\":\"CANCELADA_OCO\",\"executada\":0,\"cancelada\":6"));
+        assertEquals("CANCELADA",estado(sl)[0]);
+    }
 }

@@ -96,6 +96,10 @@ Até500 pendentes por ativo e1000 ativas por conta/ativo incluindo livro e pende
 
 Regras no [ADR-013](../adrs/ADR-013-matching-execucao.md#decisões-oco-no-núcleo--rf05c3a-2026-10-21). `processarOco` recebe o par como um comando raiz: valida as duas pernas, deduplicação e vagas (2 ativas, 1 pendente) antes de qualquer mutação; aceita TP e SL com sequências consecutivas; processa o TP como Limit DIA agressor e só então avalia o SL reduzido contra o último negócio. Um registro interno de pares liga as pernas vivas por ativo; negócios do TP (agressor ou passivo) reduzem o SL pendente, terminais encerram a irmã com `CANCELADA_OCO` e a captura do SL remove o TP do livro antes de entrar na fila. O livro ganha remoção por ordem preservando o FIFO das demais; pendentes ganham redução sem perder a sequência. Fechamento expira as pernas vivas em chegada e limpa o registro. Sem API, Kafka, migração ou dependência nova; a serialização dos fatos OCO permanece recusada até a RF05c.3b.
 
+## Integração OCO — RF05c.3b1
+
+Contrato no [ADR-013](../adrs/ADR-013-matching-execucao.md#contrato-da-integração-oco--rf05c3b-2026-10-21). O adaptador aceita `ORDEM_ADMITIDA` v3 com `pernas[2]` (TP, SL) e as mesmas guardas do núcleo antes de qualquer mutação; `SessaoMatching` registra as duas ordens sob a mesma intenção/admissão e chama `processarOco`. Eventos com raiz ou alvo OCO saem em v3 (inclui `ORDEM_REDUZIDA` e `CANCELADA_OCO`), com IDs raiz/índice e bytes reproduzíveis no replay; v1/v2 inalterados. Nesta fatia o MO ainda não emite v3, portanto nenhum par chega ao log.
+
 ## Segurança, observabilidade e testes
 
 Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação e autorização por conta/papel são pendências, sem RBAC presumido. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.

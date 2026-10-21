@@ -56,6 +56,9 @@ public class OrdemEntity {
     public long quantidadeExecutada;
     @Column(name = "quantidade_cancelada", nullable = false)
     public long quantidadeCancelada;
+
+    @Column(name = "quantidade_reduzida", nullable = false)
+    public long quantidadeReduzida;
     @Column(name = "motivo_encerramento", length = 32)
     public String motivoEncerramento;
     @Version

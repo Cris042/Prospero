@@ -192,8 +192,9 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
         e.grupoOco = o.grupoOco();
         e.papelOco = o.papelOco() == null ? null : o.papelOco().name();
         e.grupoEnvio = o.grupoEnvio();
-        if (o.grupoOco() == null && (o.tipo() == TipoOrdem.LIMIT || o.tipo() == TipoOrdem.MARKET
-                || o.tipo() == TipoOrdem.STOP || o.tipo() == TipoOrdem.STOP_LIMIT)) {
+        // RF05c.3b: as duas pernas OCO compartilham a admissão do grupo (unicidade por papel, V8).
+        if (o.tipo() == TipoOrdem.LIMIT || o.tipo() == TipoOrdem.MARKET
+                || o.tipo() == TipoOrdem.STOP || o.tipo() == TipoOrdem.STOP_LIMIT) {
             e.admissaoMatching = UUID.nameUUIDFromBytes(("admissao:" + o.grupoEnvio())
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
@@ -214,6 +215,6 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
                 e.dataSessao, e.recebidaEm,
                 e.precoBaseTunel == null ? null : new BaseTunel(e.precoBaseTunel, OrigemBase.valueOf(e.origemBase)),
                 e.motivoRejeicao == null ? null : MotivoRejeicao.valueOf(e.motivoRejeicao),
-                e.quantidadeExecutada, e.quantidadeCancelada, e.motivoEncerramento);
+                e.quantidadeExecutada, e.quantidadeCancelada, e.motivoEncerramento, e.quantidadeReduzida);
     }
 }

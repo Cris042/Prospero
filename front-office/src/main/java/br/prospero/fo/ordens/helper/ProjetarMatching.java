@@ -5,6 +5,7 @@ import br.prospero.fo.ordens.dominio.EventoMatching;
 import br.prospero.fo.ordens.dominio.LadoOrdem;
 import br.prospero.fo.ordens.dominio.MotivoRejeicao;
 import br.prospero.fo.ordens.dominio.Ordem;
+import br.prospero.fo.ordens.dominio.PapelOco;
 import br.prospero.fo.ordens.dominio.MatchingIncoerenteException;
 import br.prospero.fo.ordens.dominio.TipoOrdem;
 import br.prospero.fo.ordens.dominio.Validade;
@@ -20,7 +21,7 @@ public final class ProjetarMatching {
                                 BigDecimal tick, long lote) {
         if (!ordem.id().equals(alvo.ordem()) || !ordem.grupoEnvio().equals(alvo.intencao())
                 || !ordem.conta().equals(alvo.conta()) || !ordem.ticker().equals(evento.ticker())
-                || !ordem.dataSessao().equals(evento.sessao()) || ordem.grupoOco() != null
+                || !ordem.dataSessao().equals(evento.sessao()) || (ordem.grupoOco() != null && evento.versao() != 3)
                 || (stop(ordem) && evento.causacao() == null)) {
             throw incoerente();
         }
@@ -32,6 +33,7 @@ public final class ProjetarMatching {
             case EventoMatching.Oferta oferta -> oferta(ordem, oferta);
             case EventoMatching.Negocio negocio -> negocio(ordem, negocio, alvo, tick, lote);
             case EventoMatching.Encerrada encerrada -> encerrar(ordem, encerrada);
+            case EventoMatching.Reduzida reduzida -> reduzir(ordem, reduzida);
             case EventoMatching.Rejeitada rejeitada -> {
                 if ((stop(ordem) && acionada(ordem))
                         || (rejeitada.motivo() == MotivoRejeicao.LIMITE_STOPS_PENDENTES && (!stop(ordem) || acionada(ordem)))
@@ -57,7 +59,7 @@ public final class ProjetarMatching {
         if (o.quantidadeExecutada() != 0 || o.estado() == EstadoOrdem.CANCELADA || o.estado() == EstadoOrdem.EXECUTADA) {
             return o;
         }
-        if (o.estado() == EstadoOrdem.REJEITADA || e.restante() != o.quantidade()) {
+        if (o.estado() == EstadoOrdem.REJEITADA || e.restante() != o.quantidadeVigente()) {
             throw incoerente();
         }
         return atualizar(o, EstadoOrdem.ABERTA, 0, 0, null, null);
@@ -69,7 +71,7 @@ public final class ProjetarMatching {
         if ((stop(o) && !acionada(o)) || (compra ? LadoOrdem.COMPRA : LadoOrdem.VENDA) != o.lado()
                 || o.estado() == EstadoOrdem.REJEITADA || o.estado() == EstadoOrdem.CANCELADA
                 || o.estado() == EstadoOrdem.EXECUTADA || n.quantidade() <= 0
-                || n.quantidade() > o.quantidade() - o.quantidadeExecutada() || o.quantidadeCancelada() != 0
+                || n.quantidade() > o.quantidadeVigente() - o.quantidadeExecutada() || o.quantidadeCancelada() != 0
                 || n.quantidade() % lote != 0 || n.preco().remainder(tick).signum() != 0) {
             throw incoerente();
         }
@@ -80,16 +82,19 @@ public final class ProjetarMatching {
             }
         }
         long executada = o.quantidadeExecutada() + n.quantidade();
-        return atualizar(o, executada == o.quantidade() ? EstadoOrdem.EXECUTADA : EstadoOrdem.PARCIALMENTE_EXECUTADA,
+        return atualizar(o, executada == o.quantidadeVigente() ? EstadoOrdem.EXECUTADA : EstadoOrdem.PARCIALMENTE_EXECUTADA,
                 executada, 0, null, null);
     }
 
     private static Ordem encerrar(Ordem o, EventoMatching.Encerrada e) {
         boolean excesso = "LIMITE_CASCATA".equals(e.motivo());
-        if ((excesso && (!stop(o) || acionada(o) || e.executada() != 0))
-                || (stop(o) && !excesso && !acionada(o))
+        // Irmã OCO cancelada: SL ainda sem acionamento e sem execução; TP com a execução já projetada.
+        boolean irma = "CANCELADA_OCO".equals(e.motivo());
+        if ((irma && (o.grupoOco() == null || stop(o) && (acionada(o) || e.executada() != 0)))
+                || (excesso && (!stop(o) || acionada(o) || e.executada() != 0))
+                || (stop(o) && !excesso && !irma && !acionada(o))
                 || o.estado() == EstadoOrdem.REJEITADA || e.executada() != o.quantidadeExecutada()
-                || e.cancelada() != o.quantidade() - o.quantidadeExecutada()) {
+                || e.cancelada() != o.quantidadeVigente() - o.quantidadeExecutada()) {
             throw incoerente();
         }
         if (("FOK_SEM_LIQUIDEZ".equals(e.motivo()) && (o.validade() != Validade.FOK || e.executada() != 0))
@@ -105,6 +110,18 @@ public final class ProjetarMatching {
                 e.executada(), e.cancelada(), null, e.motivo());
     }
 
+    /** Só o Stop Loss pendente perde quantidade; o restante deve igualar o que o Take Profit ainda deve. */
+    private static Ordem reduzir(Ordem o, EventoMatching.Reduzida e) {
+        long vigente = o.quantidadeVigente() - e.reduzida();
+        if (o.papelOco() != PapelOco.STOP_LOSS || acionada(o) || o.estado() == EstadoOrdem.REJEITADA
+                || o.estado() == EstadoOrdem.CANCELADA || o.quantidadeExecutada() != 0 || vigente <= 0
+                || e.restante() != vigente) {
+            throw incoerente();
+        }
+        Ordem atualizada = atualizar(o, inicial(o) ? EstadoOrdem.AGUARDANDO_GATILHO : o.estado(), 0, 0, null, null);
+        return comReducao(atualizada, o.quantidadeReduzida() + e.reduzida());
+    }
+
     private static boolean stop(Ordem o) {
         return o.tipo() == TipoOrdem.STOP || o.tipo() == TipoOrdem.STOP_LIMIT;
     }
@@ -112,7 +129,8 @@ public final class ProjetarMatching {
     private static boolean acionada(Ordem o) {
         return o.estado() == EstadoOrdem.ABERTA || o.estado() == EstadoOrdem.PARCIALMENTE_EXECUTADA
                 || o.estado() == EstadoOrdem.EXECUTADA
-                || (o.estado() == EstadoOrdem.CANCELADA && !"LIMITE_CASCATA".equals(o.motivoEncerramento()));
+                || (o.estado() == EstadoOrdem.CANCELADA && !"LIMITE_CASCATA".equals(o.motivoEncerramento())
+                    && !"CANCELADA_OCO".equals(o.motivoEncerramento()));
     }
 
     private static Ordem pendente(Ordem o, EventoMatching.StopPendente e) {
@@ -135,9 +153,16 @@ public final class ProjetarMatching {
 
     private static Ordem atualizar(Ordem o, EstadoOrdem estado, long executada, long cancelada,
                                    MotivoRejeicao rejeicao, String encerramento) {
-        return new Ordem(o.id(), o.conta(), o.ticker(), o.lado(), o.tipo(), o.validade(), o.quantidade(),
+        return comReducao(new Ordem(o.id(), o.conta(), o.ticker(), o.lado(), o.tipo(), o.validade(), o.quantidade(),
                 o.precoLimite(), o.precoGatilho(), o.grupoOco(), o.papelOco(), o.grupoEnvio(), estado,
-                o.dataSessao(), o.recebidaEm(), o.baseTunel(), rejeicao, executada, cancelada, encerramento);
+                o.dataSessao(), o.recebidaEm(), o.baseTunel(), rejeicao, executada, cancelada, encerramento), o.quantidadeReduzida());
+    }
+
+    private static Ordem comReducao(Ordem o, long reduzida) {
+        return new Ordem(o.id(), o.conta(), o.ticker(), o.lado(), o.tipo(), o.validade(), o.quantidade(),
+                o.precoLimite(), o.precoGatilho(), o.grupoOco(), o.papelOco(), o.grupoEnvio(), o.estado(),
+                o.dataSessao(), o.recebidaEm(), o.baseTunel(), o.motivoRejeicao(), o.quantidadeExecutada(),
+                o.quantidadeCancelada(), o.motivoEncerramento(), reduzida);
     }
 
     private static MatchingIncoerenteException incoerente() {
