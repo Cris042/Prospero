@@ -28,6 +28,7 @@ def main():
         ("middle-office", "MO", "mo", "OcoPostgresIT"),
         ("middle-office", "MO", "mo", "OcoQaPostgresIT"),
         ("middle-office", "MO", "mo", "OcoAdmissaoQaPostgresIT"),
+        ("middle-office", "MO", "mo", "EncerramentoPostgresIT"),
         ("front-office", "FO", "fo", "MatchingPostgresIT"),
         ("front-office", "FO", "fo", "OcoQaPostgresIT"),
     ]:
