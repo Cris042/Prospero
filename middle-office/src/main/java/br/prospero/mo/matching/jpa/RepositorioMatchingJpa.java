@@ -10,6 +10,7 @@ import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static br.prospero.mo.matching.helper.EnvelopeMatching.*;
@@ -25,7 +26,16 @@ public class RepositorioMatchingJpa {
 
     public record Reserva(UUID intencao, UUID ordem, String conta, String ticker, String recurso, String tipo,
                           String validade, LocalDate sessao, long inicial, long restante,
-                          BigDecimal limite, BigDecimal teto, BigDecimal valor, String estado, BigDecimal gatilho, boolean acionada) { }
+                          BigDecimal limite, BigDecimal teto, BigDecimal valor, String estado, BigDecimal gatilho, boolean acionada,
+                          boolean oco) { }
+
+    /** Progresso de uma perna OCO; caixa/custódia continuam na reserva do grupo (RF05c.3b). */
+    public record Perna(UUID ordem, UUID intencao, String papel, String tipo, BigDecimal limite, BigDecimal gatilho,
+                        long quantidade, long executada, long reduzida, long cancelada, boolean acionada, String estado) {
+        long restante() { return quantidade - executada - reduzida - cancelada; }
+        boolean viva() { return !estado.equals("ENCERRADA"); }
+        boolean takeProfit() { return papel.equals("TAKE_PROFIT"); }
+    }
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void aplicar(JsonNode evento) {
@@ -39,7 +49,7 @@ public class RepositorioMatchingJpa {
         exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
                 .setParameter("a",uuid(evento,"correlacao")).setParameter("t",texto(evento,"ticker"))
                 .setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList().isEmpty(),"correlacao");
-        boolean v2 = evento.get("versao").intValue() == 2;
+        boolean v2 = evento.get("versao").intValue() >= 2;
         if (v2) exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
                 .setParameter("a",uuid(evento,"causacao")).setParameter("t",texto(evento,"ticker"))
                 .setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList().isEmpty(),"causacao");
@@ -52,22 +62,34 @@ public class RepositorioMatchingJpa {
                 Reserva compra=reserva(uuid(d,"intencaoCompra"));
                 Reserva venda=reserva(uuid(d,"intencaoVenda"));
                 validarVersao(evento,compra,venda);
-                exigir(!compra.ordem().equals(venda.ordem()),"ordens distintas");
+                UUID ordemCompra=uuid(d,"ordemCompra"), ordemVenda=uuid(d,"ordemVenda");
+                exigir(!ordemCompra.equals(ordemVenda) && !compra.intencao().equals(venda.intencao()),"ordens distintas");
                 validar(compra,evento,d,"Compra"); validar(venda,evento,d,"Venda");
                 long q=inteiro(d,"quantidade",1,1000000); BigDecimal p=preco(d,"preco");
-                exigir((!stop(compra) || v2 && compra.acionada()) && (!stop(venda) || v2 && venda.acionada()),"stop nao acionado");
+                Perna pernaCompra=compra.oco()?perna(compra,ordemCompra):null, pernaVenda=venda.oco()?perna(venda,ordemVenda):null;
+                exigir(executavel(compra,pernaCompra,v2) && executavel(venda,pernaVenda,v2),"stop nao acionado");
                 exigir(q<=compra.restante() && q<=venda.restante(),"restante");
+                exigir((pernaCompra==null || q<=pernaCompra.restante()) && (pernaVenda==null || q<=pernaVenda.restante()),"restante perna");
                 exigir(p.compareTo(compra.teto())<=0,"teto compra");
-                exigir(compra.limite()==null || p.compareTo(compra.limite())<=0,"limite compra");
-                exigir(venda.limite()==null || p.compareTo(venda.limite())>=0,"limite venda");
+                BigDecimal limiteCompra=pernaCompra==null?compra.limite():pernaCompra.limite();
+                BigDecimal limiteVenda=pernaVenda==null?venda.limite():pernaVenda.limite();
+                exigir(limiteCompra==null || p.compareTo(limiteCompra)<=0,"limite compra");
+                exigir(limiteVenda==null || p.compareTo(limiteVenda)>=0,"limite venda");
                 var consumo=br.prospero.mo.matching.helper.CalculoConsumo.compra(compra.restante(),q,compra.teto(),p,compra.valor());
                 consumirCompra(compra,q,consumo); consumirVenda(venda,q);
+                if (pernaCompra!=null) executarPerna(pernaCompra,q);
+                if (pernaVenda!=null) executarPerna(pernaVenda,q);
                 inserir("matching_negocio","negocio",texto(d,"negocio"),assinaturaNegocio);
             }
         } else {
             Reserva r=reserva(uuid(d,"intencao"));
             validarVersao(evento,r);
             validar(r,evento,d,"");
+            if (r.oco()) {
+                aplicarPerna(evento,d,r,perna(r,uuid(d,"ordem")));
+                inserir("matching_evento","id",uuid(evento,"id"),hash);
+                return;
+            }
             exigir(!stop(r) || v2,"versao stop");
             if (v2) exigir(uuid(evento,"correlacao").equals(br.prospero.mo.risco.helper.EnvelopeAdmissao.id(r.intencao())),"alvo correlacao");
             switch(texto(evento,"tipo")) {
@@ -111,20 +133,125 @@ public class RepositorioMatchingJpa {
         inserir("matching_evento","id",uuid(evento,"id"),hash);
     }
 
+    /** v3 exatamente quando a raiz ou um alvo é OCO; senão v2 exatamente quando há stop (ADR-013). */
     private void validarVersao(JsonNode evento, Reserva... alvos) {
-        boolean v2 = evento.get("versao").intValue() == 2;
-        List<?> tipos = em().createNativeQuery("SELECT tipo FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
-                .setParameter("a",uuid(evento,v2?"causacao":"correlacao"))
+        int versao = evento.get("versao").intValue();
+        List<?> raizes = em().createNativeQuery("SELECT tipo,oco FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
+                .setParameter("a",uuid(evento,versao>=2?"causacao":"correlacao"))
                 .setParameter("t",texto(evento,"ticker")).setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList();
-        boolean envolveStop = tipos.stream().anyMatch(t -> "STOP".equals(t) || "STOP_LIMIT".equals(t))
+        boolean envolveOco = raizes.stream().anyMatch(c -> Boolean.TRUE.equals(((Object[]) c)[1]))
+                || java.util.Arrays.stream(alvos).anyMatch(Reserva::oco);
+        boolean envolveStop = raizes.stream().map(c -> ((Object[]) c)[0]).anyMatch(t -> "STOP".equals(t) || "STOP_LIMIT".equals(t))
                 || java.util.Arrays.stream(alvos).anyMatch(RepositorioMatchingJpa::stop);
-        exigir(v2 == envolveStop,"versao stop");
+        exigir(versao == (envolveOco ? 3 : envolveStop ? 2 : 1),"versao stop");
     }
 
-    private static boolean stop(Reserva r) { return r.tipo().equals("STOP") || r.tipo().equals("STOP_LIMIT"); }
+    private static boolean executavel(Reserva r, Perna p, boolean v2) {
+        if (p == null) return !stop(r) || v2 && r.acionada();
+        // TP negocia até a captura (que o encerra); SL só depois de acionado.
+        return p.viva() && (p.takeProfit() || p.acionada());
+    }
+
+    private Perna perna(Reserva r, UUID ordem) {
+        return perna(r.intencao(),ordem);
+    }
+
+    private Perna perna(UUID intencao, UUID ordem) {
+        List<?> linhas=em().createNativeQuery("""
+                SELECT ordem,intencao,papel,tipo,preco_limite,preco_gatilho,quantidade,executada,reduzida,cancelada,
+                stop_acionado,estado FROM reserva_perna WHERE ordem=:o FOR UPDATE
+                """).setParameter("o",ordem).getResultList();
+        exigir(linhas.size()==1,"perna ausente"); Object[] c=(Object[])linhas.getFirst();
+        Perna p=new Perna((UUID)c[0],(UUID)c[1],(String)c[2],(String)c[3],(BigDecimal)c[4],(BigDecimal)c[5],
+                ((Number)c[6]).longValue(),((Number)c[7]).longValue(),((Number)c[8]).longValue(),((Number)c[9]).longValue(),
+                (Boolean)c[10],(String)c[11]);
+        exigir(p.intencao().equals(intencao),"perna de outro grupo");
+        return p;
+    }
+
+    private Perna irma(Perna p) {
+        List<?> ordens=em().createNativeQuery("SELECT ordem FROM reserva_perna WHERE intencao=:i AND ordem<>:o")
+                .setParameter("i",p.intencao()).setParameter("o",p.ordem()).getResultList();
+        exigir(ordens.size()==1,"irma ausente");
+        return perna(p.intencao(),(UUID)ordens.getFirst());
+    }
+
+    private void executarPerna(Perna p, long q) {
+        em().createNativeQuery("UPDATE reserva_perna SET executada=executada+:q,estado='PARCIAL' WHERE ordem=:o")
+                .setParameter("q",q).setParameter("o",p.ordem()).executeUpdate();
+    }
+
+    /** Fatos de uma perna OCO: só o último terminal do grupo libera o restante reservado. */
+    private void aplicarPerna(JsonNode evento, JsonNode d, Reserva r, Perna p) {
+        exigir(uuid(evento,"correlacao").equals(br.prospero.mo.risco.helper.EnvelopeAdmissao.id(r.intencao())),"alvo correlacao");
+        boolean stopLoss=!p.takeProfit();
+        switch(texto(evento,"tipo")) {
+            case "ORDEM_ACEITA" -> exigir(p.viva(),"perna encerrada");
+            case "STOP_PENDENTE" -> {
+                exigir(stopLoss && !p.acionada() && p.estado().equals("ATIVA"),"stop pendente");
+                exigir(p.gatilho().compareTo(preco(d,"precoGatilho"))==0,"gatilho");
+            }
+            case "ORDEM_REDUZIDA" -> {
+                exigir(stopLoss && !p.acionada() && p.estado().equals("ATIVA"),"reducao perna");
+                long reduzida=inteiro(d,"reduzida",1,1000000), restante=inteiro(d,"restante",1,1000000);
+                Perna tp=irma(p);
+                exigir(reduzida<p.restante() && restante==p.restante()-reduzida && restante==tp.quantidade()-tp.executada(),"reducao restante");
+                em().createNativeQuery("UPDATE reserva_perna SET reduzida=reduzida+:q WHERE ordem=:o")
+                        .setParameter("q",reduzida).setParameter("o",p.ordem()).executeUpdate();
+            }
+            case "STOP_ACIONADO" -> {
+                exigir(stopLoss && !p.acionada() && p.estado().equals("ATIVA") && !irma(p).viva(),"stop acionamento");
+                exigir(texto(d,"tipoExecutavel").equals(p.tipo().equals("STOP")?"MARKET":"LIMIT"),"tipo executavel");
+                em().createNativeQuery("UPDATE reserva_perna SET stop_acionado=TRUE WHERE ordem=:o")
+                        .setParameter("o",p.ordem()).executeUpdate();
+            }
+            case "OFERTA_NO_LIVRO" -> {
+                exigir(p.viva() && (p.takeProfit() || p.tipo().equals("STOP_LIMIT") && p.acionada()),"oferta tipo");
+                exigir(inteiro(d,"restante",1,1000000)==p.restante(),"oferta restante");
+                exigir(p.limite()!=null && p.limite().compareTo(preco(d,"preco"))==0,"oferta preco");
+                exigir(texto(d,"lado").equals(r.recurso().equals("CAIXA")?"COMPRA":"VENDA"),"oferta lado");
+            }
+            case "ORDEM_REJEITADA" -> {
+                exigir(p.viva() && p.executada()==0 && p.reduzida()==0 && !p.acionada(),"rejeicao executada");
+                exigir(!texto(d,"motivo").equals("LIMITE_STOPS_PENDENTES") || stopLoss || irma(p).viva(),"rejeicao stop");
+                encerrarPerna(r,p,p.restante());
+            }
+            case "ORDEM_ENCERRADA" -> {
+                exigir(p.viva(),"terminal divergente");
+                exigir(inteiro(d,"executada",0,1000000)==p.executada(),"executada");
+                exigir(inteiro(d,"cancelada",0,1000000)==p.restante(),"cancelada");
+                String motivo=texto(d,"motivo");
+                Perna outra=irma(p);
+                switch (motivo) {
+                    case "CANCELADA_OCO" -> exigir(p.takeProfit() ? outra.viva() : !outra.viva() && !p.acionada() && p.executada()==0,"cancelamento oco");
+                    case "LIMITE_CASCATA" -> exigir(stopLoss && !p.acionada() && p.executada()==0 && !outra.viva(),"cascata");
+                    default -> {
+                        exigir(p.takeProfit() ? Set.of("EXECUTADA","LIMITE_NEGOCIOS").contains(motivo) : p.acionada(),"terminal perna");
+                        exigir(!motivo.equals("FOK_SEM_LIQUIDEZ"),"terminal FOK");
+                        exigir(!motivo.equals("SALDO_CANCELADO_IOC") || p.tipo().equals("STOP"),"terminal IOC");
+                        exigir(motivo.equals("EXECUTADA") == (p.restante()==0),"execucao terminal");
+                    }
+                }
+                encerrarPerna(r,p,p.restante());
+            }
+            default -> throw new IllegalStateException("tipo validado na fronteira");
+        }
+    }
+
+    private void encerrarPerna(Reserva r, Perna p, long cancelada) {
+        em().createNativeQuery("UPDATE reserva_perna SET cancelada=cancelada+:c,estado='ENCERRADA' WHERE ordem=:o")
+                .setParameter("c",cancelada).setParameter("o",p.ordem()).executeUpdate();
+        if (!irma(p).viva()) {
+            encerrar(r);
+        }
+    }
+
+    // Grupo OCO não tem tipo próprio: os tipos ficam nas pernas.
+    private static boolean stop(Reserva r) { return "STOP".equals(r.tipo()) || "STOP_LIMIT".equals(r.tipo()); }
 
     private void validar(Reserva r, JsonNode e,JsonNode d,String lado) {
-        exigir(r.ordem()!=null && r.ordem().equals(uuid(d,"ordem"+lado)) && r.conta().equals(texto(d,"conta"+lado)),"identidade reserva");
+        // No grupo OCO a perna é conferida em reserva_perna; a reserva confere só conta, ativo e sessão.
+        exigir((r.oco() || r.ordem()!=null && r.ordem().equals(uuid(d,"ordem"+lado))) && r.conta().equals(texto(d,"conta"+lado)),"identidade reserva");
         exigir(r.ticker().equals(texto(e,"ticker")) && r.sessao().equals(LocalDate.parse(texto(e,"dataSessao"))),"sessao reserva");
         if (!lado.isEmpty()) {
             exigir(!r.estado().equals("ENCERRADA"),"reserva encerrada");
@@ -138,13 +265,14 @@ public class RepositorioMatchingJpa {
     private Reserva reserva(UUID i) {
         List<?> linhas=em().createNativeQuery("""
                 SELECT intencao,ordem,conta,ticker,recurso,tipo,validade,data_sessao,quantidade_inicial,
-                quantidade_restante,preco_limite,preco_maximo,valor_restante,estado,preco_gatilho,stop_acionado FROM reserva WHERE intencao=:i FOR UPDATE
+                quantidade_restante,preco_limite,preco_maximo,valor_restante,estado,preco_gatilho,stop_acionado,oco FROM reserva WHERE intencao=:i FOR UPDATE
                 """).setParameter("i",i).getResultList();
         exigir(linhas.size()==1,"reserva ausente"); Object[] c=(Object[])linhas.getFirst();
-        exigir(c[1]!=null && c[7]!=null && c[8]!=null && c[9]!=null,"reserva legada");
+        boolean oco=(Boolean)c[16];
+        exigir((c[1]!=null || oco) && c[7]!=null && c[8]!=null && c[9]!=null,"reserva legada");
         LocalDate data=c[7] instanceof LocalDate l ? l : ((java.sql.Date)c[7]).toLocalDate();
         return new Reserva((UUID)c[0],(UUID)c[1],(String)c[2],(String)c[3],(String)c[4],(String)c[5],(String)c[6],data,
-                ((Number)c[8]).longValue(),((Number)c[9]).longValue(),(BigDecimal)c[10],(BigDecimal)c[11],(BigDecimal)c[12],(String)c[13],(BigDecimal)c[14],(Boolean)c[15]);
+                ((Number)c[8]).longValue(),((Number)c[9]).longValue(),(BigDecimal)c[10],(BigDecimal)c[11],(BigDecimal)c[12],(String)c[13],(BigDecimal)c[14],(Boolean)c[15],oco);
     }
     private boolean duplicado(String tabela,String coluna,Object id,String hash) {
         List<?> existentes=em().createNativeQuery("SELECT assinatura FROM "+tabela+" WHERE "+coluna+"=:i").setParameter("i",id).getResultList();

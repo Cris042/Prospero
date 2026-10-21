@@ -1,5 +1,6 @@
 package br.prospero.me.matching.helper;
 
+import br.prospero.me.livro.dominio.AdmissaoOco;
 import br.prospero.me.livro.dominio.MotorMatching;
 import br.prospero.me.livro.dominio.ParametrosAtivo;
 
@@ -23,13 +24,22 @@ public final class SessaoMatching {
         if (sessao != null && !sessao.equals(a.sessao())) throw new IllegalArgumentException("Uma sessão por log.");
         var anterior = ordens.get(a.ordem());
         if (anterior != null && !anterior.equals(comando)) throw new IllegalArgumentException("Admissão divergente.");
+        // O par registra a intenção pelo Take Profit; o Stop Loss compartilha a mesma admissão.
+        if (comando.oco()) {
+            var irma = ordens.get(comando.stopLoss().ordem());
+            if (irma != null && !irma.equals(comando) || (anterior == null) != (irma == null)) {
+                throw new IllegalArgumentException("Admissão divergente.");
+            }
+        }
         UUID ordemDaIntencao = intencoes.get(a.intencao());
         if (ordemDaIntencao != null && !ordemDaIntencao.equals(a.ordem())) throw new IllegalArgumentException("Intenção divergente.");
-        if (anterior == null && ordens.size() >= 30_000) throw new IllegalStateException("Orçamento de ordens esgotado.");
+        int novas = comando.oco() ? 2 : 1;
+        if (anterior == null && ordens.size() + novas > 30_000) throw new IllegalStateException("Orçamento de ordens esgotado.");
         sessao = a.sessao();
         ordens.putIfAbsent(a.ordem(), comando);
+        if (comando.oco()) ordens.putIfAbsent(comando.stopLoss().ordem(), comando);
         intencoes.putIfAbsent(a.intencao(), a.ordem());
-        var eventos = motor.processar(a);
+        var eventos = comando.oco() ? motor.processarOco(new AdmissaoOco(a, comando.stopLoss())) : motor.processar(a);
         List<byte[]> envelopes = new ArrayList<>(eventos.size());
         for (int i = 0; i < eventos.size(); i++) envelopes.add(EnvelopeMatching.evento(comando, eventos.get(i), i, ordens));
         return List.copyOf(envelopes);

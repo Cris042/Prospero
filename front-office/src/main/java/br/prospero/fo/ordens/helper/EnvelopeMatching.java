@@ -46,10 +46,12 @@ public final class EnvelopeMatching {
         } catch (IOException erro) {
             throw invalido("json");
         }
-        boolean v2 = r != null && r.path("versao").isInt() && r.get("versao").intValue() == 2;
+        int versao = r != null && r.path("versao").isInt() ? r.get("versao").intValue() : 0;
+        // v2 (stops) e v3 (OCO) acrescentam a causação raiz; somente v3 transporta fatos OCO.
+        boolean v2 = versao == 2 || versao == 3, v3 = versao == 3;
         if (v2) campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados", "causacao");
         else campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados");
-        if (!r.get("versao").isInt() || (r.get("versao").intValue() != 1 && !v2)
+        if (!r.get("versao").isInt() || (versao != 1 && !v2)
                 || !"matching-engine".equals(texto(r, "origem"))) {
             throw invalido("versao ou origem");
         }
@@ -91,6 +93,12 @@ public final class EnvelopeMatching {
                 if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido("tipoExecutavel");
                 yield new EventoMatching.StopAcionado(alvo(d, ""), TipoOrdem.valueOf(tipo), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
             }
+            case "ORDEM_REDUZIDA" -> {
+                if (!v3) throw invalido("versao");
+                campos(d, "ordem", "intencao", "conta", "reduzida", "restante");
+                yield new EventoMatching.Reduzida(alvo(d, ""), inteiro(d, "reduzida", 1, 1_000_000),
+                        inteiro(d, "restante", 1, 1_000_000));
+            }
             case "OFERTA_NO_LIVRO" -> {
                 campos(d, "ordem", "intencao", "conta", "lado", "preco", "restante");
                 yield new EventoMatching.Oferta(alvo(d, ""), lado(d, "lado"), preco(d), inteiro(d, "restante", 1, 1_000_000));
@@ -106,7 +114,8 @@ public final class EnvelopeMatching {
             case "ORDEM_ENCERRADA" -> {
                 campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
                 String motivo = texto(d, "motivo");
-                if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))) {
+                if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))
+                        && !(v3 && "CANCELADA_OCO".equals(motivo))) {
                     throw invalido("motivo");
                 }
                 yield new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),
@@ -129,7 +138,8 @@ public final class EnvelopeMatching {
             }
             default -> throw invalido("tipo");
         };
-        return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe, v2 ? uuid(r, "causacao") : null);
+        return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe,
+                v2 ? uuid(r, "causacao") : null, versao);
     }
 
     public static String assinatura(byte[] bytes) {

@@ -29,7 +29,25 @@ public final class EnvelopeMatching {
 
     private EnvelopeMatching() { }
 
-    public record Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao) { }
+    private static final Set<String> DADOS_OCO = Set.of("ticker", "lado", "dataSessao", "precoMaximo", "pernas");
+    private static final Set<String> TAKE_PROFIT = Set.of("papel", "ordem", "tipo", "validade", "quantidade", "precoLimite");
+    private static final Set<String> STOP_LOSS = Set.of("papel", "ordem", "tipo", "validade", "quantidade", "precoLimite", "precoGatilho");
+
+    /** Admissão simples, ou par OCO (v3) com admissao = Take Profit e stopLoss = Stop Loss. */
+    public record Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao, Admissao stopLoss) {
+        public Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao) {
+            this(id, ocorridoEm, traceparent, admissao, null);
+        }
+
+        public boolean oco() { return stopLoss != null; }
+
+        /** Perna do comando com a ordem informada. */
+        public Admissao perna(UUID ordem) {
+            if (admissao.ordem().equals(ordem)) return admissao;
+            if (oco() && stopLoss.ordem().equals(ordem)) return stopLoss;
+            throw new IllegalArgumentException("Ordem fora do comando.");
+        }
+    }
 
     public static Comando comando(byte[] bytes, String chave) {
         try {
@@ -38,7 +56,7 @@ public final class EnvelopeMatching {
             campos(raiz, RAIZ);
             int versao = raiz.path("versao").isInt() ? raiz.get("versao").intValue() : 0;
             if (!texto(raiz, "tipo").equals("ORDEM_ADMITIDA") || !raiz.get("versao").isInt()
-                    || (versao != 1 && versao != 2) || !texto(raiz, "origem").equals("middle-office")) throw invalido();
+                    || versao < 1 || versao > 3 || !texto(raiz, "origem").equals("middle-office")) throw invalido();
             UUID id = uuid(raiz, "id"), intencao = uuid(raiz, "correlacao");
             if (!id.equals(UUID.nameUUIDFromBytes(("admissao:" + intencao).getBytes(StandardCharsets.UTF_8)))) throw invalido();
             String conta = texto(raiz, "conta");
@@ -48,6 +66,7 @@ public final class EnvelopeMatching {
                     || trace.substring(3, 35).equals("0".repeat(32)) || trace.substring(36, 52).equals("0".repeat(16)))) throw invalido();
             Instant ocorrido = Instant.parse(texto(raiz, "ocorridoEm"));
             JsonNode dados = raiz.get("dados");
+            if (versao == 3) return par(id, intencao, conta, ocorrido, trace, dados, chave);
             Set<String> camposDados = new HashSet<>(DADOS);
             if (versao == 2) camposDados.add("precoGatilho");
             campos(dados, camposDados);
@@ -79,29 +98,76 @@ public final class EnvelopeMatching {
         }
     }
 
+    /** Par OCO v3 (RF05c.3b): duas pernas em ordem fixa, mesmas guardas do núcleo antes de qualquer mutação. */
+    private static Comando par(UUID id, UUID intencao, String conta, Instant ocorrido, String trace, JsonNode dados,
+                               String chave) {
+        campos(dados, DADOS_OCO);
+        String ticker = texto(dados, "ticker");
+        if (!ATIVOS.contains(ticker) || !ticker.equals(chave)) throw invalido();
+        String data = texto(dados, "dataSessao");
+        if (!data.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) throw invalido();
+        LocalDate sessao = LocalDate.parse(data);
+        Lado lado = Lado.valueOf(texto(dados, "lado"));
+        BigDecimal maximo = preco(dados, "precoMaximo");
+        boolean compra = lado == Lado.COMPRA;
+        if (compra != (maximo != null)) throw invalido();
+        JsonNode pernas = dados.get("pernas");
+        if (pernas == null || !pernas.isArray() || pernas.size() != 2) throw invalido();
+        JsonNode tp = pernas.get(0), sl = pernas.get(1);
+        campos(tp, TAKE_PROFIT);
+        campos(sl, STOP_LOSS);
+        if (!texto(tp, "papel").equals("TAKE_PROFIT") || !texto(sl, "papel").equals("STOP_LOSS")
+                || !texto(tp, "tipo").equals("LIMIT") || !Set.of("STOP", "STOP_LIMIT").contains(texto(sl, "tipo"))
+                || !texto(tp, "validade").equals("DIA") || !texto(sl, "validade").equals("DIA")) throw invalido();
+        long q = quantidade(tp);
+        if (q != quantidade(sl)) throw invalido();
+        TipoOrdem tipoStop = TipoOrdem.valueOf(texto(sl, "tipo"));
+        BigDecimal alvo = preco(tp, "precoLimite"), limiteStop = preco(sl, "precoLimite"), gatilho = preco(sl, "precoGatilho");
+        UUID ordemTp = uuid(tp, "ordem"), ordemSl = uuid(sl, "ordem");
+        if (alvo == null || gatilho == null || ordemTp.equals(ordemSl)
+                || (tipoStop == TipoOrdem.STOP_LIMIT) != (limiteStop != null)
+                || (compra ? alvo.compareTo(gatilho) >= 0 : alvo.compareTo(gatilho) <= 0)
+                || (limiteStop != null && (compra ? limiteStop.compareTo(gatilho) < 0 : limiteStop.compareTo(gatilho) > 0))
+                || (compra && (alvo.compareTo(maximo) > 0 || limiteStop != null && limiteStop.compareTo(maximo) > 0))) {
+            throw invalido();
+        }
+        Admissao takeProfit = new Admissao(ordemTp, intencao, conta, ticker, lado, TipoOrdem.LIMIT, Validade.DIA, q,
+                alvo, maximo, null, sessao);
+        Admissao stopLoss = new Admissao(ordemSl, intencao, conta, ticker, lado, tipoStop, Validade.DIA, q,
+                limiteStop, maximo, gatilho, sessao);
+        return new Comando(id, ocorrido, trace, takeProfit, stopLoss);
+    }
+
+    private static long quantidade(JsonNode no) {
+        JsonNode q = no.get("quantidade");
+        if (!q.isIntegralNumber() || !q.canConvertToLong() || q.longValue() <= 0 || q.longValue() > 1_000_000) throw invalido();
+        return q.longValue();
+    }
+
     public static byte[] evento(Comando comando, Evento evento, int indice, Map<UUID, Comando> ordens) {
-        boolean v2 = stop(comando) || envolvidos(evento).stream().anyMatch(id -> stop(ordens.get(id)));
+        boolean v3 = comando.oco() || envolvidos(evento).stream().anyMatch(id -> ordens.get(id).oco());
+        boolean v2 = !v3 && (stop(comando) || envolvidos(evento).stream().anyMatch(id -> stop(ordens.get(id))));
         UUID alvo = switch (evento) {
             case Evento.Negocio e -> e.agressor() == Lado.COMPRA ? e.ordemCompra() : e.ordemVenda();
             default -> envolvidos(evento).getFirst();
         };
-        // Fatos OCO ficam fora do contrato Kafka até a RF05c.3b definir a liberação por grupo no MO.
-        if (evento instanceof Evento.OrdemReduzida || (evento instanceof Evento.OrdemEncerrada fim
-                && fim.motivo() == MotivoEncerramento.CANCELADA_OCO)) {
+        // Fatos OCO existem somente em v3; invariantes violadas indicam defeito do núcleo, não entrada externa.
+        if (!v3 && (evento instanceof Evento.OrdemReduzida || (evento instanceof Evento.OrdemEncerrada fim
+                && fim.motivo() == MotivoEncerramento.CANCELADA_OCO))) {
             throw new IllegalArgumentException("Evento OCO fora do contrato.");
         }
         if ((evento instanceof Evento.StopPendente || evento instanceof Evento.StopAcionado)
-                && !stop(ordens.get(alvo))) throw new IllegalArgumentException("Evento stop sem admissão stop.");
+                && !stopPerna(ordens.get(alvo), alvo)) throw new IllegalArgumentException("Evento stop sem admissão stop.");
         ObjectNode raiz = JSON.createObjectNode();
         raiz.put("id", UUID.nameUUIDFromBytes(("matching:" + comando.id() + ":" + indice).getBytes(StandardCharsets.UTF_8)).toString());
-        raiz.put("versao", v2 ? 2 : 1);
+        raiz.put("versao", v3 ? 3 : v2 ? 2 : 1);
         raiz.put("origem", "matching-engine");
-        raiz.put("correlacao", (v2 ? ordens.get(alvo).id() : comando.id()).toString());
+        raiz.put("correlacao", (v2 || v3 ? ordens.get(alvo).id() : comando.id()).toString());
         raiz.put("ocorridoEm", comando.ocorridoEm().toString());
         raiz.put("ticker", evento.ticker());
         raiz.put("dataSessao", comando.admissao().sessao().toString());
         raiz.put("traceparent", comando.traceparent());
-        if (v2) raiz.put("causacao", comando.id().toString());
+        if (v2 || v3) raiz.put("causacao", comando.id().toString());
         ObjectNode dados = raiz.putObject("dados");
         switch (evento) {
             case Evento.StopPendente e -> {
@@ -112,7 +178,10 @@ public final class EnvelopeMatching {
                 raiz.put("tipo", "STOP_ACIONADO"); ordem(dados, e.ordem(), ordens);
                 dados.put("tipoExecutavel", e.tipoExecutavel().name()); dados.put("sequencia", e.sequencia());
             }
-            case Evento.OrdemReduzida e -> throw new IllegalArgumentException("Evento OCO fora do contrato.");
+            case Evento.OrdemReduzida e -> {
+                raiz.put("tipo", "ORDEM_REDUZIDA"); ordem(dados, e.ordem(), ordens);
+                dados.put("reduzida", e.reduzida()); dados.put("restante", e.restante());
+            }
             case Evento.OrdemAceita e -> {
                 raiz.put("tipo", "ORDEM_ACEITA"); ordem(dados, e.ordem(), ordens); dados.put("sequencia", e.sequencia());
             }
@@ -142,7 +211,12 @@ public final class EnvelopeMatching {
     }
 
     private static boolean stop(Comando comando) {
-        return comando.admissao().tipo() == TipoOrdem.STOP || comando.admissao().tipo() == TipoOrdem.STOP_LIMIT;
+        return stopPerna(comando, comando.admissao().ordem());
+    }
+
+    private static boolean stopPerna(Comando comando, UUID ordem) {
+        TipoOrdem tipo = comando.perna(ordem).tipo();
+        return tipo == TipoOrdem.STOP || tipo == TipoOrdem.STOP_LIMIT;
     }
 
     private static java.util.List<UUID> envolvidos(Evento evento) {
