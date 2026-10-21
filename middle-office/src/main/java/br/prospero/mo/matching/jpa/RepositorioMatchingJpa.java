@@ -39,6 +39,10 @@ public class RepositorioMatchingJpa {
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void aplicar(JsonNode evento) {
+        if (texto(evento,"tipo").equals("SESSAO_ENCERRADA")) {
+            aplicarMarco(evento);
+            return;
+        }
         JsonNode d=evento.get("dados");
         boolean negocio=texto(evento,"tipo").equals("NEGOCIO");
         var contas= negocio ? java.util.stream.Stream.of(texto(d,"contaCompra"),texto(d,"contaVenda"))
@@ -47,13 +51,7 @@ public class RepositorioMatchingJpa {
         String hash=assinatura(evento);
         if (duplicado("matching_evento","id",uuid(evento,"id"),hash)) return;
         boolean v4 = evento.get("versao").intValue() == 4;
-        if (v4) exigir(uuid(evento,"causacao").equals(encerramento(texto(evento,"ticker"),texto(evento,"dataSessao"))),"causacao encerramento");
-        if (texto(evento,"tipo").equals("SESSAO_ENCERRADA")) {
-            // Marco do encerramento: sem reserva própria; registra só o fato para deduplicação.
-            exigir(uuid(evento,"correlacao").equals(uuid(evento,"causacao")),"correlacao encerramento");
-            inserir("matching_evento","id",uuid(evento,"id"),hash);
-            return;
-        }
+        if (v4) exigirCausacaoEncerramento(evento);
         exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
                 .setParameter("a",uuid(evento,"correlacao")).setParameter("t",texto(evento,"ticker"))
                 .setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList().isEmpty(),"correlacao");
@@ -145,6 +143,18 @@ public class RepositorioMatchingJpa {
             }
         }
         inserir("matching_evento","id",uuid(evento,"id"),hash);
+    }
+
+    /** Marco do encerramento (v4): sem conta nem reserva; só o fato deduplicado (RF05c.4). */
+    private void aplicarMarco(JsonNode evento) {
+        exigirCausacaoEncerramento(evento);
+        exigir(uuid(evento,"correlacao").equals(uuid(evento,"causacao")),"correlacao encerramento");
+        String hash=assinatura(evento);
+        if (!duplicado("matching_evento","id",uuid(evento,"id"),hash)) inserir("matching_evento","id",uuid(evento,"id"),hash);
+    }
+
+    private static void exigirCausacaoEncerramento(JsonNode evento) {
+        exigir(uuid(evento,"causacao").equals(encerramento(texto(evento,"ticker"),texto(evento,"dataSessao"))),"causacao encerramento");
     }
 
     /** v3 exatamente quando a raiz ou um alvo é OCO; senão v2 exatamente quando há stop (ADR-013). */

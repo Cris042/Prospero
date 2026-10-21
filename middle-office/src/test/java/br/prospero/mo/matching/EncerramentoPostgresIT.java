@@ -173,4 +173,26 @@ class EncerramentoPostgresIT {
         }
         assertEquals(0, BigDecimal.ZERO.compareTo(decimal("SELECT reservado FROM conta_risco WHERE conta='CONTA-002'")));
     }
+
+    private ObjectNode marco(UUID correlacao) {
+        ObjectNode e = JSON.createObjectNode();
+        e.put("id", UUID.randomUUID().toString()); e.put("tipo", "SESSAO_ENCERRADA"); e.put("versao", 4);
+        e.put("origem", "matching-engine"); e.put("correlacao", correlacao.toString());
+        e.put("causacao", ENCERRAMENTO.toString());
+        e.put("ocorridoEm", "2026-10-18T21:00:00Z"); e.put("ticker", "ALFA3");
+        e.put("dataSessao", "2026-10-18"); e.putNull("traceparent");
+        e.putObject("dados").put("expiradas", 0);
+        return e;
+    }
+
+    @Test
+    void marcoDoEncerramentoSemContaEDeduplicadoEExigeCorrelacaoIgualACausacao() throws Exception {
+        QuarkusTransaction.requiringNew().run(this::limpar);
+        ObjectNode m = marco(ENCERRAMENTO);
+        aplicar(m);
+        aplicar(m);
+        assertEquals(1L, ((Number) QuarkusTransaction.requiringNew().call(() ->
+                em.createNativeQuery("SELECT count(*) FROM matching_evento").getSingleResult())).longValue());
+        assertThrows(RuntimeException.class, () -> aplicar(marco(UUID.randomUUID())));
+    }
 }
