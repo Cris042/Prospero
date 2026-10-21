@@ -41,6 +41,7 @@ public final class MotorMatching {
     private static final class EstadoAtivo {
         final Livro livro = new Livro();
         final StopsPendentes stops = new StopsPendentes();
+        final ParesOco pares = new ParesOco();
         // Uma contagem cobre livro, pendentes, agressor e selecionadas aguardando na fila.
         final Map<String, Integer> ativasPorConta = new HashMap<>();
         BigDecimal ultimo;
@@ -88,13 +89,7 @@ public final class MotorMatching {
         if (recusa != null) {
             return List.of(new Evento.OrdemRejeitada(a.ordem(), a.ticker(), recusa));
         }
-        if (!a.sessao().equals(e.sessao)) {
-            // Nova sessão: IDs de negócio recomeçam e a base da faixa volta à referência (ADR-013).
-            e.sessao = a.sessao();
-            e.negocios = 0;
-            e.ultimo = null;
-            e.chegada = 0;
-        }
+        abrirSessao(a.sessao(), e);
         ContextoComando contexto = new ContextoComando();
         long sequencia = ++e.chegada;
         e.ativar(a.conta());
@@ -106,6 +101,141 @@ public final class MotorMatching {
         }
         drenarAcionadas(e, p, contexto);
         return List.copyOf(contexto.eventos);
+    }
+
+    private static void abrirSessao(LocalDate sessao, EstadoAtivo e) {
+        if (!sessao.equals(e.sessao)) {
+            // Nova sessão: IDs de negócio recomeçam e a base da faixa volta à referência (ADR-013).
+            e.sessao = sessao;
+            e.negocios = 0;
+            e.ultimo = null;
+            e.chegada = 0;
+        }
+    }
+
+    /**
+     * Par OCO como um comando raiz (RF05c.3a): validação e vagas (2 ativas, 1 pendente) antes de qualquer mutação;
+     * Take Profit primeiro, como Limit DIA agressor, e só depois o Stop Loss reduzido é avaliado contra o último
+     * negócio (decisão do usuário, ADR-013). O adaptador Kafka ainda não recebe pares.
+     */
+    public List<Evento> processarOco(AdmissaoOco par) {
+        Admissao tp = par.takeProfit();
+        Admissao sl = par.stopLoss();
+        if (tp.ordem().equals(sl.ordem())) {
+            return vistas.add(tp.ordem())
+                    ? List.of(new Evento.OrdemRejeitada(tp.ordem(), tp.ticker(), MotivoRejeicao.COMBINACAO_INVALIDA))
+                    : List.of();
+        }
+        boolean tpInedita = vistas.add(tp.ordem());
+        boolean slInedita = vistas.add(sl.ordem());
+        if (tpInedita != slInedita) {
+            // Nunca emitir terminal para a perna já vista, que pode estar viva.
+            Admissao inedita = tpInedita ? tp : sl;
+            return List.of(new Evento.OrdemRejeitada(inedita.ordem(), inedita.ticker(),
+                    MotivoRejeicao.COMBINACAO_INVALIDA));
+        }
+        if (!tpInedita) {
+            return List.of();
+        }
+        ParametrosAtivo p = parametros.get(tp.ticker());
+        EstadoAtivo e = p == null ? null : estados.computeIfAbsent(tp.ticker(), t -> new EstadoAtivo());
+        MotivoRejeicao recusa = p == null ? MotivoRejeicao.ATIVO_DESCONHECIDO : recusaPar(tp, sl, e, p);
+        if (recusa != null) {
+            return List.of(new Evento.OrdemRejeitada(tp.ordem(), tp.ticker(), recusa),
+                    new Evento.OrdemRejeitada(sl.ordem(), sl.ticker(), recusa));
+        }
+        abrirSessao(tp.sessao(), e);
+        ContextoComando contexto = new ContextoComando();
+        long sequenciaTp = ++e.chegada;
+        long sequenciaSl = ++e.chegada;
+        e.ativar(tp.conta());
+        e.ativar(sl.conta());
+        contexto.eventos.add(new Evento.OrdemAceita(tp.ordem(), tp.ticker(), sequenciaTp));
+        contexto.eventos.add(new Evento.OrdemAceita(sl.ordem(), sl.ticker(), sequenciaSl));
+        ParesOco.Par vinculo = e.pares.registrar(tp, sl);
+        negociar(tp, sequenciaTp, e, p, contexto);
+        if (e.pares.vivo(vinculo)) {
+            Admissao reduzido = vinculo.stopLoss;
+            if (StopsPendentes.acionavel(reduzido, e.ultimo)) {
+                cancelarTakeProfit(reduzido.ordem(), e, contexto.eventos);
+                selecionar(reduzido, e, contexto);
+            } else {
+                e.stops.guardar(reduzido, sequenciaSl);
+                contexto.eventos.add(new Evento.StopPendente(reduzido.ordem(), reduzido.ticker(),
+                        reduzido.precoGatilho()));
+            }
+        }
+        drenarAcionadas(e, p, contexto);
+        return List.copyOf(contexto.eventos);
+    }
+
+    /** Guardas do par (ADR-010) e de cada perna; vagas do par inteiro, conservadoras para o Stop Loss. */
+    private static MotivoRejeicao recusaPar(Admissao tp, Admissao sl, EstadoAtivo e, ParametrosAtivo p) {
+        boolean venda = tp.lado() == Lado.VENDA;
+        if (!tp.conta().equals(sl.conta()) || !tp.intencao().equals(sl.intencao()) || !tp.ticker().equals(sl.ticker())
+                || tp.lado() != sl.lado() || tp.quantidade() != sl.quantidade() || !tp.sessao().equals(sl.sessao())
+                || tp.tipo() != TipoOrdem.LIMIT || tp.validade() != Validade.DIA || !stop(sl)
+                || !java.util.Objects.equals(tp.precoMaximo(), sl.precoMaximo())
+                || tp.precoLimite() == null || sl.precoGatilho() == null
+                || (venda ? tp.precoLimite().compareTo(sl.precoGatilho()) <= 0
+                          : tp.precoLimite().compareTo(sl.precoGatilho()) >= 0)) {
+            return MotivoRejeicao.COMBINACAO_INVALIDA;
+        }
+        MotivoRejeicao recusa = recusa(tp, e, p);
+        if (recusa == null) {
+            recusa = recusa(sl, e, p);
+        }
+        if (recusa == null && e.ativas(tp.conta()) + 2 > MAX_ORDENS_ATIVAS_POR_CONTA) {
+            recusa = MotivoRejeicao.LIMITE_ORDENS_ATIVAS;
+        }
+        if (recusa == null && e.stops.quantidade() >= MAX_STOPS_PENDENTES) {
+            recusa = MotivoRejeicao.LIMITE_STOPS_PENDENTES;
+        }
+        return recusa;
+    }
+
+    /** Captura irrevogável do Stop Loss: o saldo do Take Profit sai do livro antes de o Stop Loss entrar na fila. */
+    private static void cancelarTakeProfit(UUID stopLoss, EstadoAtivo e, List<Evento> eventos) {
+        ParesOco.Par par = e.pares.dissolverPorStopLoss(stopLoss);
+        if (par == null) {
+            return;
+        }
+        OfertaViva tp = e.livro.remover(par.takeProfit.ordem());
+        if (tp == null) {
+            throw new IllegalStateException("Take Profit vivo fora do livro.");
+        }
+        e.desativar(tp.conta);
+        eventos.add(new Evento.OrdemEncerrada(tp.ordem, par.takeProfit.ticker(), MotivoEncerramento.CANCELADA_OCO,
+                tp.executada, tp.restante()));
+    }
+
+    /** Negócio do Take Profit: reduz o Stop Loss na mesma quantidade, salvo o último, cujo terminal cancela o saldo. */
+    private static void reduzirIrma(UUID ordem, long quantidade, EstadoAtivo e, List<Evento> eventos) {
+        ParesOco.Par par = e.pares.takeProfit(ordem);
+        if (par == null) {
+            return;
+        }
+        par.executadaTakeProfit += quantidade;
+        if (par.executadaTakeProfit == par.takeProfit.quantidade()) {
+            return;
+        }
+        par.stopLoss = par.stopLoss.reduzida(par.stopLoss.quantidade() - quantidade);
+        e.stops.reduzir(par.stopLoss);
+        eventos.add(new Evento.OrdemReduzida(par.stopLoss.ordem(), par.stopLoss.ticker(), quantidade,
+                par.stopLoss.quantidade()));
+    }
+
+    /** Terminal do Take Profit com o par vivo encerra o Stop Loss (ADR-013: execução total e limites). */
+    private static void encerrarIrma(UUID ordem, EstadoAtivo e, List<Evento> eventos) {
+        ParesOco.Par par = e.pares.dissolverPorTakeProfit(ordem);
+        if (par == null) {
+            return;
+        }
+        Admissao sl = par.stopLoss;
+        e.stops.remover(sl.ordem());
+        e.desativar(sl.conta());
+        eventos.add(new Evento.OrdemEncerrada(sl.ordem(), sl.ticker(), MotivoEncerramento.CANCELADA_OCO, 0,
+                sl.quantidade()));
     }
 
     private static boolean stop(Admissao a) {
@@ -189,6 +319,7 @@ public final class MotorMatching {
                     MotivoEncerramento.EXPIRADA_DIA, 0, ordem.quantidade()));
         }
         e.ativasPorConta.clear();
+        e.pares.limpar();
         e.ultimaEncerrada = sessao;
         return List.copyOf(eventos.values());
     }
@@ -305,11 +436,14 @@ public final class MotorMatching {
             eventos.add(new Evento.Negocio(a.ticker() + "-" + e.sessao + "-" + (++e.negocios), a.ticker(), passiva.preco,
                     quantidade, compra ? a.ordem() : passiva.ordem, compra ? a.conta() : passiva.conta,
                     compra ? passiva.ordem : a.ordem(), compra ? passiva.conta : a.conta(), a.lado()));
+            reduzirIrma(a.ordem(), quantidade, e, eventos);
+            reduzirIrma(passiva.ordem, quantidade, e, eventos);
             if (passiva.restante() == 0) {
                 e.livro.removerCabeca(passiva);
                 e.desativar(passiva.conta);
                 eventos.add(new Evento.OrdemEncerrada(passiva.ordem, a.ticker(), MotivoEncerramento.EXECUTADA,
                         passiva.quantidade, 0));
+                encerrarIrma(passiva.ordem, e, eventos);
             }
             capturarStops(e, contexto);
         }
@@ -318,6 +452,7 @@ public final class MotorMatching {
 
     private static void capturarStops(EstadoAtivo e, ContextoComando contexto) {
         for (Admissao acionada : e.stops.retirarAcionados(e.ultimo)) {
+            cancelarTakeProfit(acionada.ordem(), e, contexto.eventos);
             selecionar(acionada, e, contexto);
         }
     }
@@ -326,6 +461,7 @@ public final class MotorMatching {
                                  List<Evento> eventos) {
         e.desativar(a.conta());
         eventos.add(new Evento.OrdemEncerrada(a.ordem(), a.ticker(), motivo, executada, a.quantidade() - executada));
+        encerrarIrma(a.ordem(), e, eventos);
     }
 
     private static void encerrarOuRepousar(Admissao a, long sequencia, EstadoAtivo e, Limites limites, long executada,

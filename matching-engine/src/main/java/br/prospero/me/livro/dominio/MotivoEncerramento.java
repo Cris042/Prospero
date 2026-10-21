@@ -10,5 +10,6 @@ public enum MotivoEncerramento {
     SEM_LIQUIDEZ,
     LIMITE_NEGOCIOS,
     EXPIRADA_DIA,
-    LIMITE_CASCATA
+    LIMITE_CASCATA,
+    CANCELADA_OCO
 }

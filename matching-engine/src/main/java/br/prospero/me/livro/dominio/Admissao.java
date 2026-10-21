@@ -19,6 +19,12 @@ public record Admissao(UUID ordem, UUID intencao, String conta, String ticker, L
         this(ordem, intencao, conta, ticker, lado, tipo, validade, quantidade, precoLimite, precoMaximo, null, sessao);
     }
 
+    /** Mesma ordem com quantidade menor, para a perna OCO reduzida pela irmã. */
+    Admissao reduzida(long quantidade) {
+        return new Admissao(ordem, intencao, conta, ticker, lado, tipo, validade, quantidade, precoLimite, precoMaximo,
+                precoGatilho, sessao);
+    }
+
     public Admissao {
         Objects.requireNonNull(ordem);
         Objects.requireNonNull(intencao);

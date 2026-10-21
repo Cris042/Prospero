@@ -26,11 +26,15 @@ public sealed interface Evento {
                    UUID ordemVenda, String contaVenda, Lado agressor) implements Evento {
     }
 
+    /** Perna OCO pendente reduzida pela execução da irmã; restante é a nova quantidade da perna (RF05c.3a). */
+    record OrdemReduzida(UUID ordem, String ticker, long reduzida, long restante) implements Evento {
+    }
+
     /** Saldo que passou a repousar no livro. */
     record OfertaNoLivro(UUID ordem, String ticker, Lado lado, BigDecimal preco, long restante) implements Evento {
     }
 
-    /** Fim da vida da ordem: executada + cancelada = quantidade original. */
+    /** Fim da vida da ordem: executada + reduções OCO + cancelada = quantidade original. */
     record OrdemEncerrada(UUID ordem, String ticker, MotivoEncerramento motivo, long executada, long cancelada)
             implements Evento {
     }

@@ -85,6 +85,9 @@ public final class EnvelopeMatching {
             case Evento.Negocio e -> e.agressor() == Lado.COMPRA ? e.ordemCompra() : e.ordemVenda();
             default -> envolvidos(evento).getFirst();
         };
+        // Fatos OCO ficam fora do contrato Kafka até a RF05c.3b definir a liberação por grupo no MO.
+        if (evento instanceof Evento.OrdemReduzida || (evento instanceof Evento.OrdemEncerrada fim
+                && fim.motivo() == MotivoEncerramento.CANCELADA_OCO)) throw new IllegalArgumentException("Evento OCO fora do contrato.");
         if ((evento instanceof Evento.StopPendente || evento instanceof Evento.StopAcionado)
                 && !stop(ordens.get(alvo))) throw new IllegalArgumentException("Evento stop sem admissão stop.");
         ObjectNode raiz = JSON.createObjectNode();
@@ -107,6 +110,7 @@ public final class EnvelopeMatching {
                 raiz.put("tipo", "STOP_ACIONADO"); ordem(dados, e.ordem(), ordens);
                 dados.put("tipoExecutavel", e.tipoExecutavel().name()); dados.put("sequencia", e.sequencia());
             }
+            case Evento.OrdemReduzida e -> throw new IllegalArgumentException("Evento OCO fora do contrato.");
             case Evento.OrdemAceita e -> {
                 raiz.put("tipo", "ORDEM_ACEITA"); ordem(dados, e.ordem(), ordens); dados.put("sequencia", e.sequencia());
             }
@@ -148,6 +152,7 @@ public final class EnvelopeMatching {
             case Evento.OrdemEncerrada e -> java.util.List.of(e.ordem());
             case Evento.StopPendente e -> java.util.List.of(e.ordem());
             case Evento.StopAcionado e -> java.util.List.of(e.ordem());
+            case Evento.OrdemReduzida e -> java.util.List.of(e.ordem());
         };
     }
 

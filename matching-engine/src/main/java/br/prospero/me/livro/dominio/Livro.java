@@ -45,6 +45,21 @@ final class Livro {
         porOrdem.remove(oferta.ordem);
     }
 
+    /** Retira uma oferta de qualquer posição, preservando o FIFO das demais; null se não estiver no livro. */
+    OfertaViva remover(UUID ordem) {
+        OfertaViva oferta = porOrdem.remove(ordem);
+        if (oferta == null) {
+            return null;
+        }
+        var niveis = lado(oferta.lado);
+        ArrayDeque<OfertaViva> fila = niveis.get(oferta.preco);
+        fila.remove(oferta);
+        if (fila.isEmpty()) {
+            niveis.remove(oferta.preco);
+        }
+        return oferta;
+    }
+
     boolean contem(UUID ordem) {
         return porOrdem.containsKey(ordem);
     }
