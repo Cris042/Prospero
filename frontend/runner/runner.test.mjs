@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ExcelJS from 'exceljs';
 import { runWorkbook } from './index.mjs';
+import { compile } from './contract.mjs';
+import { execute } from './executor.mjs';
 
 const STEP = [
   'cenario',
@@ -610,4 +612,204 @@ test('ZIP recusa mais de 128 entradas antes de HTTP', async (t) => {
   });
   await assert.rejects(runWorkbook(path, config), { message: 'ZIP_INVALIDO_OU_LIMITE' });
   assert.equal(calls.length, 0);
+});
+
+function preparacao(overrides = {}) {
+  return step('Preparar', {
+    servico: 'preparacao-risco',
+    metodo: 'PUT',
+    caminho: '/api/v1/preparacoes-risco/contas/CONTA-002',
+    headers: '{"content-type":"application/json"}',
+    corpo: '{"saldo":"100.00","custodia":{"ALFA3":10},"execucao":"${execucao}"}',
+    intervaloMs: 50,
+    prazoMs: 1000,
+    ...overrides,
+  });
+}
+
+function configurarPreparacao(config) {
+  config.servicos['preparacao-risco'] = { ...config.servicos.fo };
+  return config;
+}
+
+test('preparação opt-in repete somente reserva viva e mantém corpo até sucesso', async (t) => {
+  const { config, calls } = await server(t, (_, res, all) =>
+    all.length < 3
+      ? json(res, 409, { codigo: 'RESERVA_VIVA' })
+      : json(res, 200, { conta: 'CONTA-002', saldo: '100.00' }),
+  );
+  const path = await fixture(t, {
+    passos: [preparacao()],
+    resultados: [result('Preparar', { corpo: '{"/saldo":"100.00"}' })],
+  });
+  const report = await runWorkbook(path, configurarPreparacao(config));
+  assert.equal(report.sucesso, true);
+  assert.equal(report.cenarios[0].passos[0].tentativas, 3);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every((call) => call.method === 'PUT' && call.body === calls[0].body));
+});
+
+function planoPreparacao(config, overrides = {}, expectedOverrides = {}) {
+  const request = preparacao(overrides);
+  const expected = result('Preparar', { corpo: '{"/saldo":"100.00"}', ...expectedOverrides });
+  return compile(
+    {
+      Carga: [STEP],
+      Passos: [STEP, STEP.map((key) => request[key] ?? '')],
+      Resultados: [RESULT, RESULT.map((key) => expected[key] ?? '')],
+    },
+    configurarPreparacao(config),
+  );
+}
+
+for (const [name, patch, expected, error = /POLLING_INVALIDO/] of [
+  ['serviço diferente', { servico: 'fo' }],
+  ['POST', { metodo: 'POST' }],
+  ['PATCH', { metodo: 'PATCH' }],
+  ['DELETE', { metodo: 'DELETE' }],
+  ['conta da tela', { caminho: '/api/v1/preparacoes-risco/contas/CONTA-001' }],
+  ['outra conta', { caminho: '/api/v1/preparacoes-risco/contas/CONTA-004' }],
+  ['sufixo de conta', { caminho: '/api/v1/preparacoes-risco/contas/CONTA-0023' }],
+  ['barra final', { caminho: '/api/v1/preparacoes-risco/contas/CONTA-002/' }],
+  [
+    'newline final',
+    { caminho: '/api/v1/preparacoes-risco/contas/CONTA-002\n' },
+    undefined,
+    /CAMINHO_INVALIDO/,
+  ],
+  ['query', { caminho: '/api/v1/preparacoes-risco/contas/CONTA-002?x=1' }],
+  ['outro recurso', { caminho: '/api/v1/ordens' }],
+  ['conta interpolada', { caminho: '/api/v1/preparacoes-risco/contas/${cenario}' }],
+  ['status esperado 409', {}, { status: 409 }],
+  ['intervalo abaixo do mínimo', { intervaloMs: 49 }],
+  ['prazo acima do máximo', { prazoMs: 30001 }],
+]) {
+  test(`espera de preparação recusa ${name} antes de HTTP`, async (t) => {
+    const { config, calls } = await server(t, (_, res) => json(res, 200, {}));
+    assert.throws(() => planoPreparacao(config, patch, expected), error);
+    assert.equal(calls.length, 0);
+  });
+}
+
+for (const [name, status, body, raw = false] of [
+  ['200 divergente', 200, { saldo: '999.00' }],
+  ['409 código diferente', 409, { codigo: 'OUTRO_CONFLITO' }],
+  ['409 código ausente', 409, {}],
+  ['409 array', 409, [{ codigo: 'RESERVA_VIVA' }]],
+  ['409 null', 409, null],
+  ['409 JSON inválido', 409, '{"codigo":', true],
+  ['400', 400, { codigo: 'RESERVA_VIVA' }],
+  ['401', 401, { codigo: 'RESERVA_VIVA' }],
+  ['403', 403, { codigo: 'RESERVA_VIVA' }],
+  ['500', 500, { codigo: 'RESERVA_VIVA' }],
+]) {
+  test(`espera de preparação não repete ${name}`, async (t) => {
+    const { config, calls } = await server(t, (_, res) => {
+      if (raw) res.writeHead(status, { 'content-type': 'application/json' }).end(body);
+      else json(res, status, body);
+    });
+    const report = await execute(planoPreparacao(config), config);
+    assert.equal(report.sucesso, false);
+    assert.equal(calls.length, 1);
+    assert.equal(report.cenarios[0].passos[0].tentativas, 1);
+  });
+}
+
+test('preparação CONTA-003 também aceita a espera explícita', async (t) => {
+  const { config, calls } = await server(t, (_, res, all) =>
+    all.length === 1
+      ? json(res, 409, { codigo: 'RESERVA_VIVA' })
+      : json(res, 200, { saldo: '100.00' }),
+  );
+  const report = await execute(
+    planoPreparacao(config, { caminho: '/api/v1/preparacoes-risco/contas/CONTA-003' }),
+    config,
+  );
+  assert.equal(report.sucesso, true);
+  assert.equal(calls.length, 2);
+});
+
+test('preparação sem opt-in mantém uma única tentativa e 409 esperado é sucesso', async (t) => {
+  const { config, calls } = await server(t, (_, res) => json(res, 409, { codigo: 'RESERVA_VIVA' }));
+  const single = { intervaloMs: '', prazoMs: '' };
+  const failed = await execute(planoPreparacao(config, single), config);
+  assert.equal(failed.sucesso, false);
+  assert.equal(calls.length, 1);
+  const blocked = await execute(
+    planoPreparacao(config, single, { status: 409, corpo: '{}' }),
+    config,
+  );
+  assert.equal(blocked.sucesso, true);
+  assert.equal(calls.length, 2);
+});
+
+test('espera de preparação esgota prazo sem executar próximo passo', async (t) => {
+  const { config, calls } = await server(t, (_, res) => json(res, 409, { codigo: 'RESERVA_VIVA' }));
+  const plan = planoPreparacao(config, { prazoMs: 250 });
+  plan[0].steps.push({ ...plan[0].steps[0], id: 'NaoExecutar', path: '/api/v1/nunca' });
+  const report = await execute(plan, config);
+  assert.equal(report.sucesso, false);
+  assert.equal(report.cenarios[0].passos[0].erro.codigo, 'POLLING_ESGOTADO');
+  assert.equal(report.cenarios[0].passos[1].status, 'nao-executado');
+  assert.ok(calls.length >= 1 && calls.length <= 5);
+  assert.ok(calls.every((call) => call.url === '/api/v1/preparacoes-risco/contas/CONTA-002'));
+});
+
+test('cancelamento interrompe espera de preparação sem nova mutação', async (t) => {
+  const controller = new AbortController();
+  const { config, calls } = await server(t, (_, res) => {
+    json(res, 409, { codigo: 'RESERVA_VIVA' });
+    controller.abort();
+  });
+  const report = await execute(planoPreparacao(config), config, { signal: controller.signal });
+  assert.equal(report.sucesso, false);
+  assert.equal(calls.length, 1);
+});
+
+test('timeout de preparação não autoriza uma nova tentativa', async (t) => {
+  const { config, calls } = await server(t, () => {});
+  const report = await execute(planoPreparacao(config, { prazoMs: 150 }), config);
+  assert.equal(report.sucesso, false);
+  assert.equal(calls.length, 1);
+});
+
+test('falha de transporte de preparação não autoriza uma nova tentativa', async (t) => {
+  const { config, calls } = await server(t, (_, res) => res.destroy());
+  const report = await execute(planoPreparacao(config), config);
+  assert.equal(report.sucesso, false);
+  assert.equal(calls.length, 1);
+});
+
+test('planilhas financeiras optam em preparação 200 e preservam a prova de 409', async () => {
+  let bloqueados = 0;
+  for (const name of ['matching', 'risco']) {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(new URL(`./exemplos/${name}.xlsx`, import.meta.url).pathname);
+    const expectations = new Map();
+    workbook.getWorksheet('Resultados').eachRow((row, n) => {
+      if (n > 1)
+        expectations.set(`${row.getCell(1).value}/${row.getCell(2).value}`, row.getCell(3).value);
+    });
+    for (const sheetName of ['Carga', 'Passos']) {
+      workbook.getWorksheet(sheetName).eachRow((row, n) => {
+        if (
+          n === 1 ||
+          row.getCell(4).value !== 'preparacao-risco' ||
+          row.getCell(5).value !== 'PUT'
+        )
+          return;
+        const status = expectations.get(`${row.getCell(1).value}/${row.getCell(3).value}`);
+        if (status === 200) {
+          assert.equal(row.getCell(10).value, 200);
+          assert.equal(row.getCell(11).value, 15000);
+        } else {
+          bloqueados++;
+          assert.equal(status === 409 || status === 403, true);
+          assert.equal(row.getCell(10).value ?? '', '');
+          assert.equal(row.getCell(11).value ?? '', '');
+        }
+      });
+    }
+  }
+  assert.equal(bloqueados, 2, 'PreparoBloqueado409 e ContaDaTela403 permanecem sem polling');
 });

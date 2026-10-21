@@ -54,6 +54,7 @@ const preparar = (c, saldo, custodia = {}, conta = 'CONTA-002') =>
     {
       corpo: { saldo, custodia },
       status: 200,
+      polling: true,
       esperado: { '/conta': conta, '/saldoReservado': '0.00' },
     },
   );
@@ -163,6 +164,7 @@ const limit = (ticker, lado, quantidade, precoLimite) => ({
     {
       corpo: { saldo: '220.00' },
       status: 200,
+      polling: true,
       esperado: { '/saldoDisponivel': '220.00' },
     },
   );

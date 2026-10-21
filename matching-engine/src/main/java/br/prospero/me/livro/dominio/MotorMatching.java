@@ -4,7 +4,6 @@ import br.prospero.me.livro.helper.FaixaPreco;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,7 +26,7 @@ public final class MotorMatching {
     private static final BigDecimal PRECO_MAXIMO = new BigDecimal("1000000.00");
     private final Map<String, ParametrosAtivo> parametros;
     private final Map<String, EstadoAtivo> estados = new HashMap<>();
-    /** Ordens já decididas (aceitas ou rejeitadas), em todos os ativos; a RF05c expurga no encerramento da sessão. */
+    /** Ordens já decididas, em todos os ativos/sessões; fechamento não autoriza ressuscitar uma identidade. */
     private final Set<UUID> vistas = new HashSet<>();
 
     public MotorMatching(Map<String, ParametrosAtivo> parametros) {
@@ -39,6 +38,7 @@ public final class MotorMatching {
         final Livro livro = new Livro();
         BigDecimal ultimo;
         LocalDate sessao;
+        LocalDate ultimaEncerrada;
         long negocios;
         long chegada;
     }
@@ -61,6 +61,7 @@ public final class MotorMatching {
             e.sessao = a.sessao();
             e.negocios = 0;
             e.ultimo = null;
+            e.chegada = 0;
         }
         List<Evento> eventos = new ArrayList<>();
         eventos.add(new Evento.OrdemAceita(a.ordem(), a.ticker(), ++e.chegada));
@@ -75,9 +76,45 @@ public final class MotorMatching {
         return eventos;
     }
 
+    /**
+     * Comando interno da RF05c.1a, por ativo/data: expira somente saldos vivos, em sequência de chegada.
+     * Repetição de data já encerrada é inócua. O adaptador Kafka ainda não recebe este comando: continua
+     * restrito a uma sessão por log, sem virada operacional nem liberação financeira comprovada por este método.
+     */
+    public List<Evento> encerrarSessao(String ticker, LocalDate sessao) {
+        if (ticker == null || !parametros.containsKey(ticker) || sessao == null) {
+            throw new IllegalArgumentException("Ativo e sessão de encerramento inválidos.");
+        }
+        EstadoAtivo e = estados.get(ticker);
+        if (e != null && e.ultimaEncerrada != null && !sessao.isAfter(e.ultimaEncerrada)) {
+            return List.of();
+        }
+        if (e != null && e.sessao != null && !sessao.equals(e.sessao)) {
+            throw new IllegalArgumentException("Encerramento diverge da sessão do ativo.");
+        }
+        if (e == null) {
+            e = new EstadoAtivo();
+            estados.put(ticker, e);
+        }
+        e.sessao = sessao;
+        List<Evento> eventos = new ArrayList<>();
+        for (OfertaViva oferta : e.livro.retirarTodas()) {
+            eventos.add(new Evento.OrdemEncerrada(oferta.ordem, ticker, MotivoEncerramento.EXPIRADA_DIA,
+                    oferta.executada, oferta.restante()));
+        }
+        e.ultimaEncerrada = sessao;
+        return List.copyOf(eventos);
+    }
+
     private static MotivoRejeicao recusa(Admissao a, EstadoAtivo e, ParametrosAtivo p) {
         if (e.sessao != null && a.sessao().isBefore(e.sessao)) {
             return MotivoRejeicao.SESSAO_ANTERIOR;
+        }
+        if (a.sessao().equals(e.ultimaEncerrada)) {
+            return MotivoRejeicao.SESSAO_ENCERRADA;
+        }
+        if (e.sessao != null && a.sessao().isAfter(e.sessao) && !e.sessao.equals(e.ultimaEncerrada)) {
+            return MotivoRejeicao.SESSAO_NAO_ENCERRADA;
         }
         if (a.quantidade() > MAX_QUANTIDADE) {
             return MotivoRejeicao.QUANTIDADE_INVALIDA;

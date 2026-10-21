@@ -3,7 +3,9 @@ package br.prospero.me.livro.dominio;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
@@ -52,5 +54,16 @@ final class Livro {
 
     int ativas(String conta) {
         return ativasPorConta.getOrDefault(conta, 0);
+    }
+
+    /** Retira ambos os lados e índices em ordem global de chegada, independente do preço e do HashMap. */
+    List<OfertaViva> retirarTodas() {
+        List<OfertaViva> ofertas = porOrdem.values().stream()
+                .sorted(Comparator.comparingLong(o -> o.sequencia)).toList();
+        compras.clear();
+        vendas.clear();
+        porOrdem.clear();
+        ativasPorConta.clear();
+        return ofertas;
     }
 }

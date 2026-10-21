@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import { LIMITS, ensure } from './limits.mjs';
-import { resolveValue, readPointer, targetPath, parseExactJson } from './contract.mjs';
+import { LIMITS, ensure, isRecord } from './limits.mjs';
+import {
+  resolveValue,
+  readPointer,
+  targetPath,
+  parseExactJson,
+  riskPreparation,
+} from './contract.mjs';
 
 function summary(value) {
   if (value === undefined) return { tipo: 'ausente' };
@@ -34,6 +40,10 @@ function assertions(response, expected) {
 async function request(step, config, context, signal) {
   const service = config.servicos[step.service];
   const path = targetPath(resolveValue(step.path, context, true));
+  ensure(
+    !step.deadline || step.method === 'GET' || riskPreparation({ ...step, path }),
+    'POLLING_INVALIDO',
+  );
   const url = new URL(path, service.origem);
   ensure(
     url.origin === new URL(service.origem).origin && url.pathname.startsWith('/api/v1/'),
@@ -125,15 +135,23 @@ export async function execute(plan, config, options = {}) {
         const stepSignal = polling ? AbortSignal.any([signal, polling]) : signal;
         let response;
         let difference;
+        let retryable;
         do {
           stepSignal.throwIfAborted();
           ensure(++requests <= LIMITS.requests, 'LIMITE_REQUISICOES');
           item.tentativas++;
           response = await request(step, config, context, stepSignal);
           difference = assertions(response, expected);
+          retryable =
+            step.method === 'GET' ||
+            (riskPreparation(step) &&
+              response.status === 409 &&
+              isRecord(response.body) &&
+              response.body.codigo === 'RESERVA_VIVA');
           if (
             !difference ||
             !step.deadline ||
+            !retryable ||
             performance.now() - started + step.interval >= step.deadline
           )
             break;
@@ -141,7 +159,7 @@ export async function execute(plan, config, options = {}) {
         } while (true);
         if (difference) {
           item.erro = {
-            codigo: step.deadline ? 'POLLING_ESGOTADO' : 'ASSERCAO_DIVERGENTE',
+            codigo: step.deadline && retryable ? 'POLLING_ESGOTADO' : 'ASSERCAO_DIVERGENTE',
             ...difference,
           };
           throw new Error('ASSERTION');

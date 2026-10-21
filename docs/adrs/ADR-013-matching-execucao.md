@@ -24,7 +24,7 @@
 | Limit | Compra com limite acima do preço máximo reservado é rejeitada (`PRECO_ACIMA_DA_RESERVA`). DIA repousa o saldo; IOC cancela a sobra (`SALDO_CANCELADO_IOC`); FOK verifica antes a quantidade inteira executável sem tocar o livro (`FOK_SEM_LIQUIDEZ`). |
 | Stops (RF05c) | Gatilho pelo último negócio do ME, igualdade aciona (compra `último ≥ gatilho`, venda `último ≤ gatilho`); gatilho já satisfeito na entrada aciona imediatamente. Stop acionado vira Market IOC com faixa; Stop Limit vira Limit DIA sem prioridade original. Cascata no mesmo comando, em ordem de acionamento e sequência. |
 | OCO (RF05c) | Parcial numa perna reduz a outra na mesma quantidade; execução total cancela a outra; acionamento do stop cancela o Take Profit. A reserva única do par é consumida uma vez. |
-| Sessão (RF05c) | Validade DIA expira por comando `ENCERRAR_SESSAO` gravado no log (reproduzível), liberando reservas. Sem relógio do ME. |
+| Sessão (RF05c) | Validade DIA expira por comando explícito por ativo/data, sem relógio do ME. RF05c.1a implementa só o núcleo puro: expira saldo em ordem de chegada, fechamento repetido inócuo, impede admissão tardia e troca de data sem fechar; deduplicação histórica preservada. Comando no log e liberação real de reservas continuam na integração futura. |
 | Determinismo | Núcleo puro sem relógio, aleatoriedade nem I/O; tempo vem do comando. ID do negócio = `TICKER-sessão-n`, sequência por ativo e sessão. |
 | Limites | Por comando: até 256 negócios (sobra cancelada `LIMITE_NEGOCIOS`); até 1000 ordens ativas por conta e ativo (`LIMITE_ORDENS_ATIVAS`); stops pendentes 500 por ativo e cascata 32 (RF05c). Determinísticos e iguais no replay. |
 | Mensageria (RF05b) | `matching.comandos.v1` (MO → ME) e `matching.eventos.v1` (ME → MO, FO), chave = ativo, criados pelo `kafka-init`. Eventos: `ORDEM_ACEITA`, `OFERTA_NO_LIVRO`, `NEGOCIO` (dois lados), `ORDEM_ENCERRADA{motivo}`, `ORDEM_REJEITADA{motivo}`; catálogo já previsto para RF06 (profundidade) e RF10 (`CANCELAR`). |
@@ -45,6 +45,12 @@
 - O relay por polling de 200 ms soma latência por salto; a RF05 só **mede** RNF04 (sem prometer p99 < 50 ms).
 - Ordens `RESERVADA` anteriores à RF05b permanecem preservadas sem admissão automática: os dados legados não incluem validade, sessão nem todos os IDs necessários. Não fabricar metadados nem consultar banco do FO para republicá-las. Reconciliação explícita futura precisa de contrato próprio.
 - Riscos residuais do canal PLAINTEXT crescem: um `ORDEM_ENCERRADA` forjado poderia liberar reserva de ordem viva; eventos terminais valem só de `origem = matching-engine` e o risco fica registrado até ACL/HMAC.
+
+## Detalhamento da RF05c.1a (2026-10-19)
+
+Refinamento independente de arquitetura, QA, segurança, operação e viabilidade consolidado no roadmap: núcleo de encerramento antes de integrar controle de sessão, stops e OCO. O domínio devolve terminais `EXPIRADA_DIA` somente para ofertas ainda vivas, com executada acumulada e cancelada igual ao saldo. Fechamento por ativo/data estabelece fronteira inclusive com livro vazio; reentrega do fechamento é inócua. Não expurgar IDs: o mesmo ID de ordem não pode reaparecer noutra sessão/ativo. Nova data no núcleo só após fechar a anterior, reiniciando último preço e sequências; isso não remove a restrição operacional de uma sessão por log da RF05b. Contrato e limites no HLD-004. Sem mudança de requisito, dependência ou garantia financeira integrada.
+
+Pendentes antes de implementar stops: destino das ativações além de32 e momento em que executam em relação ao agressor. Perguntas enviadas ao usuário; alternativas não viram aceite implícito. Integração OCO depende de reserva de grupo e progresso distinto de execução/redução/cancelamento por perna. Encerramento integrado depende de autoridade/correlação do comando por ativo e recuperação comprovada; não adotar endpoint administrativo sem contrato nem apagar logs/checkpoints para simular abertura diária.
 
 ## Revisão
 

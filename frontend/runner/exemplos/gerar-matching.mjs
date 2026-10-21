@@ -62,6 +62,9 @@ function preparar(c) {
       `/api/v1/preparacoes-risco/contas/CONTA-${n}`,
       { saldo: '1000.00', custodia: { ALFA3: 100 } },
       { '/saldoDisponivel': '1000.00', '/saldoReservado': '0.00' },
+      null,
+      200,
+      true,
     );
 }
 function enviar(c, id, servico, lado, quantidade, validade = 'DIA', precoLimite = '10.00') {
