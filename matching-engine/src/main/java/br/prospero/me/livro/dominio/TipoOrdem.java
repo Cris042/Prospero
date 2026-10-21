@@ -1,6 +1,6 @@
 package br.prospero.me.livro.dominio;
 
-/** Tipos executáveis no livro; Stop e Stop Limit entram na RF05c (acionados viram Market/Limit). */
+/** Tipos do núcleo; stops acionados viram Market/Limit. Kafka v1 continua restrito a Market/Limit. */
 public enum TipoOrdem {
-    MARKET, LIMIT
+    MARKET, LIMIT, STOP, STOP_LIMIT
 }

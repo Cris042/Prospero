@@ -13,6 +13,14 @@ public sealed interface Evento {
     record OrdemRejeitada(UUID ordem, String ticker, MotivoRejeicao motivo) implements Evento {
     }
 
+    /** Stop aceito aguardando negócio gatilho; não é oferta nem evento do contrato Kafka v1. */
+    record StopPendente(UUID ordem, String ticker, BigDecimal precoGatilho) implements Evento {
+    }
+
+    /** Conversão interna com nova prioridade, preservando a identidade da ordem. */
+    record StopAcionado(UUID ordem, String ticker, TipoOrdem tipoExecutavel, long sequencia) implements Evento {
+    }
+
     /** Negócio ao preço da oferta passiva; id determinístico TICKER-sessão-n. */
     record Negocio(String id, String ticker, BigDecimal preco, long quantidade, UUID ordemCompra, String contaCompra,
                    UUID ordemVenda, String contaVenda, Lado agressor) implements Evento {

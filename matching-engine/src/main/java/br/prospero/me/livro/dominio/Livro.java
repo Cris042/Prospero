@@ -16,7 +16,6 @@ final class Livro {
     private final NavigableMap<BigDecimal, ArrayDeque<OfertaViva>> compras = new TreeMap<>(Collections.reverseOrder());
     private final NavigableMap<BigDecimal, ArrayDeque<OfertaViva>> vendas = new TreeMap<>();
     private final Map<UUID, OfertaViva> porOrdem = new HashMap<>();
-    private final Map<String, Integer> ativasPorConta = new HashMap<>();
 
     NavigableMap<BigDecimal, ArrayDeque<OfertaViva>> lado(Lado lado) {
         return lado == Lado.COMPRA ? compras : vendas;
@@ -31,7 +30,6 @@ final class Livro {
     void repousar(OfertaViva oferta) {
         lado(oferta.lado).computeIfAbsent(oferta.preco, p -> new ArrayDeque<>()).addLast(oferta);
         porOrdem.put(oferta.ordem, oferta);
-        ativasPorConta.merge(oferta.conta, 1, Integer::sum);
     }
 
     /** Remove a cabeça do melhor nível do lado, que deve ser a oferta informada. */
@@ -45,15 +43,10 @@ final class Livro {
             niveis.remove(oferta.preco);
         }
         porOrdem.remove(oferta.ordem);
-        ativasPorConta.merge(oferta.conta, -1, (a, b) -> a + b == 0 ? null : a + b);
     }
 
     boolean contem(UUID ordem) {
         return porOrdem.containsKey(ordem);
-    }
-
-    int ativas(String conta) {
-        return ativasPorConta.getOrDefault(conta, 0);
     }
 
     /** Retira ambos os lados e índices em ordem global de chegada, independente do preço e do HashMap. */
@@ -63,7 +56,6 @@ final class Livro {
         compras.clear();
         vendas.clear();
         porOrdem.clear();
-        ativasPorConta.clear();
         return ofertas;
     }
 }

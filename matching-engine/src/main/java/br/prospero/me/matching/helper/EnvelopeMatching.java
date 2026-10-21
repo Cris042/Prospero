@@ -54,8 +54,10 @@ public final class EnvelopeMatching {
             if (!q.isIntegralNumber() || !q.canConvertToLong() || q.longValue() <= 0 || q.longValue() > 1_000_000) throw invalido();
             String data = texto(dados, "dataSessao");
             if (!data.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) throw invalido();
+            String tipo = texto(dados, "tipo");
+            if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido();
             Admissao a = new Admissao(uuid(dados, "ordem"), intencao, conta, ticker, Lado.valueOf(texto(dados, "lado")),
-                    TipoOrdem.valueOf(texto(dados, "tipo")), Validade.valueOf(texto(dados, "validade")), q.longValue(),
+                    TipoOrdem.valueOf(tipo), Validade.valueOf(texto(dados, "validade")), q.longValue(),
                     preco(dados, "precoLimite"), preco(dados, "precoMaximo"), LocalDate.parse(data));
             boolean compra = a.lado() == Lado.COMPRA, limit = a.tipo() == TipoOrdem.LIMIT;
             if (limit != (a.precoLimite() != null) || compra != (a.precoMaximo() != null)
@@ -80,6 +82,8 @@ public final class EnvelopeMatching {
         raiz.put("traceparent", comando.traceparent());
         ObjectNode dados = raiz.putObject("dados");
         switch (evento) {
+            case Evento.StopPendente e -> throw new IllegalArgumentException("Stop fora do contrato Kafka v1.");
+            case Evento.StopAcionado e -> throw new IllegalArgumentException("Stop fora do contrato Kafka v1.");
             case Evento.OrdemAceita e -> {
                 raiz.put("tipo", "ORDEM_ACEITA"); ordem(dados, e.ordem(), ordens); dados.put("sequencia", e.sequencia());
             }
