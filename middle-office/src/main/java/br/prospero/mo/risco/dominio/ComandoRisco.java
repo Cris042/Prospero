@@ -16,7 +16,17 @@ public record ComandoRisco(UUID evento, UUID intencao, String conta, String tick
         this(evento, intencao, conta, ticker, lado, precoBase, pernas, traceparent, null);
     }
 
+    /** Par OCO admissível (RF05c.3b): Take Profit Limit DIA seguido de Stop Loss Stop/Stop Limit DIA com gatilho. */
+    public boolean oco() {
+        return pernas.size() == 2 && pernas.get(0).tipo() == TipoOrdem.LIMIT && pernas.get(0).validade() == Validade.DIA
+                && (pernas.get(1).tipo() == TipoOrdem.STOP || pernas.get(1).tipo() == TipoOrdem.STOP_LIMIT)
+                && pernas.get(1).validade() == Validade.DIA && pernas.get(1).precoGatilho() != null;
+    }
+
     public boolean admissivel() {
+        if (dataSessao != null && oco()) {
+            return true;
+        }
         return dataSessao != null && pernas.size() == 1 && pernas.getFirst().validade() != null
                 && (pernas.getFirst().tipo() == TipoOrdem.LIMIT || pernas.getFirst().tipo() == TipoOrdem.MARKET
                     || (pernas.getFirst().tipo() == TipoOrdem.STOP || pernas.getFirst().tipo() == TipoOrdem.STOP_LIMIT)

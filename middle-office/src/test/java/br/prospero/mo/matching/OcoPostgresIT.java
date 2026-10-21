@@ -35,6 +35,7 @@ class OcoPostgresIT {
 
     @Inject AplicarMatchingActor aplicar;
     @Inject EntityManager em;
+    @Inject br.prospero.mo.risco.jpa.RepositorioRiscoJpa risco;
 
     /** Grupo OCO e contraparte simples. */
     private record Cenario(UUID grupo, UUID tp, UUID sl, UUID contraparte) { }
@@ -266,5 +267,53 @@ class OcoPostgresIT {
         d.put("conta", "CONTA-002"); d.put("sequencia", 2);
         assertThrows(RuntimeException.class, () -> aplicar(simples), "v3 sem OCO envolvido");
         assertEquals(0, numero("SELECT count(*) FROM matching_evento"));
+    }
+
+    @Test
+    void admissaoRealDoParGravaGrupoEPernasAtomicamenteEPublicaV3() throws Exception {
+        QuarkusTransaction.requiringNew().run(this::limpar);
+        var dia = br.prospero.mo.risco.dominio.Validade.DIA;
+        var tp = new br.prospero.mo.risco.dominio.Perna(UUID.randomUUID(), br.prospero.mo.risco.dominio.TipoOrdem.LIMIT, 2,
+                new BigDecimal("9.80"), null, dia);
+        var sl = new br.prospero.mo.risco.dominio.Perna(UUID.randomUUID(), br.prospero.mo.risco.dominio.TipoOrdem.STOP, 2,
+                null, new BigDecimal("10.20"), dia);
+        UUID grupo = UUID.randomUUID();
+        var par = new br.prospero.mo.risco.dominio.ComandoRisco(UUID.randomUUID(), grupo, "CONTA-002", "ALFA3",
+                br.prospero.mo.risco.dominio.Lado.COMPRA, new BigDecimal("10.00"), java.util.List.of(tp, sl), null,
+                java.time.LocalDate.of(2026, 10, 18));
+        // Em teste o actor usa o repositório em memória; aqui a decisão e a admissão passam pelo JPA real.
+        var decisao = br.prospero.mo.risco.dominio.Decisao.reservada(par,
+                br.prospero.mo.risco.helper.CalculoReserva.exigencia(par, risco.parametros("ALFA3").orElseThrow()), 1,
+                java.time.Instant.parse("2026-10-18T12:00:00Z"));
+        QuarkusTransaction.requiringNew().run(() -> {
+            risco.bloquearConta("CONTA-002");
+            risco.registrar(decisao);
+            risco.registrarAdmissao(par, decisao);
+            // A movimentação do disponível pertence ao actor (fora deste IT); reproduzida aqui com o mesmo valor.
+            em.createNativeQuery("UPDATE conta_risco SET disponivel=disponivel-22.44,reservado=22.44 WHERE conta='CONTA-002'")
+                    .executeUpdate();
+        });
+        assertEquals(0, new BigDecimal("22.44").compareTo(decimal("SELECT reservado FROM conta_risco WHERE conta='CONTA-002'")));
+        Object[] linha = QuarkusTransaction.requiringNew().call(() -> (Object[]) em.createNativeQuery(
+                "SELECT oco,ordem,tipo,preco_maximo,valor_restante,quantidade_restante FROM reserva WHERE intencao=:i")
+                .setParameter("i", grupo).getSingleResult());
+        assertEquals(Boolean.TRUE, linha[0]);
+        assertNull(linha[1]);
+        assertNull(linha[2]);
+        assertEquals(0, new BigDecimal("11.22").compareTo((BigDecimal) linha[3]));
+        assertEquals(2, numero("SELECT count(*) FROM reserva_perna WHERE intencao='" + grupo + "'"));
+        var json = JSON.readTree(EnvelopeAdmissao.serializar(par, decisao, null));
+        assertEquals(3, json.get("versao").intValue());
+        assertEquals(EnvelopeAdmissao.id(grupo).toString(), json.get("id").textValue());
+        Cenario c = new Cenario(grupo, tp.id(), sl.id(), UUID.randomUUID());
+        ObjectNode aceita = fato(c, tp.id(), "CONTA-002", "ORDEM_ACEITA", grupo);
+        ((ObjectNode) aceita.get("dados")).put("sequencia", 1);
+        aplicar(aceita);
+        aplicar(encerrada(c, tp.id(), "CONTA-002", "LIMITE_NEGOCIOS", 0, 2));
+        assertEquals(0, new BigDecimal("22.44").compareTo(decimal("SELECT reservado FROM conta_risco WHERE conta='CONTA-002'")),
+                "terminal do TP com SL vivo mantém a reserva do grupo");
+        aplicar(encerrada(c, sl.id(), "CONTA-002", "CANCELADA_OCO", 0, 2));
+        assertEquals(0, BigDecimal.ZERO.compareTo(decimal("SELECT reservado FROM conta_risco WHERE conta='CONTA-002'")));
+        assertEquals(0, new BigDecimal("1000").compareTo(decimal("SELECT disponivel FROM conta_risco WHERE conta='CONTA-002'")));
     }
 }

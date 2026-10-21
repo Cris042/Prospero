@@ -15,6 +15,12 @@ public final class EnvelopeAdmissao {
         return UUID.nameUUIDFromBytes(("admissao:" + intencao).getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Preço unitário máximo exato da compra: reserva ÷ quantidade (o par tem a mesma quantidade nas pernas). */
+    public static BigDecimal precoMaximo(ComandoRisco c, Decisao d) {
+        return d.valorReservado() == null ? null
+                : d.valorReservado().divide(BigDecimal.valueOf(c.pernas().getFirst().quantidade()));
+    }
+
     public static String serializar(ComandoRisco c, Decisao d, String traceparent) {
         var raiz = new ObjectMapper().createObjectNode();
         raiz.put("id", id(c.intencao()).toString());
@@ -29,6 +35,29 @@ public final class EnvelopeAdmissao {
         raiz.put("conta", c.conta());
         raiz.put("traceparent", traceparent);
         var dados = raiz.putObject("dados");
+        if (c.oco()) {
+            // v3 (ADR-013 RF05c.3b): uma mensagem para o par, TP antes do SL.
+            raiz.put("versao", 3);
+            dados.put("ticker", c.ticker());
+            dados.put("lado", c.lado().name());
+            dados.put("dataSessao", c.dataSessao().toString());
+            BigDecimal maximo = precoMaximo(c, d);
+            dados.put("precoMaximo", maximo == null ? null : maximo.setScale(2).toPlainString());
+            var pernas = dados.putArray("pernas");
+            String[] papeis = {"TAKE_PROFIT", "STOP_LOSS"};
+            for (int i = 0; i < 2; i++) {
+                var perna = c.pernas().get(i);
+                var no = pernas.addObject();
+                no.put("papel", papeis[i]);
+                no.put("ordem", perna.id().toString());
+                no.put("tipo", perna.tipo().name());
+                no.put("validade", perna.validade().name());
+                no.put("quantidade", perna.quantidade());
+                no.put("precoLimite", perna.precoLimite() == null ? null : perna.precoLimite().setScale(2).toPlainString());
+                if (i == 1) no.put("precoGatilho", perna.precoGatilho().setScale(2).toPlainString());
+            }
+            return raiz.toString();
+        }
         dados.put("ordem", p.id().toString());
         dados.put("ticker", c.ticker());
         dados.put("lado", c.lado().name());

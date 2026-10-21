@@ -55,7 +55,7 @@ python3 scripts/testar-matching-postgres.py --projeto "$project" --cache "$cache
 "${compose[@]}" run --rm --no-deps -T runner-planilhas
 # RF01/RF02: workbooks com tokens curtos (preparação e contas de teste) em arquivo temporário fora do Git e da imagem.
 runner_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-runner.XXXXXX")"
-# Cenários que preparam carteiras antecedem Stop/OCO, preservadas até RF05c.
+# Cenários que preparam carteiras antecedem Stop/OCO vivos no livro, que bloqueiam nova preparação.
 rodar_workbook() {
   local workbook="$1" perfil="$2"
   python3 scripts/mercado.py config-runner "$runner_cfg/$workbook.json" --perfil "$perfil"
@@ -73,7 +73,7 @@ python3 scripts/mercado.py verificar-concorrencia --origem-mo "$mo_origem" --pro
 python3 scripts/mercado.py verificar-recuperacao --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"
 # start/restart pode alterar a porta dinâmica publicada na CI.
 mo_origem="http://$("${compose[@]}" port middle-office 8080)"
-# RF04 mantém OCO final na CONTA-003; a prova seguinte usa CONTA-002, sem apagar esse fato.
+# RF04 deixa o OCO final vivo na CONTA-003; a prova seguinte usa CONTA-002, sem apagar esse fato.
 rodar_workbook risco risco
 python3 scripts/mercado.py verificar-risco --origem "$fo_origem" --origem-mo "$mo_origem"
 # RF02/RF03 ainda registram Stop/OCO; nenhuma preparação de carteira após essas provas.

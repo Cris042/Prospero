@@ -338,4 +338,145 @@ for (const parcial of [false, true]) {
     '/saldoReservado': '0.00',
   });
 }
+// RF05c.3b: par OCO admitido inteiro; cada cenário termina sem reservas nem ofertas, por negócios reais.
+function enviarOco(c, id, servico, lado, quantidade, alvo, gatilho) {
+  passo(
+    c,
+    id,
+    servico,
+    'POST',
+    '/api/v1/ordens-oco',
+    {
+      ticker: 'ALFA3',
+      lado,
+      quantidade,
+      validade: 'DIA',
+      takeProfit: { precoLimite: alvo },
+      stopLoss: { tipo: 'STOP', precoGatilho: gatilho },
+    },
+    {},
+    { [id]: '/grupoOco' },
+    202,
+  );
+}
+function consultarOco(c, id, servico, variavel, esperado) {
+  passo(
+    c,
+    id,
+    servico,
+    'GET',
+    `/api/v1/ordens-oco/\${${variavel}}`,
+    null,
+    esperado,
+    null,
+    200,
+    true,
+  );
+}
+{
+  const c = 'OcoAlvoExecutaCancelaStop';
+  preparar(c);
+  fixarUltimo(c);
+  enviarOco(c, 'Oco', 'ordens-b', 'VENDA', 2, '10.20', '9.80');
+  consultarOco(c, 'OcoAdmitido', 'ordens-b', 'Oco', {
+    '/ordens/0/papelOco': 'TAKE_PROFIT',
+    '/ordens/0/estado': 'ABERTA',
+    '/ordens/1/papelOco': 'STOP_LOSS',
+    '/ordens/1/estado': 'AGUARDANDO_GATILHO',
+  });
+  carteira(c, 'CustodiaReservadaUmaVez', 'risco-b', { '/custodias/0/reservado': 2 });
+  enviar(c, 'CompraAlvo', 'ordens-a', 'COMPRA', 2, 'IOC', '10.20');
+  consultar(c, 'CompraAlvoExecutada', 'ordens-a', 'CompraAlvo', terminal('EXECUTADA', 2, 0));
+  consultarOco(c, 'OcoEncerrado', 'ordens-b', 'Oco', {
+    '/ordens/0/estado': 'EXECUTADA',
+    '/ordens/0/quantidadeExecutada': 2,
+    '/ordens/1/estado': 'CANCELADA',
+    '/ordens/1/motivoEncerramento': 'CANCELADA_OCO',
+    '/ordens/1/quantidadeExecutada': 0,
+    '/ordens/1/quantidadeCancelada': 2,
+  });
+  carteira(c, 'CaixaFinalOcoAlvo', 'risco-a', {
+    '/saldoTotal': '969.60',
+    '/saldoDisponivel': '969.60',
+    '/saldoReservado': '0.00',
+  });
+  carteira(c, 'CustodiaFinalOcoAlvo', 'risco-b', {
+    '/custodias/0/total': 97,
+    '/custodias/0/reservado': 0,
+  });
+}
+{
+  const c = 'OcoParcialReduzStopEGatilhoCancelaAlvo';
+  preparar(c);
+  fixarUltimo(c);
+  enviarOco(c, 'Oco', 'ordens-b', 'VENDA', 3, '10.20', '9.90');
+  consultarOco(c, 'OcoAdmitido', 'ordens-b', 'Oco', {
+    '/ordens/0/estado': 'ABERTA',
+    '/ordens/1/estado': 'AGUARDANDO_GATILHO',
+  });
+  enviar(c, 'CompraParcial', 'ordens-a', 'COMPRA', 1, 'IOC', '10.20');
+  consultar(c, 'CompraParcialExecutada', 'ordens-a', 'CompraParcial', terminal('EXECUTADA', 1, 0));
+  consultarOco(c, 'StopReduzido', 'ordens-b', 'Oco', {
+    '/ordens/0/estado': 'PARCIALMENTE_EXECUTADA',
+    '/ordens/0/quantidadeExecutada': 1,
+    '/ordens/1/estado': 'AGUARDANDO_GATILHO',
+    '/ordens/1/quantidadeReduzida': 1,
+  });
+  enviar(c, 'CompraGatilho', 'ordens-a', 'COMPRA', 1, 'DIA', '9.90');
+  consultar(c, 'CompraGatilhoAberta', 'ordens-a', 'CompraGatilho', { '/estado': 'ABERTA' });
+  enviar(c, 'LiquidezStop', 'ordens-a', 'COMPRA', 2, 'DIA', '9.85');
+  consultar(c, 'LiquidezStopAberta', 'ordens-a', 'LiquidezStop', { '/estado': 'ABERTA' });
+  enviar(c, 'VendaGatilho', 'ordens-b', 'VENDA', 1, 'IOC', '9.90');
+  consultar(c, 'VendaGatilhoExecutada', 'ordens-b', 'VendaGatilho', terminal('EXECUTADA', 1, 0));
+  consultarOco(c, 'GatilhoCancelaAlvo', 'ordens-b', 'Oco', {
+    '/ordens/0/estado': 'CANCELADA',
+    '/ordens/0/motivoEncerramento': 'CANCELADA_OCO',
+    '/ordens/0/quantidadeExecutada': 1,
+    '/ordens/0/quantidadeCancelada': 2,
+    '/ordens/1/estado': 'EXECUTADA',
+    '/ordens/1/quantidadeExecutada': 2,
+    '/ordens/1/quantidadeReduzida': 1,
+  });
+  consultar(c, 'LiquidezStopConsumida', 'ordens-a', 'LiquidezStop', terminal('EXECUTADA', 2, 0));
+  carteira(c, 'CaixaFinalOcoStop', 'risco-a', {
+    '/saldoTotal': '950.20',
+    '/saldoDisponivel': '950.20',
+    '/saldoReservado': '0.00',
+  });
+  carteira(c, 'CustodiaFinalOcoStop', 'risco-b', {
+    '/custodias/0/total': 95,
+    '/custodias/0/reservado': 0,
+  });
+}
+{
+  const c = 'OcoCompraAlvoDevolveTroco';
+  preparar(c);
+  fixarUltimo(c);
+  enviarOco(c, 'Oco', 'ordens-a', 'COMPRA', 2, '9.80', '10.20');
+  consultarOco(c, 'OcoAdmitido', 'ordens-a', 'Oco', {
+    '/ordens/0/estado': 'ABERTA',
+    '/ordens/1/estado': 'AGUARDANDO_GATILHO',
+  });
+  // Reserva única pelo maior custo: teto do Stop sobre o gatilho 10,20 com túnel de 10% = 11,22.
+  carteira(c, 'ReservaUnicaPar', 'risco-a', {
+    '/saldoTotal': '990.00',
+    '/saldoReservado': '22.44',
+  });
+  enviar(c, 'VendaAlvo', 'ordens-b', 'VENDA', 2, 'IOC', '9.80');
+  consultar(c, 'VendaAlvoExecutada', 'ordens-b', 'VendaAlvo', terminal('EXECUTADA', 2, 0));
+  consultarOco(c, 'OcoEncerrado', 'ordens-a', 'Oco', {
+    '/ordens/0/estado': 'EXECUTADA',
+    '/ordens/1/estado': 'CANCELADA',
+    '/ordens/1/motivoEncerramento': 'CANCELADA_OCO',
+  });
+  carteira(c, 'CaixaFinalOcoCompra', 'risco-a', {
+    '/saldoTotal': '970.40',
+    '/saldoDisponivel': '970.40',
+    '/saldoReservado': '0.00',
+  });
+  carteira(c, 'CustodiaFinalOcoCompra', 'risco-b', {
+    '/custodias/0/total': 97,
+    '/custodias/0/reservado': 0,
+  });
+}
 await workbook.xlsx.writeFile(fileURLToPath(new URL('./matching.xlsx', import.meta.url)));

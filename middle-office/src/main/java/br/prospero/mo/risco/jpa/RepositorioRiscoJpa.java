@@ -170,6 +170,10 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public void registrarAdmissao(br.prospero.mo.risco.dominio.ComandoRisco c, Decisao d) {
+        if (c.oco()) {
+            registrarAdmissaoOco(c, d);
+            return;
+        }
         var p = c.pernas().getFirst();
         nativa("""
                 UPDATE reserva SET ordem=:o, admissao=:a, tipo=:t, validade=:v, data_sessao=:s,
@@ -180,6 +184,31 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
                 .setParameter("q", p.quantidade()).setParameter("l", p.precoLimite(), BigDecimal.class)
                 .setParameter("m", d.valorReservado() == null ? null : d.valorReservado().divide(BigDecimal.valueOf(p.quantidade())), BigDecimal.class)
                 .setParameter("r", d.valorReservado(), BigDecimal.class).setParameter("g", p.precoGatilho(), BigDecimal.class).setParameter("i", c.intencao()).executeUpdate();
+    }
+
+    /** Grupo e as duas pernas na mesma transação da decisão e da outbox (ADR-013 RF05c.3b). */
+    private void registrarAdmissaoOco(br.prospero.mo.risco.dominio.ComandoRisco c, Decisao d) {
+        long q = c.pernas().getFirst().quantidade();
+        int n = nativa("""
+                UPDATE reserva SET oco=TRUE, admissao=:a, validade='DIA', data_sessao=:s, quantidade_inicial=:q,
+                quantidade_restante=:q, preco_maximo=:m, valor_restante=:r WHERE intencao=:i AND ordem IS NULL
+                """).setParameter("a", br.prospero.mo.risco.helper.EnvelopeAdmissao.id(c.intencao()))
+                .setParameter("s", c.dataSessao()).setParameter("q", q)
+                .setParameter("m", br.prospero.mo.risco.helper.EnvelopeAdmissao.precoMaximo(c, d), BigDecimal.class)
+                .setParameter("r", d.valorReservado(), BigDecimal.class).setParameter("i", c.intencao()).executeUpdate();
+        if (n != 1) {
+            throw new IllegalStateException("Reserva do par ausente.");
+        }
+        String[] papeis = {"TAKE_PROFIT", "STOP_LOSS"};
+        for (int i = 0; i < 2; i++) {
+            var p = c.pernas().get(i);
+            nativa("""
+                    INSERT INTO reserva_perna(ordem,intencao,papel,tipo,preco_limite,preco_gatilho,quantidade)
+                    VALUES(:o,:i,:p,:t,:l,:g,:q)
+                    """).setParameter("o", p.id()).setParameter("i", c.intencao()).setParameter("p", papeis[i])
+                    .setParameter("t", p.tipo().name()).setParameter("l", p.precoLimite(), BigDecimal.class)
+                    .setParameter("g", p.precoGatilho(), BigDecimal.class).setParameter("q", q).executeUpdate();
+        }
     }
 
     /** Nulos tipados: sem o tipo, o PostgreSQL recebe o parâmetro nulo como bytea. */
