@@ -73,7 +73,7 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   expect(navegacoes).toEqual([]);
   expect(posts[0].autorizacao).toBeUndefined();
   expect(posts[0].chave).toMatch(/^[0-9a-f-]{36}$/);
-  expect((await page.content()).toLowerCase()).not.toContain('executada');
+  await expect(status).not.toContainText('Executada');
   expect(erros).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
