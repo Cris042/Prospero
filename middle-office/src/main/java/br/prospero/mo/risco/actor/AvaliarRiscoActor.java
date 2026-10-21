@@ -48,6 +48,7 @@ public class AvaliarRiscoActor {
 
     @Transactional
     public Avaliacao avaliar(ComandoRisco comando, String traceparent) {
+        repositorio.bloquearConta(comando.conta());
         Optional<Decisao> existente = repositorio.decisao(comando.intencao());
         if (existente.isPresent()) {
             metricas.counter("prospero.risco.reentregas").increment();
@@ -56,6 +57,12 @@ public class AvaliarRiscoActor {
         Instant agora = relogio.instant().truncatedTo(ChronoUnit.MICROS);
         Decisao decisao = decidir(comando, agora);
         repositorio.registrar(decisao);
+        if (decisao.resultado() == br.prospero.mo.risco.dominio.ResultadoRisco.RESERVADA && comando.admissivel()) {
+            repositorio.registrarAdmissao(comando, decisao);
+            UUID admissao = br.prospero.mo.risco.helper.EnvelopeAdmissao.id(comando.intencao());
+            outbox.gravar(new MensagemSaida(admissao, "matching.comandos.v1", comando.ticker(), "ORDEM_ADMITIDA",
+                    br.prospero.mo.risco.helper.EnvelopeAdmissao.serializar(comando, decisao, traceparent), traceparent, agora));
+        }
         UUID evento = UUID.randomUUID();
         outbox.gravar(new MensagemSaida(evento, EnvelopeRisco.TOPICO_RESULTADOS, comando.conta(), "RESULTADO_RISCO",
                 EnvelopeRisco.resultado(evento, decisao, agora, traceparent), traceparent, agora));

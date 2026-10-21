@@ -15,7 +15,8 @@ import java.util.UUID;
 public record Ordem(UUID id, String conta, String ticker, LadoOrdem lado, TipoOrdem tipo, Validade validade,
                     long quantidade, BigDecimal precoLimite, BigDecimal precoGatilho, UUID grupoOco,
                     PapelOco papelOco, UUID grupoEnvio, EstadoOrdem estado, LocalDate dataSessao,
-                    Instant recebidaEm, BaseTunel baseTunel, MotivoRejeicao motivoRejeicao) {
+                    Instant recebidaEm, BaseTunel baseTunel, MotivoRejeicao motivoRejeicao,
+                    long quantidadeExecutada, long quantidadeCancelada, String motivoEncerramento) {
     public Ordem {
         Objects.requireNonNull(id);
         Objects.requireNonNull(conta);
@@ -33,6 +34,18 @@ public record Ordem(UUID id, String conta, String ticker, LadoOrdem lado, TipoOr
         if ((estado == EstadoOrdem.REJEITADA) != (motivoRejeicao != null)) {
             throw new IllegalArgumentException("Motivo existe somente na rejeição.");
         }
+        if (quantidadeExecutada < 0 || quantidadeCancelada < 0
+                || quantidadeExecutada > quantidade || quantidadeCancelada > quantidade - quantidadeExecutada) {
+            throw new IllegalArgumentException("Progresso da ordem inválido.");
+        }
+    }
+
+    public Ordem(UUID id, String conta, String ticker, LadoOrdem lado, TipoOrdem tipo, Validade validade,
+                 long quantidade, BigDecimal precoLimite, BigDecimal precoGatilho, UUID grupoOco, PapelOco papelOco,
+                 UUID grupoEnvio, EstadoOrdem estado, LocalDate dataSessao, Instant recebidaEm, BaseTunel baseTunel,
+                 MotivoRejeicao motivoRejeicao) {
+        this(id, conta, ticker, lado, tipo, validade, quantidade, precoLimite, precoGatilho, grupoOco, papelOco,
+                grupoEnvio, estado, dataSessao, recebidaEm, baseTunel, motivoRejeicao, 0, 0, null);
     }
 
     /** Ordem recém-registrada, ainda sem resultado do risco. */

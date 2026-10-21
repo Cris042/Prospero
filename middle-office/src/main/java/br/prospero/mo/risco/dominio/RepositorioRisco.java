@@ -7,6 +7,10 @@ import java.util.UUID;
 
 /** Porta de persistência do risco; as reservas são atualizações condicionais na linha de controle (HLD-003). */
 public interface RepositorioRisco {
+    void bloquearConta(String conta);
+
+    void registrarAdmissao(ComandoRisco comando, Decisao decisao);
+
     Optional<Decisao> decisao(UUID intencao);
 
     Optional<ParametrosRisco> parametros(String ticker);
@@ -25,8 +29,8 @@ public interface RepositorioRisco {
     Optional<Carteira> carteira(String conta);
 
     /**
-     * Preparação local (ADR-012, RF04b): redefine caixa e custódia da conta e apaga suas reservas; ativos ausentes do
-     * mapa ficam com zero. Decisões são preservadas para a deduplicação de reentregas.
+     * Preparação local (ADR-012, RF04b): redefine caixa e custódia somente sem reservas vivas; ativos ausentes do
+     * mapa ficam com zero. Histórico e deduplicação são preservados.
      */
     void preparar(String conta, BigDecimal saldo, Map<String, Long> custodia);
 }

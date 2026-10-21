@@ -13,8 +13,8 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | MO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | MO00A | P05 | Conversão decimal exata técnica e limites, sem regras financeiras antecipadas. | Concluída — PR #3 integrado |
 | MO01 | RF03 | Validar lote, tick, túnel e preços de referência. | Lote/tick/túnel no FO (ADR-011, PR #20); MO revalida lote e quantidade máxima na RF04a |
-| MO02 | RF04 | Reservar recursos e proteger limites contra concorrência. | RF04a integrada (PR #21); RF04b (carteira, preparação local, provas) em revisão |
-| MO03 | RF05 | Consumir execuções e ajustar o consumo das reservas. | Planejada |
+| MO02 | RF04 | Reservar recursos e proteger limites contra concorrência. | Concluída — PRs #21/#22 integrados |
+| MO03 | RF05 | Admitir ordens reservadas, consumir execuções e ajustar reservas; preparação recusa conta viva. | RF05b em validação |
 | MO04 | RF08 | Receber efeitos de liquidação por eventos e atualizar os saldos locais. | Planejada |
 | MO05 | RF10 | Liberar saldo elegível com deduplicação e proteção contra corridas. | Planejada |
 | MO99 | V01 | Resiliência, métricas, rastreio e critérios não funcionais aplicáveis | Planejada |

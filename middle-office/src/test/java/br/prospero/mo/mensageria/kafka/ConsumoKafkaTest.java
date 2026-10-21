@@ -41,6 +41,30 @@ class ConsumoKafkaTest {
                 new SimpleMeterRegistry());
     }
 
+    @Test
+    void financeiroNaoDescartaMesmoAposDezFalhas() {
+        consumo = new ConsumoKafka(() -> consumidor, TOPICO, this::processar,
+                (t,p,o,m) -> rejeitados.add(m), new SimpleMeterRegistry(), true);
+        falhasProgramadas.put("0:0", 12);
+        for (int tentativa=0; tentativa<12; tentativa++) {
+            publicar(P0,0,"ok");
+            assertThrows(IllegalStateException.class, () -> consumo.ciclo(consumidor));
+            assertEquals(0, consumidor.position(P0));
+        }
+        assertEquals(0, rejeitados.size());
+    }
+
+    @Test
+    void financeiroInvalidoNaoAvancaOffset() {
+        consumo = new ConsumoKafka(() -> consumidor, TOPICO, this::processar,
+                (t,p,o,m) -> rejeitados.add(m), new SimpleMeterRegistry(), true);
+        publicar(P0,0,"invalida");
+        assertThrows(MensagemInvalidaException.class, () -> consumo.ciclo(consumidor));
+        assertEquals(0, consumidor.position(P0));
+        assertEquals(1, rejeitados.size());
+        org.junit.jupiter.api.Assertions.assertFalse(consumo.saudavel());
+    }
+
     private void processar(ConsumerRecord<String, byte[]> registro) {
         String id = registro.partition() + ":" + registro.offset();
         if (new String(registro.value()).equals("invalida")) {

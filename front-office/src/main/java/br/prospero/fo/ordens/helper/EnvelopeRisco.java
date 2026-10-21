@@ -47,7 +47,7 @@ public final class EnvelopeRisco {
         ObjectNode raiz = JSON.createObjectNode();
         raiz.put("id", id.toString());
         raiz.put("tipo", "AVALIAR_RISCO");
-        raiz.put("versao", 1);
+        raiz.put("versao", 2);
         raiz.put("origem", "front-office");
         raiz.put("correlacao", primeira.grupoEnvio().toString());
         raiz.put("ocorridoEm", agora.toString());
@@ -57,11 +57,13 @@ public final class EnvelopeRisco {
         dados.put("ticker", primeira.ticker());
         dados.put("lado", primeira.lado().name());
         dados.put("precoBase", texto(precoBase));
+        dados.put("dataSessao", primeira.dataSessao().toString());
         ArrayNode pernas = dados.putArray("ordens");
         for (Ordem ordem : ordens) {
             ObjectNode perna = pernas.addObject();
             perna.put("id", ordem.id().toString());
             perna.put("tipo", ordem.tipo().name());
+            perna.put("validade", ordem.validade().name());
             perna.put("quantidade", ordem.quantidade());
             perna.put("precoLimite", texto(ordem.precoLimite()));
             perna.put("precoGatilho", texto(ordem.precoGatilho()));

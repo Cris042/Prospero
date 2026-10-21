@@ -5,5 +5,5 @@ package br.prospero.fo.ordens.dominio;
  * (ADR-012). Estados de execução entram na RF05.
  */
 public enum EstadoOrdem {
-    RECEBIDA, RESERVADA, REJEITADA
+    RECEBIDA, RESERVADA, REJEITADA, ABERTA, PARCIALMENTE_EXECUTADA, EXECUTADA, CANCELADA
 }

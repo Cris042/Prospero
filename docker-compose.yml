@@ -209,6 +209,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
     - dados-me
     - eventos
@@ -329,6 +331,15 @@ services:
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
           --topic "$$topico" --partitions 3 --replication-factor 1 \
           --config retention.ms=604800000 --config retention.bytes=67108864
+      done
+      # RF05b: replay exige preservar o início integral da única sessão do laboratório.
+      for topico in matching.comandos.v1 matching.eventos.v1; do
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic "$$topico" --partitions 3 --replication-factor 1 \
+          --config retention.ms=-1 --config retention.bytes=-1 --config cleanup.policy=delete
+        /opt/kafka/bin/kafka-configs.sh --bootstrap-server kafka:9092 --alter \
+          --entity-type topics --entity-name "$$topico" \
+          --add-config retention.ms=-1,retention.bytes=-1,cleanup.policy=delete
       done
     depends_on:
       kafka:

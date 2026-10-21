@@ -82,12 +82,16 @@ class SagaRiscoTest {
         assertEquals("CONTA-002", m.chave(), "chave de partição é a conta");
         assertEquals(m.id().toString(), comando.get("id").asText());
         assertEquals("AVALIAR_RISCO", comando.get("tipo").asText());
-        assertEquals(1, comando.get("versao").asInt());
+        assertEquals(2, comando.get("versao").asInt(), "RF05b transporta sessão e validade para o MO");
         assertEquals("front-office", comando.get("origem").asText());
         assertEquals(id, comando.get("correlacao").asText());
         assertEquals("20.00", comando.at("/dados/precoBase").asText(), "Market leva a base para a reserva");
         assertTrue(comando.at("/dados/ordens/0/precoLimite").isNull());
         assertEquals(10, comando.at("/dados/ordens/0/quantidade").asLong());
+        String dataSessao = given().auth().oauth2(token("CONTA-002")).when().get("/api/v1/ordens/" + id)
+                .then().statusCode(200).extract().path("dataSessao");
+        assertEquals(dataSessao, comando.at("/dados/dataSessao").asText(), "sessão persistida, não data do relay");
+        assertEquals("IOC", comando.at("/dados/ordens/0/validade").asText());
         // A ordem Market continua sem base gravada (ADR-011).
         given().auth().oauth2(token("CONTA-002")).when().get("/api/v1/ordens/" + id).then().statusCode(200)
                 .body("precoBaseTunel", nullValue()).body("estado", equalTo("RECEBIDA"))
@@ -106,6 +110,8 @@ class SagaRiscoTest {
         assertEquals("VENDA", comando.at("/dados/lado").asText());
         assertEquals("LIMIT", comando.at("/dados/ordens/0/tipo").asText());
         assertEquals("STOP_LIMIT", comando.at("/dados/ordens/1/tipo").asText());
+        assertEquals("DIA", comando.at("/dados/ordens/0/validade").asText());
+        assertEquals("DIA", comando.at("/dados/ordens/1/validade").asText());
     }
 
     @Test

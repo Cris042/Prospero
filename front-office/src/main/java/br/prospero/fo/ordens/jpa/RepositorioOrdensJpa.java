@@ -192,6 +192,10 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
         e.grupoOco = o.grupoOco();
         e.papelOco = o.papelOco() == null ? null : o.papelOco().name();
         e.grupoEnvio = o.grupoEnvio();
+        if (o.grupoOco() == null && (o.tipo() == TipoOrdem.LIMIT || o.tipo() == TipoOrdem.MARKET)) {
+            e.admissaoMatching = UUID.nameUUIDFromBytes(("admissao:" + o.grupoEnvio())
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
         e.estado = o.estado().name();
         e.dataSessao = o.dataSessao();
         e.recebidaEm = o.recebidaEm();
@@ -202,12 +206,13 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
         return e;
     }
 
-    private static Ordem ordem(OrdemEntity e) {
+    static Ordem ordem(OrdemEntity e) {
         return new Ordem(e.id, e.conta, e.ticker, LadoOrdem.valueOf(e.lado), TipoOrdem.valueOf(e.tipo),
                 Validade.valueOf(e.validade), e.quantidade, e.precoLimite, e.precoGatilho, e.grupoOco,
                 e.papelOco == null ? null : PapelOco.valueOf(e.papelOco), e.grupoEnvio, EstadoOrdem.valueOf(e.estado),
                 e.dataSessao, e.recebidaEm,
                 e.precoBaseTunel == null ? null : new BaseTunel(e.precoBaseTunel, OrigemBase.valueOf(e.origemBase)),
-                e.motivoRejeicao == null ? null : MotivoRejeicao.valueOf(e.motivoRejeicao));
+                e.motivoRejeicao == null ? null : MotivoRejeicao.valueOf(e.motivoRejeicao),
+                e.quantidadeExecutada, e.quantidadeCancelada, e.motivoEncerramento);
     }
 }

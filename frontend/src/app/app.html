@@ -13,8 +13,8 @@
       em negócios.
     </p>
     <p class="aviso">
-      <strong>Consulta de mercado e registro de ordens disponíveis.</strong> Execução ainda não
-      implementada. Nenhum dado ou valor financeiro real.
+      <strong>Consulta de mercado e execução de ordens Limit e Market disponíveis.</strong>
+      Liquidação ainda não implementada. Nenhum dado ou valor financeiro real.
     </p>
   </section>
   <app-mercado />
@@ -56,11 +56,11 @@
     </div>
     <p class="nota">
       A disponibilidade confirma a conexão com PostgreSQL e Kafka. Cada serviço possui seu próprio
-      banco; o fluxo financeiro será construído nas próximas tarefas.
+      banco.
     </p>
   </section>
   <section class="fluxo" aria-labelledby="fluxo-titulo">
-    <p class="sobretitulo">O QUE VAMOS CONSTRUIR</p>
+    <p class="sobretitulo">CAMINHO DA ORDEM</p>
     <h2 id="fluxo-titulo">Uma ordem, quatro responsabilidades.</h2>
     <ol>
       <li><strong>01 · Entrada</strong><span>Receber e acompanhar ordens.</span></li>

@@ -62,7 +62,14 @@ export interface Ordem {
   readonly grupoOco: string | null;
   readonly papelOco: 'TAKE_PROFIT' | 'STOP_LOSS' | null;
   /** RECEBIDA aguarda o risco; RESERVADA não implica execução (RF04, ADR-012). */
-  readonly estado: 'RECEBIDA' | 'RESERVADA' | 'REJEITADA';
+  readonly estado:
+    | 'RECEBIDA'
+    | 'RESERVADA'
+    | 'REJEITADA'
+    | 'ABERTA'
+    | 'PARCIALMENTE_EXECUTADA'
+    | 'EXECUTADA'
+    | 'CANCELADA';
   readonly motivoRejeicao: MotivoRejeicao | null;
   readonly dataSessao: string;
   readonly recebidaEm: string;

@@ -38,6 +38,8 @@ public final class ConsumoKafka implements Runnable {
     private final AtomicInteger vivo = new AtomicInteger();
     private final Map<TopicPartition, Long> falhaEm = new HashMap<>();
     private final Map<TopicPartition, Integer> falhas = new HashMap<>();
+    private final boolean financeiro;
+    private volatile boolean bloqueado;
     private volatile boolean ativo = true;
     private volatile Consumer<String, byte[]> consumidor;
 
@@ -54,6 +56,12 @@ public final class ConsumoKafka implements Runnable {
 
     public ConsumoKafka(Supplier<Consumer<String, byte[]>> fabrica, String topico, Processador processador,
                         Rejeicao rejeicao, MeterRegistry metricas) {
+        this(fabrica, topico, processador, rejeicao, metricas, false);
+    }
+
+    public ConsumoKafka(Supplier<Consumer<String, byte[]>> fabrica, String topico, Processador processador,
+                        Rejeicao rejeicao, MeterRegistry metricas, boolean financeiro) {
+        this.financeiro = financeiro;
         this.fabrica = fabrica;
         this.topico = topico;
         this.processador = processador;
@@ -84,6 +92,8 @@ public final class ConsumoKafka implements Runnable {
             vivo.set(0);
         }
     }
+
+    public boolean saudavel() { return vivo.get() == 1 && !bloqueado; }
 
     public void parar() {
         ativo = false;
@@ -125,14 +135,22 @@ public final class ConsumoKafka implements Runnable {
     private void processarOuRejeitar(TopicPartition particao, ConsumerRecord<String, byte[]> registro) {
         try {
             processador.processar(registro);
+            if (financeiro) bloqueado = false;
         } catch (MensagemInvalidaException invalida) {
+            if (financeiro) {
+                bloqueado = true;
+                ativo = false;
+                rejeicao.registrar(registro.topic(), registro.partition(), registro.offset(), invalida.getMessage());
+                throw invalida;
+            }
             rejeitar(registro, invalida.getMessage());
         } catch (RuntimeException falha) {
+            if (financeiro) bloqueado = true;
             int seguidas = contarFalha(particao, registro.offset());
             metricas.counter("prospero.consumo.falhas", "topico", topico).increment();
             LOG.warnf("Falha ao processar: topico=%s particao=%d offset=%d tentativa=%d erro=%s", registro.topic(),
                     registro.partition(), registro.offset(), seguidas, falha.getClass().getSimpleName());
-            if (seguidas < TENTATIVAS_MAXIMAS) {
+            if (financeiro || seguidas < TENTATIVAS_MAXIMAS) {
                 throw falha;
             }
             rejeitar(registro, "falha persistente: " + falha.getClass().getSimpleName());

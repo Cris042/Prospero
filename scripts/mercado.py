@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""RF01–RF04: emite tokens curtos (mercado e ordens por conta), configuração do runner XLSX e verificações contra o
+"""RF01–RF05b: emite tokens curtos (mercado e ordens por conta), configuração do runner XLSX e verificações contra o
 ambiente real; sem exibir a chave."""
 import argparse
 import concurrent.futures
 import datetime
+import hashlib
 import json
 import os
 import queue
@@ -126,10 +127,25 @@ def http(metodo, url, tok, corpo=None, cabecalhos=None):
         return json.load(resposta)
 
 
-def preparar_carteira(origem_mo, conta, saldo, custodia):
-    """RF04b: redefine a carteira de uma conta de teste pela API local do MO (apaga as reservas dela)."""
-    return http("PUT", f"{origem_mo}/api/v1/preparacoes-risco/contas/{conta}", token("risco-preparacao", 60),
-                {"saldo": saldo, "custodia": custodia})
+def preparar_carteira(origem_mo, conta, saldo, custodia, prazo=0):
+    """Redefine carteira sem reservas vivas. Após limpeza conhecida, pode esperar os terminais do MO."""
+    limite = time.monotonic() + prazo
+    tok = token("risco-preparacao", 60)
+    while True:
+        try:
+            return http("PUT", f"{origem_mo}/api/v1/preparacoes-risco/contas/{conta}", tok,
+                        {"saldo": saldo, "custodia": custodia})
+        except urllib.error.HTTPError as erro:
+            if erro.code != 409 or time.monotonic() >= limite:
+                raise
+            try:
+                problema = json.load(erro)
+            except (ValueError, UnicodeError):
+                raise erro
+            if not isinstance(problema, dict) or problema.get("codigo") != "RESERVA_VIVA":
+                raise
+            erro.close()
+            time.sleep(min(0.2, max(0, limite - time.monotonic())))
 
 
 def carteira(origem_mo, conta):
@@ -148,67 +164,54 @@ def aguardar_decisao(origem, tok, caminho, prazo=20.0):
 
 
 def verificar_risco(origem, origem_mo):
-    """SAGA FO→MO real (ADR-012), repetível: prepara CONTA-002 (R$ 1.000.000,00 e 1.000 ações/ativo); compras
-    concorrentes que somadas excedem o saldo → uma RESERVADA e outra SALDO_INSUFICIENTE; venda sem custódia; quantidade
-    máxima; Market e OCO; ao fim, a carteira do MO reflete exatamente as reservas."""
-    sem_pendencias(origem, "CONTA-002")
-    preparar_carteira(origem_mo, "CONTA-002", "1000000.00", {t: 1000 for t in ATIVOS})
-    tok = token("ordens", 120, "CONTA-002")
+    """RF04/RF05b: concorrência acima do saldo, rejeições, Market sem livro e OCO final.
+    Limpa a Limit vencedora por negócio real na mesma conta; OCO permanece reservada até RF05c.
+    Executar após as provas que preparam CONTA-002 e antes das provas sem preparação."""
+    conta = "CONTA-002"
+    sem_pendencias(origem, conta)
+    preparar_carteira(origem_mo, conta, "1000000.00", {t: 60000 if t == "ALFA3" else 1000 for t in ATIVOS}, prazo=30)
+    tok = token("ordens", 300, conta)
 
-    def chamar(caminho, corpo=None):
-        cabecalhos = {"Authorization": "Bearer " + tok}
-        if corpo is not None:
-            cabecalhos.update({"Content-Type": "application/json", "X-Idempotency-Key": "risco-" + uuid.uuid4().hex[:16]})
-        pedido = urllib.request.Request(origem + caminho, method="POST" if corpo is not None else "GET",
-                                        data=None if corpo is None else json.dumps(corpo).encode(), headers=cabecalhos)
-        with urllib.request.urlopen(pedido, timeout=10) as resposta:
-            if resposta.status not in (200, 202):
-                raise SystemExit(f"HTTP {resposta.status} em {caminho}")
-            return json.load(resposta)
+    def enviar(corpo, caminho="/api/v1/ordens"):
+        return http("POST", origem + caminho, tok, corpo, {"X-Idempotency-Key": "risco-" + uuid.uuid4().hex})
 
-    def decidido(caminho):
-        return aguardar_decisao(origem, tok, caminho)
+    def limit(ticker, lado, quantidade, preco, validade="DIA"):
+        return {"ticker": ticker, "lado": lado, "tipo": "LIMIT", "validade": validade,
+                "quantidade": quantidade, "precoLimite": preco}
 
-    def limit(ticker, lado, quantidade, preco):
-        return {"ticker": ticker, "lado": lado, "tipo": "LIMIT", "validade": "DIA", "quantidade": quantidade,
-                "precoLimite": preco}
-
-    falhas = []
-    # 2 × 60.000 × 10,00 = 1.200.000,00 sobre 1.000.000,00 semeados: a linha de controle admite só uma.
     with concurrent.futures.ThreadPoolExecutor(2) as executor:
-        ids = list(executor.map(lambda _: chamar("/api/v1/ordens", limit("ALFA3", "COMPRA", 60000, "10.00"))["id"],
-                                range(2)))
-    estados = sorted((o["estado"], o["motivoRejeicao"]) for i in ids for o in decidido(f"/api/v1/ordens/{i}"))
-    if estados != [("REJEITADA", "SALDO_INSUFICIENTE"), ("RESERVADA", None)]:
-        falhas.append(f"compras concorrentes acima do saldo: esperado uma reserva e uma rejeição, obtido {estados}")
-    casos = [
-        ("venda acima da custódia", "/api/v1/ordens", limit("GAMA3", "VENDA", 1001, "30.00"),
-         [("REJEITADA", "CUSTODIA_INSUFICIENTE")]),
-        ("quantidade máxima por ordem", "/api/v1/ordens", limit("BETA3", "COMPRA", 100001, "20.00"),
-         [("REJEITADA", "QUANTIDADE_MAXIMA_EXCEDIDA")]),
-        ("compra Market pelo teto do túnel", "/api/v1/ordens",
-         {"ticker": "BETA3", "lado": "COMPRA", "tipo": "MARKET", "validade": "IOC", "quantidade": 10},
-         [("RESERVADA", None)]),
-        ("OCO com reserva única", "/api/v1/ordens-oco",
-         {"ticker": "DELTA3", "lado": "VENDA", "quantidade": 5, "validade": "DIA",
-          "takeProfit": {"precoLimite": "42.00"}, "stopLoss": {"tipo": "STOP", "precoGatilho": "38.00"}},
-         [("RESERVADA", None), ("RESERVADA", None)]),
-    ]
-    for nome, caminho, corpo, esperado in casos:
-        criado = chamar(caminho, corpo)
-        alvo = f"/api/v1/ordens-oco/{criado['grupoOco']}" if "grupoOco" in criado and caminho.endswith("oco") \
-            else f"/api/v1/ordens/{criado['id']}"
-        obtido = [(o["estado"], o["motivoRejeicao"]) for o in decidido(alvo)]
-        if obtido != esperado:
-            falhas.append(f"{nome}: esperado {esperado}, obtido {obtido}")
-    # 600.000,00 (compra concorrente vencedora) + 10 × teto(20,00) = 220,00 (Market); OCO de venda reserva 5 DELTA3.
-    final = carteira(origem_mo, "CONTA-002")
+        ids = list(executor.map(lambda _: enviar(limit("ALFA3", "COMPRA", 60000, "10.00"))["id"], range(2)))
+    decisoes = [aguardar_decisao(origem, tok, f"/api/v1/ordens/{i}")[0] for i in ids]
+    rejeitadas = [o for o in decisoes if o["estado"] == "REJEITADA"]
+    vencedoras = [o for o in decisoes if o["estado"] != "REJEITADA"]
+    if len(rejeitadas) != 1 or rejeitadas[0]["motivoRejeicao"] != "SALDO_INSUFICIENTE" or len(vencedoras) != 1:
+        raise SystemExit("Risco: duas compras concorrentes excedendo o saldo não produziram uma reserva e uma rejeição.")
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{vencedoras[0]['id']}", {"estado": "ABERTA"})
+    aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira",
+                    {"saldoReservado": "600000.00", "saldoDisponivel": "400000.00"})
+    for corpo, motivo in [(limit("GAMA3", "VENDA", 1001, "30.00"), "CUSTODIA_INSUFICIENTE"),
+                          (limit("BETA3", "COMPRA", 100001, "20.00"), "QUANTIDADE_MAXIMA_EXCEDIDA")]:
+        criada = enviar(corpo)
+        aguardar_campos(origem, tok, f"/api/v1/ordens/{criada['id']}", {"estado": "REJEITADA", "motivoRejeicao": motivo})
+    market = enviar({"ticker": "BETA3", "lado": "COMPRA", "tipo": "MARKET", "validade": "IOC", "quantidade": 10})
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{market['id']}",
+                    {"estado": "CANCELADA", "quantidadeExecutada": 0, "quantidadeCancelada": 10})
+    limpar = enviar(limit("ALFA3", "VENDA", 60000, "10.00", "IOC"))
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{limpar['id']}", {"estado": "EXECUTADA", "quantidadeExecutada": 60000})
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{vencedoras[0]['id']}", {"estado": "EXECUTADA"})
+    aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira",
+                    {"saldoTotal": "400000.00", "saldoReservado": "0.00", "saldoDisponivel": "400000.00"})
+    oco = enviar({"ticker": "DELTA3", "lado": "VENDA", "quantidade": 5, "validade": "DIA",
+                   "takeProfit": {"precoLimite": "42.00"}, "stopLoss": {"tipo": "STOP", "precoGatilho": "38.00"}},
+                  "/api/v1/ordens-oco")
+    par = aguardar_decisao(origem, tok, f"/api/v1/ordens-oco/{oco['grupoOco']}")
+    if [o["estado"] for o in par] != ["RESERVADA", "RESERVADA"]:
+        raise SystemExit("Risco: OCO não preservou duas pernas reservadas sem admissão parcial.")
+    final = carteira(origem_mo, conta)
     delta = next(c for c in final["custodias"] if c["ticker"] == "DELTA3")
-    if (final["saldoReservado"], final["saldoDisponivel"], delta["reservado"]) != ("600220.00", "399780.00", 5):
-        falhas.append(f"carteira divergente das reservas: {final}")
-    if falhas:
-        raise SystemExit("Falha na verificação de risco: " + "; ".join(falhas))
-    print("Risco: reserva concorrente, custódia, quantidade máxima, Market, OCO e carteira do MO verificados.")
+    if final["saldoReservado"] != "0.00" or delta["reservado"] != 5:
+        raise SystemExit("Risco: reserva única OCO divergente.")
+    print("Risco: concorrência, rejeições, Market terminal, limpeza real e OCO com reserva única verificados; OCO permanece até RF05c.")
 
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -278,7 +281,7 @@ def _verificar_concorrencia(origem_mo, projeto):
     conta = "CONTA-003"
     filtro = f"conta = '{conta}'"
     # RED: sem proteção, as duas sessões leem 100, ambas concedem 70 e gravam o valor calculado na leitura.
-    preparar_carteira(origem_mo, conta, "100.00", {})
+    preparar_carteira(origem_mo, conta, "100.00", {}, prazo=30)
     a, b = Sessao(), Sessao()
     concedidas = 0
     for s in (a, b):
@@ -334,7 +337,7 @@ def verificar_recuperacao(origem, origem_mo, projeto):
     base = compose(projeto)
     conta = "CONTA-003"
     sem_pendencias(origem, conta)
-    preparar_carteira(origem_mo, conta, "1000.00", {})
+    preparar_carteira(origem_mo, conta, "1000.00", {"ALFA3": 15}, prazo=30)
     tok = token("ordens", 300, conta)
     ordem = {"ticker": "ALFA3", "lado": "COMPRA", "tipo": "LIMIT", "validade": "DIA", "quantidade": 10,
              "precoLimite": "10.00"}
@@ -360,14 +363,16 @@ def verificar_recuperacao(origem, origem_mo, projeto):
         if time.monotonic() > limite:
             raise SystemExit("Recuperação: MO não voltou a ficar pronto.")
         time.sleep(1)
-    [decidida] = aguardar_decisao(origem, tok, f"/api/v1/ordens/{criada['id']}", 60)
-    if (decidida["estado"], carteira(origem_mo, conta)["saldoReservado"]) != ("RESERVADA", "100.00"):
-        raise SystemExit(f"Recuperação: esperado RESERVADA com 100.00 reservado, obtido {decidida}.")
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{criada['id']}", {"estado": "ABERTA"}, 60)
+    aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira", {"saldoReservado": "100.00"})
     # Reentrega do mesmo comando (cópia da outbox do FO) e mensagem inválida, seguidas de uma ordem nova.
     intencao = str(uuid.UUID(criada["id"]))
     linhas = subprocess.check_output(base + [
         "exec", "-T", "postgres-front-office", "psql", "-X", "-A", "-t", "-U", "prospero_fo", "-d", "prospero_fo",
-        "-c", f"SELECT payload FROM outbox WHERE payload LIKE '%\"correlacao\":\"{intencao}\"%'"],
+        # Harness interno sobre a pequena outbox efêmera CI: igualdade exata, sem busca por substring.
+        # O JSON legado não tem índice de correlação; esta leitura pontual não entra no caminho das APIs.
+        "-c", f"SELECT payload FROM outbox WHERE topico = 'risco.comandos.v1' "
+              f"AND payload::jsonb->>'correlacao' = '{intencao}' LIMIT 2"],
         text=True, stderr=subprocess.DEVNULL).strip().splitlines()
     if len(linhas) != 1 or not linhas[0].startswith("{"):
         raise SystemExit("Recuperação: comando original não encontrado na outbox do FO para a reentrega.")
@@ -386,15 +391,99 @@ def verificar_recuperacao(origem, origem_mo, projeto):
                    capture_output=True)
     nova = http("POST", origem + "/api/v1/ordens", tok, {**ordem, "quantidade": 5},
                 {"X-Idempotency-Key": "recup-" + uuid.uuid4().hex[:16]})
-    aguardar_decisao(origem, tok, f"/api/v1/ordens/{nova['id']}", 30)
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{nova['id']}", {"estado": "ABERTA"})
     reservado = carteira(origem_mo, conta)["saldoReservado"]
     decisoes = mo_sql(f"SELECT count(*) FROM decisao_risco WHERE intencao = '{intencao}'")
     rejeitados = int(mo_sql("SELECT count(*) FROM evento_rejeitado")) - rejeitados_antes
-    preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS})
+    limpeza = http("POST", origem + "/api/v1/ordens", tok,
+                   {**ordem, "lado": "VENDA", "quantidade": 15, "validade": "IOC"},
+                   {"X-Idempotency-Key": "recup-limpeza-" + uuid.uuid4().hex})
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{limpeza['id']}", {"estado": "EXECUTADA"})
+    aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira", {"saldoReservado": "0.00"})
+    preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS}, prazo=30)
     if (reservado, decisoes, rejeitados) != ("150.00", "1", 1):
         raise SystemExit(f"Recuperação: esperado 150.00 reservado, 1 decisão e 1 rejeitada; obtido {reservado}, "
                          f"{decisoes} e {rejeitados}.")
     print("Recuperação: MO parado mantém RECEBIDA e decide uma vez; reentrega e mensagem inválida sem efeito.")
+
+
+def aguardar_campos(origem, tok, caminho, esperado, prazo=30.0):
+    """Polling de projeções assíncronas, incluindo liberação financeira após o terminal do FO."""
+    limite = time.monotonic() + prazo
+    while time.monotonic() < limite:
+        try:
+            corpo = http("GET", origem + caminho, tok)
+        except (urllib.error.URLError, ConnectionError):
+            if caminho != "/q/health/ready":
+                raise
+            time.sleep(0.5)
+            continue
+        if all(corpo.get(k) == v for k, v in esperado.items()):
+            return corpo
+        time.sleep(0.2)
+    raise SystemExit(f"Matching: projeção não atingiu {esperado} em {prazo:.0f} s para {caminho}.")
+
+
+def verificar_matching(origem, origem_mo, projeto):
+    """Livro real após reinício do ME; reentrega de admissão sem segunda oferta/execução ou débito.
+    Apenas a prova de reentrega lê outbox/Kafka; ordens e carteiras usam APIs e a limpeza é negócio real.
+    Requer contas 002/003 sem reservas anteriores; preserva todos os fatos e nunca apaga livro/reservas."""
+    base = compose(projeto)
+    for conta in ("CONTA-002", "CONTA-003"):
+        sem_pendencias(origem, conta)
+        preparar_carteira(origem_mo, conta, "1000.00", {"ALFA3": 100}, prazo=30)
+    tokens = {c: token("ordens", 600, c) for c in ("CONTA-002", "CONTA-003")}
+
+    def enviar(conta, lado, quantidade, validade="DIA"):
+        return http("POST", origem + "/api/v1/ordens", tokens[conta],
+                    {"ticker": "ALFA3", "lado": lado, "tipo": "LIMIT", "validade": validade,
+                     "quantidade": quantidade, "precoLimite": "10.00"},
+                    {"X-Idempotency-Key": "matching-" + uuid.uuid4().hex})
+
+    def ordem(conta, id, **esperado):
+        return aguardar_campos(origem, tokens[conta], f"/api/v1/ordens/{id}", esperado)
+
+    def saldo(conta, total):
+        return aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira",
+                              {"saldoTotal": total, "saldoDisponivel": total, "saldoReservado": "0.00"})
+
+    venda = enviar("CONTA-003", "VENDA", 10)
+    ordem("CONTA-003", venda["id"], estado="ABERTA")
+    compra = enviar("CONTA-002", "COMPRA", 4, "IOC")
+    ordem("CONTA-002", compra["id"], estado="EXECUTADA", quantidadeExecutada=4, quantidadeCancelada=0)
+    ordem("CONTA-003", venda["id"], estado="PARCIALMENTE_EXECUTADA", quantidadeExecutada=4)
+    saldo("CONTA-002", "960.00")
+    # Recria o motor a partir do log com uma oferta parcialmente consumida.
+    subprocess.run(base + ["restart", "matching-engine"], check=True, capture_output=True)
+    origem_me = "http://" + subprocess.check_output(base + ["port", "matching-engine", "8080"], text=True).strip()
+    aguardar_campos(origem_me, "x", "/q/health/ready", {"status": "UP"}, 180)
+    # Mesma admissão após restart precisa ser deduplicada: não pode restaurar quantidade já executada.
+    intencao = str(uuid.UUID(venda["id"]))
+    # Mesmo UUID v3 de UUID.nameUUIDFromBytes no MO; busca pela PK, sem varrer payloads.
+    admissao = uuid.UUID(bytes=hashlib.md5(("admissao:" + intencao).encode(), usedforsecurity=False).digest(), version=3)
+    consulta = f"SELECT payload FROM outbox WHERE id = '{admissao}'"
+    linhas = subprocess.check_output(base + ["exec", "-T", "postgres-middle-office", "psql", "-X", "-A", "-t",
+        "-U", "prospero_mo", "-d", "prospero_mo", "-c", consulta], text=True,
+        stderr=subprocess.DEVNULL).strip().splitlines()
+    if len(linhas) != 1:
+        raise SystemExit("Matching: admissão única não encontrada na outbox do MO.")
+    subprocess.run(base + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-console-producer.sh", "--bootstrap-server",
+        "localhost:9092", "--topic", "matching.comandos.v1", "--property", "parse.key=true", "--property",
+        "key.separator=|"], input="ALFA3|" + linhas[0] + "\n", text=True, check=True, capture_output=True)
+    restante = enviar("CONTA-002", "COMPRA", 6, "IOC")
+    ordem("CONTA-002", restante["id"], estado="EXECUTADA", quantidadeExecutada=6, quantidadeCancelada=0)
+    ordem("CONTA-003", venda["id"], estado="EXECUTADA", quantidadeExecutada=10, quantidadeCancelada=0)
+    saldo("CONTA-002", "900.00")
+    final_venda = saldo("CONTA-003", "1000.00")
+    alfa = next(c for c in final_venda["custodias"] if c["ticker"] == "ALFA3")
+    if (alfa["total"], alfa["disponivel"], alfa["reservado"]) != (90, 90, 0):
+        raise SystemExit("Matching: custódia divergente após recuperação e reentrega.")
+    # A sobra falsa de uma admissão repetida faria esta FOK executar em vez de cancelar.
+    prova = enviar("CONTA-002", "COMPRA", 1, "FOK")
+    ordem("CONTA-002", prova["id"], estado="CANCELADA", quantidadeExecutada=0, quantidadeCancelada=1,
+          motivoEncerramento="FOK_SEM_LIQUIDEZ")
+    saldo("CONTA-002", "900.00")
+    print("Matching: execução parcial, reinício/replay com oferta viva, reentrega, ausência de débito duplicado e livro vazio verificados.")
 
 
 def escrever_config(destino, conteudo):
@@ -430,11 +519,15 @@ def main():
     e.add_argument("--origem", default="http://127.0.0.1:8081")
     e.add_argument("--origem-mo", default="http://127.0.0.1:8082")
     e.add_argument("--projeto", help="Projeto Compose de CI (usa docker-compose.ci.yml).")
+    m = sub.add_parser("verificar-matching", help="Verifica matching real, replay e reentrega após reinício do ME.")
+    m.add_argument("--origem", default="http://127.0.0.1:8081")
+    m.add_argument("--origem-mo", default="http://127.0.0.1:8082")
+    m.add_argument("--projeto", help="Projeto Compose de CI (usa docker-compose.ci.yml).")
     d = sub.add_parser("preparar-demo", help="Prepara o namespace principal com dados sintéticos.")
     d.add_argument("--origem", default="http://127.0.0.1:8081")
     args = parser.parse_args()
     if args.comando in {"preparar-demo", "verificar-ordens", "verificar-risco", "verificar-concorrencia",
-                        "verificar-recuperacao"}:
+                        "verificar-recuperacao", "verificar-matching"}:
         for origem in (getattr(args, "origem", None), getattr(args, "origem_mo", None)):
             partes = urlsplit(origem) if origem else None
             if partes and (partes.scheme != "http" or partes.hostname not in {"127.0.0.1", "localhost"}
@@ -452,6 +545,8 @@ def main():
                 verificar_risco(args.origem, args.origem_mo)
             case "verificar-concorrencia":
                 verificar_concorrencia(args.origem_mo, args.projeto)
+            case "verificar-matching":
+                verificar_matching(args.origem, args.origem_mo, args.projeto)
             case "verificar-recuperacao":
                 verificar_recuperacao(args.origem, args.origem_mo, args.projeto)
         return
@@ -469,6 +564,7 @@ def main():
     else:
         # RF04b: ordens e carteira da CONTA-002, carteira da CONTA-003 (isolamento) e preparação de carteiras.
         config = {"servicos": {"ordens-a": bearer(token("ordens", args.validade, "CONTA-002")),
+                               "ordens-b": bearer(token("ordens", args.validade, "CONTA-003")),
                                "risco-a": risco(token("risco", args.validade, "CONTA-002")),
                                "risco-b": risco(token("risco", args.validade, "CONTA-003")),
                                "preparacao-risco": risco(token("risco-preparacao", args.validade))}}

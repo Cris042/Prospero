@@ -41,7 +41,7 @@ describe('Painel de fundação', () => {
     await fixture.whenStable();
     const html = fixture.nativeElement as HTMLElement;
     expect(html.querySelector('h1')?.textContent).toContain('Próspero');
-    expect(html.textContent).toContain('Execução ainda não implementada');
+    expect(html.textContent).toContain('Liquidação ainda não implementada');
   });
 
   it('mostra indisponibilidade por texto e oferece nova consulta', async () => {
