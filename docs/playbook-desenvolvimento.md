@@ -13,6 +13,7 @@ Guia de prevenção de erros, ampliado por solicitação do usuário em 2026-10-
 | Endpoint, auth, arquivo, dependência ou configuração nova | Segurança (S01–S21) |
 | Container saudável mas API inacessível | Operação e diagnóstico |
 | Decidir se adicionar uma solução | Simplicidade e fechamento |
+| Medir complexidade, coesão e acoplamento antes de abstrair | Diagnóstico de qualidade |
 
 ## Entrada e rastreabilidade
 
@@ -144,6 +145,21 @@ Usar subir-sistema para alterações de ambiente. Distinguir processo vivo, sock
 Preferir `docker compose ps` e `docker compose logs --tail=80 <serviço>`. Investigar limite de CPU/RAM, fila e pool antes de aumentar concorrência. Preservar Horus, volumes e projeto Compose; não usar prune/down -v como solução de rotina.
 
 Logs, métricas e traces devem explicar o mesmo evento/janela. Dados ausentes não são zero. Quatro bancos isolados não são réplicas; medir propagação de eventos/projeções somente quando existentes. Para carga progressiva, seguir [P06](roadmap.md), com orçamento do gerador e telemetria, sem stress implícito.
+
+## Diagnóstico de qualidade
+
+`python3 scripts/verificar-qualidade.py` mede o Java de `*/src/main/java` de forma léxica e determinística (stdlib, sem rede): por método, linhas, complexidade ciclomática aproximada (1 + `if`/`for`/`while`/`case`/`catch`/`&&`/`||`/`?:`), aninhamento de blocos e parâmetros; por classe, linhas e dependências/dependentes por imports do próprio projeto; LCOM4 (métodos de instância ligados por campo comum ou chamada interna, sem construtores/estáticos); por pacote e feature, Ca/Ce em classes, `I = Ce/(Ca+Ce)`, abstração `A` e `D = |A+I−1|`; ciclos entre pacotes; duplicação textual normalizada (janela de 6 linhas) e mudança conjunta entre features no histórico Git local. `--json` emite JSON ordenado, `--config arquivo.json` sobrescreve limiares, `--sem-git` dispensa o histórico e `--gate` retorna 1 somente com falhas. É diagnóstico para revisão: não está na CI, e ativá-lo como gate depende de decisão do usuário. Violações de camada continuam no ArchUnit e em `verificar-estrutura.py`.
+
+| Regra (valor > limite) | Alerta | Falha |
+| --- | --- | --- |
+| Linhas / complexidade por método | 30 / 10 | 60 / 20 |
+| Aninhamento / parâmetros por método | 3 / 4 | 5 / 7 |
+| Linhas por classe / dependências do projeto por classe | 300 / 10 | 600 / 20 |
+| LCOM4 ≥ 2 com ≥ 7 métodos de instância; ciclo entre pacotes | sempre alerta | — |
+
+`D` é informativo: domínio concreto e estável (records, enums) fica naturalmente longe da sequência principal. **Quando abstrair**: somente com evidência — método acima do gate (extrair método privado ou Helper puro no mesmo contexto), duplicação com 3 ou mais ocorrências **no mesmo serviço** (regra de três), LCOM4 acima do gate confirmado por mudança conjunta, ou 3 ou mais commits alterando juntas duas features (revisar fronteira/contrato antes de criar interface). Abaixo dos gates não se abstrai; duplicação entre serviços é esperada, porque serviços não dependem da implementação uns dos outros nem de biblioteca compartilhada antecipada ([ADR-001](adrs/ADR-001-arquitetura-backend.md), [rules](rules.md#arquitetura-e-código)). As métricas são aproximações sem AST: comentários e literais são ignorados, referências no mesmo pacote não entram em Ce e variáveis locais homônimas de campos podem unir componentes do LCOM4.
+
+Ideias adaptadas, sem cópia de código, de [arch-fitness-review](https://github.com/jonatasfernandespimenta/arch-fitness-review/tree/a07ea4184b431308d6379ec5df2f5245b8590c63) (Jonatas Fernandes Pimenta, licença MIT), fixado nesse commit. Não adotados: delta por PR, relatório Mermaid/LLM, análise TypeScript e regras de camadas próprias.
 
 ## Simplicidade e fechamento
 
