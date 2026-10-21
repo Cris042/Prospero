@@ -136,4 +136,30 @@ class EnvelopeAdmissaoOcoTest {
         assertFalse(simples.oco());
         assertTrue(simples.admissivel(), "Limit DIA simples continua admissível");
     }
+
+    @Test
+    void guardasDeCoerenciaEspelhamOParserV3DoMe() {
+        // Fronteiras: preço igual ao gatilho é incoerente nos dois lados; limite do Stop Limit igual ao gatilho é aceito.
+        assertFalse(par("5", "CONTA-002", Lado.COMPRA, 2, "10.20", TipoOrdem.STOP, null, "10.20").admissivel());
+        assertFalse(par("5", "CONTA-003", Lado.VENDA, 2, "9.80", TipoOrdem.STOP, null, "9.80").admissivel());
+        assertFalse(par("5", "CONTA-003", Lado.VENDA, 2, "9.70", TipoOrdem.STOP, null, "9.80").admissivel(),
+                "venda exige alvo acima do gatilho");
+        assertFalse(par("5", "CONTA-003", Lado.VENDA, 2, "10.20", TipoOrdem.STOP_LIMIT, "9.90", "9.80").admissivel(),
+                "Stop Limit de venda acima do gatilho");
+        assertTrue(par("5", "CONTA-003", Lado.VENDA, 2, "10.20", TipoOrdem.STOP_LIMIT, "9.80", "9.80").admissivel());
+        assertTrue(par("5", "CONTA-002", Lado.COMPRA, 2, "9.80", TipoOrdem.STOP_LIMIT, "10.20", "10.20").admissivel());
+        assertFalse(par("5", "CONTA-002", Lado.COMPRA, 2, "9.80", TipoOrdem.STOP, "10.30", "10.20").admissivel(),
+                "Stop simples não tem limite");
+        assertFalse(par("5", "CONTA-002", Lado.COMPRA, 2, "9.80", TipoOrdem.STOP_LIMIT, null, "10.20").admissivel(),
+                "Stop Limit exige limite");
+        var base = par("5", "CONTA-002", Lado.COMPRA, 2, "9.80", TipoOrdem.STOP, null, "10.20");
+        var tp = base.pernas().get(0);
+        var sl = base.pernas().get(1);
+        var quantidadeDiferente = new Perna(sl.id(), TipoOrdem.STOP, 3, null, sl.precoGatilho(), Validade.DIA);
+        var mesmaOrdem = new Perna(tp.id(), TipoOrdem.STOP, 2, null, sl.precoGatilho(), Validade.DIA);
+        for (var stop : List.of(quantidadeDiferente, mesmaOrdem)) {
+            assertFalse(new ComandoRisco(base.evento(), base.intencao(), base.conta(), base.ticker(), base.lado(),
+                    base.precoBase(), List.of(tp, stop), null, SESSAO).admissivel(), stop.toString());
+        }
+    }
 }
