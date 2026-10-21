@@ -21,17 +21,21 @@ public final class ProjetarMatching {
         if (!ordem.id().equals(alvo.ordem()) || !ordem.grupoEnvio().equals(alvo.intencao())
                 || !ordem.conta().equals(alvo.conta()) || !ordem.ticker().equals(evento.ticker())
                 || !ordem.dataSessao().equals(evento.sessao()) || ordem.grupoOco() != null
-                || (ordem.tipo() != TipoOrdem.LIMIT && ordem.tipo() != TipoOrdem.MARKET)) {
+                || (stop(ordem) && evento.causacao() == null)) {
             throw incoerente();
         }
         return switch (evento.detalhe()) {
             case EventoMatching.Aceita ignorado -> inicial(ordem)
-                    ? atualizar(ordem, EstadoOrdem.ABERTA, 0, 0, null, null) : ordem;
+                    ? atualizar(ordem, stop(ordem) ? EstadoOrdem.AGUARDANDO_GATILHO : EstadoOrdem.ABERTA, 0, 0, null, null) : ordem;
+            case EventoMatching.StopPendente pendente -> pendente(ordem, pendente);
+            case EventoMatching.StopAcionado acionado -> acionar(ordem, acionado);
             case EventoMatching.Oferta oferta -> oferta(ordem, oferta);
             case EventoMatching.Negocio negocio -> negocio(ordem, negocio, alvo, tick, lote);
             case EventoMatching.Encerrada encerrada -> encerrar(ordem, encerrada);
             case EventoMatching.Rejeitada rejeitada -> {
-                if (ordem.quantidadeExecutada() != 0 || ordem.quantidadeCancelada() != 0
+                if ((stop(ordem) && acionada(ordem))
+                        || (rejeitada.motivo() == MotivoRejeicao.LIMITE_STOPS_PENDENTES && (!stop(ordem) || acionada(ordem)))
+                        || ordem.quantidadeExecutada() != 0 || ordem.quantidadeCancelada() != 0
                         || ordem.estado() == EstadoOrdem.EXECUTADA || ordem.estado() == EstadoOrdem.CANCELADA) {
                     throw incoerente();
                 }
@@ -44,7 +48,8 @@ public final class ProjetarMatching {
     }
 
     private static Ordem oferta(Ordem o, EventoMatching.Oferta e) {
-        if (o.tipo() != TipoOrdem.LIMIT || o.validade() != Validade.DIA || o.lado() != e.lado()
+        if ((o.tipo() != TipoOrdem.LIMIT && o.tipo() != TipoOrdem.STOP_LIMIT)
+                || (stop(o) && !acionada(o)) || o.validade() != Validade.DIA || o.lado() != e.lado()
                 || o.precoLimite().compareTo(e.preco()) != 0) {
             throw incoerente();
         }
@@ -61,14 +66,14 @@ public final class ProjetarMatching {
     private static Ordem negocio(Ordem o, EventoMatching.Negocio n, EventoMatching.Alvo alvo,
                                   BigDecimal tick, long lote) {
         boolean compra = alvo.equals(n.compra());
-        if ((compra ? LadoOrdem.COMPRA : LadoOrdem.VENDA) != o.lado()
+        if ((stop(o) && !acionada(o)) || (compra ? LadoOrdem.COMPRA : LadoOrdem.VENDA) != o.lado()
                 || o.estado() == EstadoOrdem.REJEITADA || o.estado() == EstadoOrdem.CANCELADA
                 || o.estado() == EstadoOrdem.EXECUTADA || n.quantidade() <= 0
                 || n.quantidade() > o.quantidade() - o.quantidadeExecutada() || o.quantidadeCancelada() != 0
                 || n.quantidade() % lote != 0 || n.preco().remainder(tick).signum() != 0) {
             throw incoerente();
         }
-        if (o.tipo() == TipoOrdem.LIMIT) {
+        if (o.tipo() == TipoOrdem.LIMIT || o.tipo() == TipoOrdem.STOP_LIMIT) {
             int comparacao = n.preco().compareTo(o.precoLimite());
             if (compra ? comparacao > 0 : comparacao < 0) {
                 throw incoerente();
@@ -80,12 +85,15 @@ public final class ProjetarMatching {
     }
 
     private static Ordem encerrar(Ordem o, EventoMatching.Encerrada e) {
-        if (o.estado() == EstadoOrdem.REJEITADA || e.executada() != o.quantidadeExecutada()
+        boolean excesso = "LIMITE_CASCATA".equals(e.motivo());
+        if ((excesso && (!stop(o) || acionada(o) || e.executada() != 0))
+                || (stop(o) && !excesso && !acionada(o))
+                || o.estado() == EstadoOrdem.REJEITADA || e.executada() != o.quantidadeExecutada()
                 || e.cancelada() != o.quantidade() - o.quantidadeExecutada()) {
             throw incoerente();
         }
         if (("FOK_SEM_LIQUIDEZ".equals(e.motivo()) && (o.validade() != Validade.FOK || e.executada() != 0))
-                || ("SALDO_CANCELADO_IOC".equals(e.motivo()) && o.validade() != Validade.IOC)) {
+                || ("SALDO_CANCELADO_IOC".equals(e.motivo()) && o.validade() != Validade.IOC && o.tipo() != TipoOrdem.STOP)) {
             throw incoerente();
         }
         boolean executada = "EXECUTADA".equals(e.motivo());
@@ -95,6 +103,30 @@ public final class ProjetarMatching {
         }
         return atualizar(o, executada ? EstadoOrdem.EXECUTADA : EstadoOrdem.CANCELADA,
                 e.executada(), e.cancelada(), null, e.motivo());
+    }
+
+    private static boolean stop(Ordem o) {
+        return o.tipo() == TipoOrdem.STOP || o.tipo() == TipoOrdem.STOP_LIMIT;
+    }
+
+    private static boolean acionada(Ordem o) {
+        return o.estado() == EstadoOrdem.ABERTA || o.estado() == EstadoOrdem.PARCIALMENTE_EXECUTADA
+                || o.estado() == EstadoOrdem.EXECUTADA
+                || (o.estado() == EstadoOrdem.CANCELADA && !"LIMITE_CASCATA".equals(o.motivoEncerramento()));
+    }
+
+    private static Ordem pendente(Ordem o, EventoMatching.StopPendente e) {
+        if (!stop(o) || o.precoGatilho().compareTo(e.precoGatilho()) != 0 || o.estado() == EstadoOrdem.REJEITADA) {
+            throw incoerente();
+        }
+        return inicial(o) ? atualizar(o, EstadoOrdem.AGUARDANDO_GATILHO, 0, 0, null, null) : o;
+    }
+
+    private static Ordem acionar(Ordem o, EventoMatching.StopAcionado e) {
+        TipoOrdem esperado = o.tipo() == TipoOrdem.STOP ? TipoOrdem.MARKET : TipoOrdem.LIMIT;
+        if (!stop(o) || e.tipoExecutavel() != esperado || o.estado() == EstadoOrdem.REJEITADA) throw incoerente();
+        return inicial(o) || o.estado() == EstadoOrdem.AGUARDANDO_GATILHO
+                ? atualizar(o, EstadoOrdem.ABERTA, 0, 0, null, null) : o;
     }
 
     private static boolean inicial(Ordem o) {

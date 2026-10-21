@@ -19,13 +19,15 @@ public final class EnvelopeAdmissao {
         var raiz = new ObjectMapper().createObjectNode();
         raiz.put("id", id(c.intencao()).toString());
         raiz.put("tipo", "ORDEM_ADMITIDA");
-        raiz.put("versao", 1);
+        var p = c.pernas().getFirst();
+        boolean stop = p.tipo() == br.prospero.mo.risco.dominio.TipoOrdem.STOP
+                || p.tipo() == br.prospero.mo.risco.dominio.TipoOrdem.STOP_LIMIT;
+        raiz.put("versao", stop ? 2 : 1);
         raiz.put("origem", "middle-office");
         raiz.put("correlacao", c.intencao().toString());
         raiz.put("ocorridoEm", d.decididaEm().toString());
         raiz.put("conta", c.conta());
         raiz.put("traceparent", traceparent);
-        var p = c.pernas().getFirst();
         var dados = raiz.putObject("dados");
         dados.put("ordem", p.id().toString());
         dados.put("ticker", c.ticker());
@@ -37,6 +39,7 @@ public final class EnvelopeAdmissao {
         dados.put("precoMaximo", d.valorReservado() == null ? null : d.valorReservado()
                 .divide(BigDecimal.valueOf(p.quantidade())).setScale(2).toPlainString());
         dados.put("dataSessao", c.dataSessao().toString());
+        if (stop) dados.put("precoGatilho", p.precoGatilho().setScale(2).toPlainString());
         return raiz.toString();
     }
 }

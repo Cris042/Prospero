@@ -70,6 +70,7 @@ class MatchingPostgresIT {
 
     @Inject AplicarMatchingActor aplicar;
     @Inject EntityManager em;
+    @Inject br.prospero.mo.mensageria.jpa.OutboxJpa outbox;
     @Inject br.prospero.mo.risco.jpa.RepositorioRiscoJpa risco;
 
     private record Par(UUID compra, UUID venda) { }
@@ -202,4 +203,139 @@ class MatchingPostgresIT {
         assertEquals("PARCIAL", QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery(
                 "SELECT estado FROM reserva WHERE intencao=:i").setParameter("i", par.compra()).getSingleResult()));
     }
+    private void tornarStop(Par par, String tipo) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            em.createNativeQuery("UPDATE reserva SET tipo=:t,validade='DIA',preco_gatilho=10,stop_acionado=false,preco_limite=:p WHERE intencao=:i")
+                    .unwrap(org.hibernate.query.NativeQuery.class).setParameter("t",tipo)
+                    .setParameter("p",tipo.equals("STOP") ? null : new BigDecimal("10.00"),BigDecimal.class)
+                    .setParameter("i",par.compra()).executeUpdate();
+        });
+    }
+    private ObjectNode eventoStop(Par par,String tipo,String campos,UUID raiz) throws Exception {
+        ObjectNode e=envelope(par.compra(),tipo); e.put("versao",2);
+        e.put("causacao",EnvelopeAdmissao.id(raiz).toString());
+        ObjectNode d=e.putObject("dados"); d.put("ordem",par.compra().toString());
+        d.put("intencao",par.compra().toString()); d.put("conta","CONTA-002");
+        d.setAll((ObjectNode)JSON.readTree("{"+campos+"}")); return e;
+    }
+    private ObjectNode negocioStop(Par par) {
+        ObjectNode e=negocio(par); e.put("versao",2); e.put("causacao",EnvelopeAdmissao.id(par.venda()).toString()); return e;
+    }
+    @Test void stopPersisteAcionamentoSemMoverRecursoENegocioAntesDeAcionarNaoDeduplica() throws Exception {
+        Par par=preparar(); tornarStop(par,"STOP");
+        var pendente=eventoStop(par,"STOP_PENDENTE","\"precoGatilho\":\"10.00\"",par.compra());
+        aplicar(pendente); aplicar(pendente);
+        saldo("total","1000"); saldo("reservado","100"); saldo("disponivel","900");
+        assertThrows(RuntimeException.class,()->aplicar(negocioStop(par)));
+        assertEquals(1,valor("SELECT count(*) FROM matching_evento").intValueExact());
+        assertEquals(0,valor("SELECT count(*) FROM matching_negocio").intValueExact());
+        assertEquals(Boolean.FALSE,QuarkusTransaction.requiringNew().call(()->em.createNativeQuery("SELECT stop_acionado FROM reserva WHERE intencao=:i").setParameter("i",par.compra()).getSingleResult()));
+        assertThrows(RuntimeException.class,()->QuarkusTransaction.requiringNew().run(()->risco.preparar("CONTA-002",new BigDecimal("5000"),Map.of())));
+        var acionar=eventoStop(par,"STOP_ACIONADO","\"tipoExecutavel\":\"MARKET\",\"sequencia\":3",par.venda());
+        aplicar(acionar); aplicar(acionar);
+        assertEquals(Boolean.TRUE,QuarkusTransaction.requiringNew().call(()->em.createNativeQuery("SELECT stop_acionado FROM reserva WHERE intencao=:i").setParameter("i",par.compra()).getSingleResult()));
+        saldo("reservado","100"); saldo("disponivel","900");
+        ObjectNode negocio=negocioStop(par); aplicar(negocio); aplicar(negocio);
+        negocio.put("id",UUID.randomUUID().toString()); aplicar(negocio);
+        saldo("total","964"); saldo("reservado","60"); saldo("disponivel","904");
+        var terminal=eventoStop(par,"ORDEM_ENCERRADA","\"motivo\":\"SALDO_CANCELADO_IOC\",\"executada\":4,\"cancelada\":6",par.venda());
+        aplicar(terminal); aplicar(terminal);
+        saldo("total","964"); saldo("reservado","0"); saldo("disponivel","964");
+        assertEquals(1,valor("SELECT count(*) FROM matching_negocio").intValueExact());
+        var adulterado=terminal.deepCopy(); ((ObjectNode)adulterado.get("dados")).put("cancelada",5);
+        assertThrows(RuntimeException.class,()->aplicar(adulterado)); saldo("disponivel","964");
+    }
+    @Test void stopLimitAtivadoPodeRepousarMasOfertaAntesDoAcionamentoEProibida() throws Exception {
+        Par par=preparar(); tornarStop(par,"STOP_LIMIT");
+        var oferta=eventoStop(par,"OFERTA_NO_LIVRO","\"lado\":\"COMPRA\",\"preco\":\"10.00\",\"restante\":10",par.venda());
+        assertThrows(RuntimeException.class,()->aplicar(oferta));
+        aplicar(eventoStop(par,"STOP_ACIONADO","\"tipoExecutavel\":\"LIMIT\",\"sequencia\":3",par.venda()));
+        aplicar(oferta); saldo("reservado","100"); saldo("total","1000");
+    }
+    @Test void limiteCascataSemAcionarELimitePendentesLiberamReservaUmaUnicaVez() throws Exception {
+        for(String motivo:new String[]{"LIMITE_CASCATA","LIMITE_STOPS_PENDENTES"}) {
+            Par par=preparar(); tornarStop(par,"STOP");
+            String tipo=motivo.equals("LIMITE_CASCATA")?"ORDEM_ENCERRADA":"ORDEM_REJEITADA";
+            String campos="\"motivo\":\""+motivo+"\""+(tipo.equals("ORDEM_ENCERRADA")?",\"executada\":0,\"cancelada\":10":"");
+            var evento=eventoStop(par,tipo,campos,motivo.equals("LIMITE_CASCATA")?par.venda():par.compra());
+            aplicar(evento); aplicar(evento); saldo("total","1000"); saldo("disponivel","1000"); saldo("reservado","0");
+            assertEquals(Boolean.FALSE,QuarkusTransaction.requiringNew().call(()->em.createNativeQuery("SELECT stop_acionado FROM reserva WHERE intencao=:i").setParameter("i",par.compra()).getSingleResult()));
+        }
+    }
+    @Test void causacaoECorrelacaoV2ExigemIdentidadeAtivoESessaoAntesDosEfeitos() throws Exception {
+        Par par=preparar(); tornarStop(par,"STOP");
+        var correto=eventoStop(par,"STOP_ACIONADO","\"tipoExecutavel\":\"MARKET\",\"sequencia\":3",par.venda());
+        for(String campo:new String[]{"causacao","correlacao"}) {
+            var e=correto.deepCopy(); e.put(campo,UUID.randomUUID().toString());
+            assertThrows(RuntimeException.class,()->aplicar(e));
+        }
+        for(String update:new String[]{"ticker='BETA3'","data_sessao='2026-10-19'"}) {
+            QuarkusTransaction.requiringNew().run(()->em.createNativeQuery("UPDATE reserva SET "+update+" WHERE intencao=:i").setParameter("i",par.venda()).executeUpdate());
+            assertThrows(RuntimeException.class,()->aplicar(correto));
+            QuarkusTransaction.requiringNew().run(()->em.createNativeQuery("UPDATE reserva SET ticker='ALFA3',data_sessao='2026-10-18' WHERE intencao=:i").setParameter("i",par.venda()).executeUpdate());
+        }
+        saldo("reservado","100"); assertEquals(0,valor("SELECT count(*) FROM matching_evento").intValueExact());
+        aplicar(correto);
+    }
+    @Test void admissaoNovaStopEOutboxAtomicasEReentregaNaoPromoveLegado() throws Exception {
+        preparar();
+        UUID i=UUID.randomUUID();
+        var perna=new br.prospero.mo.risco.dominio.Perna(i,br.prospero.mo.risco.dominio.TipoOrdem.STOP,2,null,new BigDecimal("10.00"),br.prospero.mo.risco.dominio.Validade.DIA);
+        var c=new br.prospero.mo.risco.dominio.ComandoRisco(UUID.randomUUID(),i,"CONTA-002","ALFA3",br.prospero.mo.risco.dominio.Lado.COMPRA,new BigDecimal("10.00"),java.util.List.of(perna),null,java.time.LocalDate.of(2026,10,18));
+        avaliarReal(c); avaliarReal(c);
+        assertEquals(1,valor("SELECT count(*) FROM outbox WHERE id='"+EnvelopeAdmissao.id(i)+"'").intValueExact());
+        Object[] metadata=QuarkusTransaction.requiringNew().call(()->(Object[])em.createNativeQuery("SELECT preco_gatilho,stop_acionado,preco_maximo,valor_restante FROM reserva WHERE intencao=:i").setParameter("i",i).getSingleResult());
+        assertEquals(0,new BigDecimal("10.00").compareTo((BigDecimal)metadata[0])); assertEquals(Boolean.FALSE,metadata[1]);
+        assertEquals(0,new BigDecimal("11.00").compareTo((BigDecimal)metadata[2]));
+        assertEquals(0,new BigDecimal("22.00").compareTo((BigDecimal)metadata[3]));
+        String payload=QuarkusTransaction.requiringNew().call(()->em.createNativeQuery("SELECT payload FROM outbox WHERE id=:i").setParameter("i",EnvelopeAdmissao.id(i)).getSingleResult().toString());
+        assertEquals(2,JSON.readTree(payload).path("versao").asInt());
+        UUID legado=UUID.randomUUID();
+        var antigo=new br.prospero.mo.risco.dominio.ComandoRisco(UUID.randomUUID(),legado,c.conta(),c.ticker(),c.lado(),c.precoBase(),java.util.List.of(perna),null);
+        avaliarReal(antigo);
+        var repetido=new br.prospero.mo.risco.dominio.ComandoRisco(antigo.evento(),antigo.intencao(),antigo.conta(),antigo.ticker(),antigo.lado(),antigo.precoBase(),antigo.pernas(),null,c.dataSessao());
+        avaliarReal(repetido);
+        assertEquals(0,valor("SELECT count(*) FROM outbox WHERE id='"+EnvelopeAdmissao.id(legado)+"'").intValueExact());
+        assertEquals(1,valor("SELECT count(*) FROM reserva WHERE intencao='"+legado+"' AND admissao IS NULL AND preco_gatilho IS NULL AND stop_acionado=false").intValueExact());
+    }
+
+    @Test void migracaoAditivaPreservaLegadoReservaEDeduplicacaoSemAdmitir() throws Exception {
+        String proprio="upgrade_stops_"+UUID.randomUUID().toString().replace("-", "");
+        UUID id=UUID.randomUUID();
+        var configuracao=org.flywaydb.core.Flyway.configure().dataSource(System.getenv("MATCHING_TEST_DB_URL"),System.getenv("MATCHING_TEST_DB_USER"),System.getenv("MATCHING_TEST_DB_PASSWORD"))
+                .schemas(proprio).defaultSchema(proprio).locations("classpath:db/migration");
+        try {
+            configuracao.target("3").load().migrate();
+            try(var c=conexao();var s=c.createStatement()) {
+                c.setSchema(proprio);
+                s.execute("INSERT INTO decisao_risco(intencao,evento,conta,ticker,lado,resultado,valor_reservado,versao_parametros,decidida_em) VALUES('"+id+"','"+UUID.randomUUID()+"','CONTA-002','ALFA3','COMPRA','RESERVADA',20,1,now())");
+                s.execute("INSERT INTO reserva(intencao,conta,ticker,recurso,valor,estado,criada_em,tipo,validade) VALUES('"+id+"','CONTA-002','ALFA3','CAIXA',20,'ATIVA',now(),'STOP','DIA')");
+                s.execute("UPDATE conta_risco SET reservado=20,disponivel=total-20 WHERE conta='CONTA-002'");
+                s.execute("INSERT INTO matching_evento(id,assinatura) VALUES('"+id+"','"+"a".repeat(64)+"')");
+
+            }
+            configuracao.target("latest").load().migrate();
+            try(var c=conexao();var s=c.createStatement()) {
+                c.setSchema(proprio);
+                try(var r=s.executeQuery("SELECT valor,estado,admissao,preco_gatilho,stop_acionado FROM reserva WHERE intencao='"+id+"'")) {
+                    assertTrue(r.next()); assertEquals(0,new BigDecimal("20").compareTo(r.getBigDecimal(1))); assertEquals("ATIVA",r.getString(2));
+                    assertNull(r.getObject(3)); assertNull(r.getObject(4)); assertFalse(r.getBoolean(5));
+                }
+                try(var r=s.executeQuery("SELECT reservado,disponivel,total FROM conta_risco WHERE conta='CONTA-002'")) {
+                    assertTrue(r.next()); assertEquals(0,new BigDecimal("20").compareTo(r.getBigDecimal(1)));
+                    assertEquals(0,r.getBigDecimal(3).compareTo(r.getBigDecimal(1).add(r.getBigDecimal(2))));
+                }
+                try(var r=s.executeQuery("SELECT count(*) FROM outbox")){ assertTrue(r.next()); assertEquals(0,r.getInt(1)); }
+
+                try(var r=s.executeQuery("SELECT count(*) FROM matching_evento WHERE id='"+id+"' AND assinatura='"+"a".repeat(64)+"'")){ assertTrue(r.next()); assertEquals(1,r.getInt(1)); }
+            }
+        } finally { try(var c=conexao();var s=c.createStatement()){ s.execute("DROP SCHEMA IF EXISTS "+proprio+" CASCADE"); } }
+    }
+
+    private void avaliarReal(br.prospero.mo.risco.dominio.ComandoRisco c) {
+        // Os testes REST usam alternatives em memória; este IT conecta explicitamente os adaptadores reais.
+        var actor=new br.prospero.mo.risco.actor.AvaliarRiscoActor(risco,outbox,java.time.Clock.systemUTC(),new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        QuarkusTransaction.requiringNew().run(()->actor.avaliar(c,null));
+    }
+
 }

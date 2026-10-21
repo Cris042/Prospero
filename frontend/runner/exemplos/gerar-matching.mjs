@@ -176,4 +176,166 @@ const terminal = (estado, executada, cancelada) => ({
     '/saldoReservado': '0.00',
   });
 }
+// RF05c.2: cada cenário fixa o último negócio em10,00 via APIs e consome todos os seus stops/ofertas.
+function fixarUltimo(c) {
+  enviar(c, 'SementeVenda', 'ordens-b', 'VENDA', 1);
+  consultar(c, 'SementeAberta', 'ordens-b', 'SementeVenda', { '/estado': 'ABERTA' });
+  enviar(c, 'SementeCompra', 'ordens-a', 'COMPRA', 1, 'IOC');
+  consultar(c, 'SementeExecutada', 'ordens-a', 'SementeCompra', terminal('EXECUTADA', 1, 0));
+  consultar(c, 'SementeVendaExecutada', 'ordens-b', 'SementeVenda', terminal('EXECUTADA', 1, 0));
+}
+function enviarStop(c, id, tipo, lado, quantidade, gatilho, limite) {
+  passo(
+    c,
+    id,
+    lado === 'COMPRA' ? 'ordens-a' : 'ordens-b',
+    'POST',
+    '/api/v1/ordens',
+    {
+      ticker: 'ALFA3',
+      lado,
+      tipo,
+      validade: 'DIA',
+      quantidade,
+      precoGatilho: gatilho,
+      ...(limite ? { precoLimite: limite } : {}),
+    },
+    {},
+    { [id]: '/id' },
+    202,
+  );
+}
+for (const parcial of [false, true]) {
+  const c = parcial ? 'StopParcialCancelaSaldo' : 'StopExecutaAposGatilho';
+  preparar(c);
+  fixarUltimo(c);
+  const quantidade = parcial ? 3 : 2;
+  enviarStop(c, 'Stop', 'STOP', 'COMPRA', quantidade, '10.10');
+  consultar(c, 'StopPendente', 'ordens-a', 'Stop', {
+    '/estado': 'AGUARDANDO_GATILHO',
+    '/tipo': 'STOP',
+    '/validade': 'DIA',
+    '/precoGatilho': '10.10',
+    '/quantidadeExecutada': 0,
+  });
+  carteira(c, 'ReservaPendente', 'risco-a', {
+    '/saldoTotal': '990.00',
+    '/saldoReservado': parcial ? '33.33' : '22.22',
+  });
+  enviar(c, 'Liquidez', 'ordens-b', 'VENDA', parcial ? 2 : 3, 'DIA', '10.10');
+  consultar(c, 'LiquidezAberta', 'ordens-b', 'Liquidez', { '/estado': 'ABERTA' });
+  enviar(c, 'Gatilho', 'ordens-a', 'COMPRA', 1, 'IOC', '10.10');
+  consultar(c, 'GatilhoExecutado', 'ordens-a', 'Gatilho', terminal('EXECUTADA', 1, 0));
+  consultar(c, 'StopTerminal', 'ordens-a', 'Stop', {
+    ...terminal(parcial ? 'CANCELADA' : 'EXECUTADA', parcial ? 1 : 2, parcial ? 2 : 0),
+    '/motivoEncerramento': parcial ? 'SEM_LIQUIDEZ' : 'EXECUTADA',
+    '/tipo': 'STOP',
+    '/validade': 'DIA',
+  });
+  consultar(
+    c,
+    'LiquidezConsumida',
+    'ordens-b',
+    'Liquidez',
+    terminal('EXECUTADA', parcial ? 2 : 3, 0),
+  );
+  carteira(c, 'CaixaFinalStop', 'risco-a', {
+    '/saldoTotal': parcial ? '969.80' : '959.70',
+    '/saldoDisponivel': parcial ? '969.80' : '959.70',
+    '/saldoReservado': '0.00',
+  });
+  carteira(c, 'CustodiaFinalStop', 'risco-b', {
+    '/custodias/0/total': parcial ? 97 : 96,
+    '/custodias/0/reservado': 0,
+  });
+}
+{
+  const c = 'StopLimitRepousaEViraPassiva';
+  preparar(c);
+  fixarUltimo(c);
+  enviarStop(c, 'StopLimit', 'STOP_LIMIT', 'COMPRA', 2, '10.10', '10.10');
+  consultar(c, 'StopLimitPendente', 'ordens-a', 'StopLimit', { '/estado': 'AGUARDANDO_GATILHO' });
+  enviar(c, 'LiquidezGatilho', 'ordens-b', 'VENDA', 1, 'DIA', '10.10');
+  consultar(c, 'LiquidezAberta', 'ordens-b', 'LiquidezGatilho', { '/estado': 'ABERTA' });
+  enviar(c, 'Gatilho', 'ordens-a', 'COMPRA', 1, 'IOC', '10.10');
+  consultar(c, 'GatilhoExecutado', 'ordens-a', 'Gatilho', terminal('EXECUTADA', 1, 0));
+  consultar(c, 'StopLimitNoLivro', 'ordens-a', 'StopLimit', {
+    '/estado': 'ABERTA',
+    '/tipo': 'STOP_LIMIT',
+    '/validade': 'DIA',
+    '/quantidadeExecutada': 0,
+  });
+  carteira(c, 'ReservaNoLivro', 'risco-a', { '/saldoReservado': '20.20' });
+  enviar(c, 'VendaContraStopPassiva', 'ordens-b', 'VENDA', 2, 'IOC', '10.10');
+  consultar(c, 'VendaExecutada', 'ordens-b', 'VendaContraStopPassiva', terminal('EXECUTADA', 2, 0));
+  consultar(c, 'StopLimitExecutada', 'ordens-a', 'StopLimit', terminal('EXECUTADA', 2, 0));
+  carteira(c, 'CaixaFinalStopLimit', 'risco-a', {
+    '/saldoTotal': '959.70',
+    '/saldoDisponivel': '959.70',
+    '/saldoReservado': '0.00',
+  });
+  carteira(c, 'CustodiaFinalStopLimit', 'risco-b', {
+    '/custodias/0/total': 96,
+    '/custodias/0/reservado': 0,
+  });
+}
+{
+  const c = 'StopVendaConsomeCustodia';
+  preparar(c);
+  fixarUltimo(c);
+  enviarStop(c, 'StopVenda', 'STOP', 'VENDA', 2, '9.90');
+  consultar(c, 'VendaPendente', 'ordens-b', 'StopVenda', { '/estado': 'AGUARDANDO_GATILHO' });
+  carteira(c, 'CustodiaPendente', 'risco-b', {
+    '/custodias/0/total': 99,
+    '/custodias/0/reservado': 2,
+  });
+  enviar(c, 'CompraLiquida', 'ordens-a', 'COMPRA', 3, 'DIA', '9.90');
+  consultar(c, 'CompraAberta', 'ordens-a', 'CompraLiquida', { '/estado': 'ABERTA' });
+  enviar(c, 'GatilhoVenda', 'ordens-b', 'VENDA', 1, 'IOC', '9.90');
+  consultar(c, 'GatilhoExecutado', 'ordens-b', 'GatilhoVenda', terminal('EXECUTADA', 1, 0));
+  consultar(c, 'StopVendaExecutada', 'ordens-b', 'StopVenda', terminal('EXECUTADA', 2, 0));
+  consultar(c, 'CompraExecutada', 'ordens-a', 'CompraLiquida', terminal('EXECUTADA', 3, 0));
+  carteira(c, 'CaixaFinalVendaStop', 'risco-a', {
+    '/saldoTotal': '960.30',
+    '/saldoReservado': '0.00',
+  });
+  carteira(c, 'CustodiaFinalVendaStop', 'risco-b', {
+    '/custodias/0/total': 96,
+    '/custodias/0/reservado': 0,
+  });
+}
+{
+  const c = 'StopsInvalidos';
+  preparar(c);
+  for (const [id, tipo, validade, limite, gatilho] of [
+    ['StopIoc', 'STOP', 'IOC', null, '10.00'],
+    ['StopFok', 'STOP', 'FOK', null, '10.00'],
+    ['StopLimitIncoerente', 'STOP_LIMIT', 'DIA', '9.90', '10.00'],
+    ['StopSemGatilho', 'STOP', 'DIA', null, null],
+  ]) {
+    passo(
+      c,
+      id,
+      'ordens-a',
+      'POST',
+      '/api/v1/ordens',
+      {
+        ticker: 'ALFA3',
+        lado: 'COMPRA',
+        tipo,
+        validade,
+        quantidade: 2,
+        ...(limite ? { precoLimite: limite } : {}),
+        ...(gatilho ? { precoGatilho: gatilho } : {}),
+      },
+      {},
+      null,
+      422,
+    );
+  }
+  carteira(c, 'SemReservasInvalidas', 'risco-a', {
+    '/saldoTotal': '1000.00',
+    '/saldoReservado': '0.00',
+  });
+}
 await workbook.xlsx.writeFile(fileURLToPath(new URL('./matching.xlsx', import.meta.url)));

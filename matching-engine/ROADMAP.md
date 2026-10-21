@@ -12,7 +12,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | --- | --- | --- | --- |
 | ME00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | ME01 | RF05 | Implementar domínio puro: livro, preço-tempo, FIFO e execuções parciais. | RF05a concluída — PR #23 integrado |
-| ME02 | RF05 | Implementar Market/Limit/Stop/Stop Limit, IOC/FOK e OCO. | Market/Limit e IOC/FOK na RF05a; RF05c.1a/1b implementam encerramento e Stop/Stop Limit internos, em validação/revisão; integração dos stops e OCO planejados |
+| ME02 | RF05 | Implementar Market/Limit/Stop/Stop Limit, IOC/FOK e OCO. | Market/Limit e IOC/FOK na RF05a; RF05c.1a/1b implementam encerramento e Stop/Stop Limit internos, em validação/revisão; RF05c.2 integra stops simples em validação; OCO e fechamento integrado planejados |
 | ME03 | RF05 | Integrar Kafka por ativo, offsets e replay após falhas; snapshots somente se necessários por medição (ADR-013). | RF05b em validação — sessão única, posse e assign manual |
 | ME04 | RF06 | Publicar negócios e mudanças de ofertas mesmo sem execução. | Planejada |
 | ME05 | RF10 | Cancelar apenas saldo elegível e ordenar cancelamento com execução. | Planejada |

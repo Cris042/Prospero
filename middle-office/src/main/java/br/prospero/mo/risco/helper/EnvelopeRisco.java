@@ -93,6 +93,21 @@ public final class EnvelopeRisco {
             exigirPrecosDoTipo(perna);
             pernas.add(perna);
         }
+        if (v2) {
+            for (Perna perna : pernas) {
+                boolean stop = perna.tipo() == TipoOrdem.STOP || perna.tipo() == TipoOrdem.STOP_LIMIT;
+                if ((stop && perna.validade() != br.prospero.mo.risco.dominio.Validade.DIA)
+                        || (perna.tipo() == TipoOrdem.MARKET && perna.validade() == br.prospero.mo.risco.dominio.Validade.DIA)) {
+                    throw new EnvelopeInvalidoException("validade");
+                }
+                if (perna.tipo() == TipoOrdem.STOP_LIMIT) {
+                    int comparacao = perna.precoLimite().compareTo(perna.precoGatilho());
+                    if (enumeracao(dados, "lado", Lado.class) == Lado.COMPRA ? comparacao < 0 : comparacao > 0) {
+                        throw new EnvelopeInvalidoException("limite e gatilho");
+                    }
+                }
+            }
+        }
         if (pernas.size() == 2) {
             exigirParOco(pernas.get(0), pernas.get(1));
         }

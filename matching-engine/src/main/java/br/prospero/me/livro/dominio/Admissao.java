@@ -12,7 +12,7 @@ import java.util.UUID;
 public record Admissao(UUID ordem, UUID intencao, String conta, String ticker, Lado lado, TipoOrdem tipo,
                        Validade validade, long quantidade, BigDecimal precoLimite, BigDecimal precoMaximo,
                        BigDecimal precoGatilho, LocalDate sessao) {
-    /** Compatibilidade do contrato Limit/Market; stops ainda não entram pelo adaptador Kafka. */
+    /** Compatibilidade do contrato Limit/Market v1; stops usam gatilho no contrato v2. */
     public Admissao(UUID ordem, UUID intencao, String conta, String ticker, Lado lado, TipoOrdem tipo,
                     Validade validade, long quantidade, BigDecimal precoLimite, BigDecimal precoMaximo,
                     LocalDate sessao) {

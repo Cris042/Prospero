@@ -4,6 +4,7 @@ import br.prospero.fo.comum.dominio.MensagemInvalidaException;
 import br.prospero.fo.ordens.dominio.EventoMatching;
 import br.prospero.fo.ordens.dominio.LadoOrdem;
 import br.prospero.fo.ordens.dominio.MotivoRejeicao;
+import br.prospero.fo.ordens.dominio.TipoOrdem;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -45,8 +46,10 @@ public final class EnvelopeMatching {
         } catch (IOException erro) {
             throw invalido("json");
         }
-        campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados");
-        if (!r.get("versao").isInt() || r.get("versao").intValue() != 1
+        boolean v2 = r != null && r.path("versao").isInt() && r.get("versao").intValue() == 2;
+        if (v2) campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados", "causacao");
+        else campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados");
+        if (!r.get("versao").isInt() || (r.get("versao").intValue() != 1 && !v2)
                 || !"matching-engine".equals(texto(r, "origem"))) {
             throw invalido("versao ou origem");
         }
@@ -76,6 +79,18 @@ public final class EnvelopeMatching {
                 campos(d, "ordem", "intencao", "conta", "sequencia");
                 yield new EventoMatching.Aceita(alvo(d, ""), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
             }
+            case "STOP_PENDENTE" -> {
+                if (!v2) throw invalido("versao");
+                campos(d, "ordem", "intencao", "conta", "precoGatilho");
+                yield new EventoMatching.StopPendente(alvo(d, ""), preco(d, "precoGatilho"));
+            }
+            case "STOP_ACIONADO" -> {
+                if (!v2) throw invalido("versao");
+                campos(d, "ordem", "intencao", "conta", "tipoExecutavel", "sequencia");
+                String tipo = texto(d, "tipoExecutavel");
+                if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido("tipoExecutavel");
+                yield new EventoMatching.StopAcionado(alvo(d, ""), TipoOrdem.valueOf(tipo), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
+            }
             case "OFERTA_NO_LIVRO" -> {
                 campos(d, "ordem", "intencao", "conta", "lado", "preco", "restante");
                 yield new EventoMatching.Oferta(alvo(d, ""), lado(d, "lado"), preco(d), inteiro(d, "restante", 1, 1_000_000));
@@ -83,7 +98,7 @@ public final class EnvelopeMatching {
             case "ORDEM_REJEITADA" -> {
                 campos(d, "ordem", "intencao", "conta", "motivo");
                 String motivo = texto(d, "motivo");
-                if (!REJEICOES.contains(motivo)) {
+                if (!REJEICOES.contains(motivo) && !(v2 && "LIMITE_STOPS_PENDENTES".equals(motivo))) {
                     throw invalido("motivo");
                 }
                 yield new EventoMatching.Rejeitada(alvo(d, ""), MotivoRejeicao.valueOf(motivo));
@@ -91,7 +106,7 @@ public final class EnvelopeMatching {
             case "ORDEM_ENCERRADA" -> {
                 campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
                 String motivo = texto(d, "motivo");
-                if (!ENCERRAMENTOS.contains(motivo)) {
+                if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))) {
                     throw invalido("motivo");
                 }
                 yield new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),
@@ -114,7 +129,7 @@ public final class EnvelopeMatching {
             }
             default -> throw invalido("tipo");
         };
-        return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe);
+        return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe, v2 ? uuid(r, "causacao") : null);
     }
 
     public static String assinatura(byte[] bytes) {
@@ -180,8 +195,10 @@ public final class EnvelopeMatching {
         return v.longValue();
     }
 
-    private static BigDecimal preco(JsonNode n) {
-        String valor = texto(n, "preco");
+    private static BigDecimal preco(JsonNode n) { return preco(n, "preco"); }
+
+    private static BigDecimal preco(JsonNode n, String campo) {
+        String valor = texto(n, campo);
         if (!valor.matches("[0-9]{1,7}\\.[0-9]{2}")) {
             throw invalido("preco");
         }

@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. RF05a ([ADR-013](../adrs/ADR-013-matching-execucao.md)) implementou o núcleo puro `livro/dominio/MotorMatching`: livro por ativo, FIFO, Limit/Market, DIA/IOC/FOK, preço passivo, faixa/reserva e IDs determinísticos. A RF05b acrescenta adaptador Kafka, posse e replay; RF05c.1a/1b acrescentam encerramento e Stop/Stop Limit no núcleo, em validação/revisão. Integração dos stops/fechamento e OCO seguem futuros. Estado das evidências no roadmap; metas RNF04 continuam sem medição financeira final.
+Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. RF05a ([ADR-013](../adrs/ADR-013-matching-execucao.md)) implementou o núcleo puro `livro/dominio/MotorMatching`: livro por ativo, FIFO, Limit/Market, DIA/IOC/FOK, preço passivo, faixa/reserva e IDs determinísticos. A RF05b acrescenta adaptador Kafka, posse e replay; RF05c.1a/1b acrescentam encerramento e Stop/Stop Limit no núcleo, em validação/revisão. RF05c.2 integra stops simples em validação; fechamento integrado e OCO seguem futuros. Estado das evidências no roadmap; metas RNF04 continuam sem medição financeira final.
 
 Desenho de integração: um escritor por ativo, sequenciado pela partição Kafka; no núcleo atual, um escritor por instância de `MotorMatching`, mesmo quando contém vários ativos. O núcleo puro recebe comando e produz eventos. Não consulta JPA/banco por ordem nem decide poder de compra. Stops ficam no ME como simplificação já descrita no domínio; risco e reservas precedem admissão ao matching.
 
@@ -24,7 +24,7 @@ Organização por funcionalidade sob `br.prospero.me`: REST → Actor; Actor coo
 
 `Livro` usa `TreeMap` por preço, `ArrayDeque` FIFO por nível e índice por ID. Desde a RF05c.1b, a contagem única de ativas pertence ao estado do ativo no motor e inclui livro, pendentes, agressor e selecionadas aguardando na fila. `MotorMatching` recebe `Admissao` e devolve records de `Evento`; RF05b acrescenta processador de partição e RF05c.1b acrescenta stops somente ao núcleo. Não prometer cancelamento O(1) sem definir fila/índice; medir antes de otimizar.
 
-Comando autorizado → prioridade preço-tempo → negócios a preço passivo, parciais e eventos de estado → publicação recuperável. Market/Limit/Stop/Stop Limit, Dia/IOC/FOK, verificação integral FOK, falta de liquidez e cascatas seguem ADR-013, com stops ainda internos. OCO após parciais e integração dos stops continuam futuros. Inserção e cancelamento sem negócio também alterarão bid/ask/profundidade na RF06/RF10.
+Comando autorizado → prioridade preço-tempo → negócios a preço passivo, parciais e eventos de estado → publicação recuperável. Market/Limit/Stop/Stop Limit, Dia/IOC/FOK, verificação integral FOK, falta de liquidez e cascatas seguem ADR-013, com integração dos stops simples na RF05c.2. OCO após parciais continua futuro. Inserção e cancelamento sem negócio também alterarão bid/ask/profundidade na RF06/RF10.
 
 ## Persistência, recuperação e pendências
 
@@ -58,7 +58,7 @@ Attach requer identidade/permissões adequadas; `perf_events` pode estar bloquea
 
 ## Contrato de integração RF05b
 
-Desenho fechado no refinamento complementar de 2026-10-18; estado de implementação e evidências no roadmap. `risco.comandos.v1` aceita envelopes de versão1 (legados) e versão2 (FO passa a emitir), esta com `dados.dataSessao` e `ordens[].validade`. A versão1 continua avaliável pelo MO, mas não admite ordens no ME sem os metadados ausentes. Stop/OCO também aguardam RF05c; não admitir apenas uma perna. Reserva nova simples e outbox da admissão confirmam na mesma transação.
+Desenho fechado no refinamento complementar de 2026-10-18; estado de implementação e evidências no roadmap. `risco.comandos.v1` aceita envelopes de versão1 (legados) e versão2 (FO passa a emitir), esta com `dados.dataSessao` e `ordens[].validade`. A versão1 continua avaliável pelo MO, mas não admite ordens no ME sem os metadados ausentes. Este contrato v1 não admite Stop/OCO; a RF05c.2 acrescenta v2 de stops simples, mantendo OCO excluído e sem admitir apenas uma perna do par. Reserva nova simples e outbox da admissão confirmam na mesma transação.
 
 `ORDEM_ADMITIDA` usa chave ticker e envelope `id,tipo,versao,origem,correlacao,ocorridoEm,conta,traceparent,dados`; origem `middle-office`, versão1, correlação=intenção, ID UUID determinístico derivado de `admissao:<intenção>`. Dados: `ordem,ticker,lado,tipo,validade,quantidade,precoLimite,precoMaximo,dataSessao`. Preço máximo da compra deriva exatamente do valor reservado dividido pela quantidade. Valores decimais são texto, duas casas, sem arredondamento silencioso; envelope limitado a16KiB e campos/tipos exatos, incluindo UUID canônico, conta/ativo permitidos e chave igual ao ticker.
 
@@ -82,7 +82,7 @@ Fechar novamente uma data já encerrada é inócuo, inclusive depois de abrir um
 
 Esta fatia é interna. O contrato Kafka v1 continua admitindo somente ordens simples Limit/Market, sem fechamento, Stop ou OCO. Não publica `EXPIRADA_DIA` no ambiente integrado e não comprova liberação real de reservas. Fechamento integrado ainda exige comando de controle com autoridade/correlação próprias, roteado por ativo no mesmo log, evolução coordenada MO/FO e provas de publicação parcial/replay. Encerramento global não é atômico entre partições. Mantêm-se uma sessão por log, retenção integral e limites atuais; nenhuma migração ou limpeza de dados nesta fatia.
 
-As duas lacunas de stops foram resolvidas pelo usuário em 2026-10-20: cancelar excesso além32 e executar após o agressor, conforme ADR-013. OCO exige admissão atômica do par, saldo compartilhado e progresso por perna; reduzir a irmã não é executar nem liberar toda a reserva. OCO e integração dos stops permanecem planejados.
+As duas lacunas de stops foram resolvidas pelo usuário em 2026-10-20: cancelar excesso além32 e executar após o agressor, conforme ADR-013. OCO exige admissão atômica do par, saldo compartilhado e progresso por perna; reduzir a irmã não é executar nem liberar toda a reserva. OCO permanece planejado; integração de stops simples é o recorte da RF05c.2 abaixo.
 
 ## Stops no núcleo — RF05c.1b
 
@@ -101,3 +101,9 @@ Fundação: saúde de banco/Kafka, métricas técnicas, logs com correlação e 
 ## Decisões e rastreabilidade
 
 [ADR-001](../adrs/ADR-001-arquitetura-backend.md) define fronteiras/backend; [ADR-002](../adrs/ADR-002-padroes-dominio.md), padrões; [ADR-003](../adrs/ADR-003-contratos-api.md), contratos; [ADR-004](../adrs/ADR-004-testes-planilha.md), testes; [ADR-005](../adrs/ADR-005-versoes-fundacao.md), stack. [PRD-001](../prds/PRD-001-simulador-prospero.md) é a fonte dos requisitos. Este HLD detalha o [ecossistema](HLD-001-arquitetura-prospero.md), sem alterar decisões.
+
+## Integração de stops — RF05c.2
+
+Contrato técnico definido no [ADR-013](../adrs/ADR-013-matching-execucao.md#contrato-da-integração-de-stops--rf05c2-2026-10-20), em implementação. Admissão v2 somente de Stop/Stop Limit simples DIA com gatilho; OCO e reservas legadas sem admissão continuam excluídos. Eventos v2 para raiz ou alvo stop (inclui passiva), mantendo v1 histórico byte a byte. `causacao` identifica admissão raiz, `correlacao` identifica alvo/agressora; IDs ainda são raiz/índice. Ambos os vínculos têm validação de ativo/sessão no FO/MO. Pendência e conversão são fatos sem consumo financeiro; ativação persistida antecede negócio/oferta. FO distingue `AGUARDANDO_GATILHO` de `ABERTA`, preserva tipo/validade públicos; MO conserva gatilho, teto e acionamento. Tetos determinísticos produzem terminais/rejeições explícitos e devolução única do saldo.
+
+A implantação é coordenada: pausar processamento, aplicar expansões FO/MO e atualizar consumidores/produtores compatíveis antes de retomar v2. Replay misto deve preservar bytes/IDs antigos e repetir cascatas após publicação parcial. Retorno ao binário antigo após efeitos novos é inseguro; recuperação para frente ou restauração consistente, sem apagar dados. Uma sessão/log, posse, retenção e limites operacionais da RF05b permanecem. Evidência prevista: contratos/guardas RED→GREEN, PostgreSQL real para transação/ativação/dedup, planilha por APIs repetida e recuperação do ME; resultados no PR/roadmap. Sem medição RNF04 presumida.

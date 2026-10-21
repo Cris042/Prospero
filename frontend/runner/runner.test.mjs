@@ -9,6 +9,7 @@ import ExcelJS from 'exceljs';
 import { runWorkbook } from './index.mjs';
 import { compile } from './contract.mjs';
 import { execute } from './executor.mjs';
+import { readWorkbook } from './workbook.mjs';
 
 const STEP = [
   'cenario',
@@ -778,6 +779,33 @@ test('falha de transporte de preparação não autoriza uma nova tentativa', asy
   const report = await execute(planoPreparacao(config), config);
   assert.equal(report.sucesso, false);
   assert.equal(calls.length, 1);
+});
+
+test('planilha matching compila stops com espera observável, conservação e rejeições', async () => {
+  const servicos = Object.fromEntries(
+    ['ordens-a', 'ordens-b', 'risco-a', 'risco-b', 'preparacao-risco'].map((nome) => [
+      nome,
+      { origem: 'http://127.0.0.1:8081' },
+    ]),
+  );
+  const sheets = await readWorkbook(new URL('./exemplos/matching.xlsx', import.meta.url).pathname);
+  const plan = compile(sheets, { servicos });
+  for (const name of [
+    'StopExecutaAposGatilho',
+    'StopParcialCancelaSaldo',
+    'StopLimitRepousaEViraPassiva',
+    'StopVendaConsomeCustodia',
+  ]) {
+    const scenario = plan.find((c) => c.name === name);
+    assert.ok(scenario, name);
+    const pending = scenario.steps.find((s) => s.expected.body['/estado'] === 'AGUARDANDO_GATILHO');
+    assert.equal(pending.method, 'GET');
+    assert.equal(pending.deadline, 15000);
+    assert.ok(scenario.steps.some((s) => s.expected.body['/saldoReservado'] === '0.00'));
+  }
+  const invalid = plan.find((c) => c.name === 'StopsInvalidos');
+  assert.equal(invalid.steps.filter((s) => s.expected.status === 422).length, 4);
+  assert.equal(invalid.steps.at(-1).expected.body['/saldoReservado'], '0.00');
 });
 
 test('planilhas financeiras optam em preparação 200 e preservam a prova de 409', async () => {

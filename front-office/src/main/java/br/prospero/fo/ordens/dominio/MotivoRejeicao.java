@@ -1,6 +1,6 @@
 package br.prospero.fo.ordens.dominio;
 
-/** Catálogo fechado de motivos do risco (ADR-012); resultado com motivo fora dele é descartado. */
+/** Catálogo fechado de motivos do risco e matching (ADRs012/013); cada fronteira mantém sua allowlist. */
 public enum MotivoRejeicao {
     SALDO_INSUFICIENTE,
     CUSTODIA_INSUFICIENTE,
@@ -14,5 +14,6 @@ public enum MotivoRejeicao {
     PRECO_INVALIDO,
     QUANTIDADE_INVALIDA,
     SESSAO_ANTERIOR,
-    LIMITE_ORDENS_ATIVAS
+    LIMITE_ORDENS_ATIVAS,
+    LIMITE_STOPS_PENDENTES
 }

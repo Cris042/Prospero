@@ -52,6 +52,7 @@ const ROTULOS: Record<string, string> = {
   RECEBIDA: 'Recebida',
   RESERVADA: 'Reservada',
   REJEITADA: 'Rejeitada',
+  AGUARDANDO_GATILHO: 'Aguardando gatilho',
   ABERTA: 'Aberta',
   PARCIALMENTE_EXECUTADA: 'Parcialmente executada',
   EXECUTADA: 'Executada',
@@ -63,6 +64,7 @@ const ROTULOS: Record<string, string> = {
   ATIVO_DESCONHECIDO: 'ativo desconhecido',
   CONTA_DESCONHECIDA: 'conta desconhecida',
   PRECO_BASE_AUSENTE: 'sem preço de referência',
+  LIMITE_STOPS_PENDENTES: 'limite de stops pendentes atingido',
 };
 
 @Component({

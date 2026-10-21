@@ -48,6 +48,12 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
                 .setParameter("sessao", e.sessao()).getResultList().isEmpty()) {
             throw new MatchingIncoerenteException("MATCHING_CORRELACAO");
         }
+        if (e.causacao() != null && em().createNativeQuery(
+                "SELECT 1 FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s AND grupo_oco IS NULL")
+                .setParameter("a", e.causacao()).setParameter("t", e.ticker()).setParameter("s", e.sessao())
+                .getResultList().isEmpty()) {
+            throw new MatchingIncoerenteException("MATCHING_CAUSACAO");
+        }
         if (e.detalhe() instanceof EventoMatching.Negocio n) {
             var agressora = n.agressor() == br.prospero.fo.ordens.dominio.LadoOrdem.COMPRA ? n.compra() : n.venda();
             UUID esperado = UUID.nameUUIDFromBytes(("admissao:" + agressora.intencao()).getBytes(StandardCharsets.UTF_8));
@@ -58,6 +64,10 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         EventoMatching.Alvo propria = switch (e.detalhe()) {
             case EventoMatching.Aceita a -> a.alvo();
             case EventoMatching.Rejeitada r -> r.alvo();
+            case EventoMatching.StopPendente p -> p.alvo();
+            case EventoMatching.StopAcionado a -> a.alvo();
+            case EventoMatching.Oferta o -> e.causacao() != null ? o.alvo() : null;
+            case EventoMatching.Encerrada f -> e.causacao() != null ? f.alvo() : null;
             default -> null;
         };
         if (propria != null && !e.correlacao().equals(UUID.nameUUIDFromBytes(
@@ -73,6 +83,15 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
                 throw new MatchingIncoerenteException("MATCHING_ORDEM_AUSENTE");
             }
             entidades.add(entidade);
+        }
+        List<?> tiposCausa = em().createNativeQuery(
+                "SELECT tipo FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s")
+                .setParameter("a", e.causacao() == null ? e.correlacao() : e.causacao())
+                .setParameter("t", e.ticker()).setParameter("s", e.sessao()).getResultList();
+        boolean envolveStop = tiposCausa.stream().anyMatch(t -> t.equals("STOP") || t.equals("STOP_LIMIT"))
+                || entidades.stream().anyMatch(o -> o.tipo.equals("STOP") || o.tipo.equals("STOP_LIMIT"));
+        if ((e.causacao() != null) != envolveStop) {
+            throw new MatchingIncoerenteException("MATCHING_VERSAO_STOP");
         }
         if (e.detalhe() instanceof EventoMatching.Negocio n) {
             String assinatura = EnvelopeMatching.assinaturaNegocio(e, n);
@@ -134,6 +153,8 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             case EventoMatching.Negocio n -> List.of(n.compra(), n.venda());
             case EventoMatching.Aceita a -> List.of(a.alvo());
             case EventoMatching.Oferta o -> List.of(o.alvo());
+            case EventoMatching.StopPendente p -> List.of(p.alvo());
+            case EventoMatching.StopAcionado a -> List.of(a.alvo());
             case EventoMatching.Rejeitada r -> List.of(r.alvo());
             case EventoMatching.Encerrada f -> List.of(f.alvo());
         };

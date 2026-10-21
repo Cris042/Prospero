@@ -48,7 +48,8 @@ export type MotivoRejeicao =
   | 'QUANTIDADE_FORA_DO_LOTE'
   | 'ATIVO_DESCONHECIDO'
   | 'CONTA_DESCONHECIDA'
-  | 'PRECO_BASE_AUSENTE';
+  | 'PRECO_BASE_AUSENTE'
+  | 'LIMITE_STOPS_PENDENTES';
 
 export interface Ordem {
   readonly id: string;
@@ -66,6 +67,7 @@ export interface Ordem {
     | 'RECEBIDA'
     | 'RESERVADA'
     | 'REJEITADA'
+    | 'AGUARDANDO_GATILHO'
     | 'ABERTA'
     | 'PARCIALMENTE_EXECUTADA'
     | 'EXECUTADA'

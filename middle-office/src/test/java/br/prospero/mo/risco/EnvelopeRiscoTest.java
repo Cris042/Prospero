@@ -57,7 +57,8 @@ class EnvelopeRiscoTest {
         assertThrows(EnvelopeInvalidoException.class,()->ler(v2.replace(",\"validade\":\"DIA\"","")));
         org.junit.jupiter.api.Assertions.assertFalse(ler(envelope("front-office",PERNA)).admissivel());
         String stopV2=STOP.replace("\"precoGatilho\":\"9.50\"","\"precoGatilho\":\"9.50\",\"validade\":\"DIA\"");
-        org.junit.jupiter.api.Assertions.assertFalse(ler(v2.replace(pernaV2,stopV2)).admissivel());
+        assertTrue(ler(v2.replace(pernaV2,stopV2)).admissivel(), "RF05c.2 admite Stop simples DIA com sessão");
+        org.junit.jupiter.api.Assertions.assertFalse(ler(envelope("front-office",STOP)).admissivel(), "Stop legado permanece sem admissão");
     }
 
     @Test

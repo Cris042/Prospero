@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de risco: validação RF03, reservas/limites RF04, consumo/liberação RF05/RF10 e efeitos de liquidação RF08. RF04 implementa consumidor de `risco.comandos.v1`, cálculo puro da reserva, controles condicionais, decisão por intenção, reserva e outbox de resultado na mesma transação. A RF05b acrescenta admissão de Limit/Market simples pelo MO e consumo/liberação por eventos do ME; cancelamento a pedido (RF10) e créditos de liquidação (RF08) permanecem futuros. Estado de validação/PR no roadmap.
+Contexto de risco: validação RF03, reservas/limites RF04, consumo/liberação RF05/RF10 e efeitos de liquidação RF08. RF04 implementa consumidor de `risco.comandos.v1`, cálculo puro da reserva, controles condicionais, decisão por intenção, reserva e outbox de resultado na mesma transação. A RF05b acrescenta admissão de Limit/Market simples pelo MO e consumo/liberação por eventos do ME; a RF05c.2 integra novos Stop/Stop Limit simples com ativação persistida, conforme ADR-013; cancelamento a pedido (RF10) e créditos de liquidação (RF08) permanecem futuros. Estado de validação/PR no roadmap.
 
 A P05 entregou `decimal/dominio/ValorEscalado`, `RegraDeSinal` e `decimal/helper/ConversaoDecimalExata`: núcleo técnico exato integrado pelo PR #3. RF03 foi implementada no FO pelo PR #20; parâmetros financeiros do risco estão no ADR-012 e nas migrações locais.
 
@@ -110,3 +110,9 @@ Fundação: saúde de banco/Kafka, métricas técnicas, logs com correlação e 
 ## Decisões e rastreabilidade
 
 [ADR-001](../adrs/ADR-001-arquitetura-backend.md) define fronteiras/backend; [ADR-002](../adrs/ADR-002-padroes-dominio.md), padrões; [ADR-003](../adrs/ADR-003-contratos-api.md), contratos; [ADR-004](../adrs/ADR-004-testes-planilha.md), testes; [ADR-005](../adrs/ADR-005-versoes-fundacao.md), stack. [PRD-001](../prds/PRD-001-simulador-prospero.md) é a fonte dos requisitos. Este HLD detalha o [ecossistema](HLD-001-arquitetura-prospero.md), sem alterar decisões.
+
+## Integração de stops — RF05c.2
+
+`V4__registrar_acionamento_stop.sql` expande `reserva` com `preco_gatilho` e `stop_acionado=false`. Sem backfill: decisões antigas não ganham admissão. O MO publica nova admissão de stop em v2 na mesma transação da reserva/outbox e mantém v1 para Market/Limit. Eventos v2 validam causa raiz e correlação alvo/agressor por ativo/sessão; pendência confirma gatilho, acionamento valida tipo executável e persiste o marcador sem mover recursos. Negócio/oferta de stop exige acionamento; Stop Limit conserva limite e Stop conserva teto original, com validade executável IOC. Excesso32 encerra sem acionar; excesso500 rejeita e devolve reserva intacta. Preparação continua recusando reservas vivas.
+
+Implantação coordenada, compatibilidade/replay e recuperação para frente seguem [ADR-013](../adrs/ADR-013-matching-execucao.md#contrato-da-integração-de-stops--rf05c2-2026-10-20). OCO, fechamento integrado, créditos e admissão retroativa continuam excluídos. Evidências de transação, dedup, migração e APIs no PR/roadmap.
