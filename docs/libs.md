@@ -28,8 +28,8 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | Loki / Grafana / Jaeger | 3.7.8 / 13.2.4 / 2.22.0 | Logs, dashboards e traces |
 | ai-memory | 3.1.0 | CLI e container separado; [guia](rules.md#memória-e-retomada) |
 | Gitleaks / Trivy | 8.30.1 / 0.76.0 | CI; imagens fixadas por digest |
-| Go | 1.27.2 | Módulo `ferramentas/carga`; API e executor técnicos com biblioteca padrão, sem módulos runtime externos |
-| Imagem builder Go | 1.27.2-bookworm | Dockerfile e CI; digest `sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61`; runtime `scratch`, binário estático sem shell |
+| Go | 1.27.3 | Módulo `ferramentas/carga`; API e executor técnicos com biblioteca padrão, sem módulos runtime externos |
+| Imagem builder Go | 1.27.3-bookworm | Dockerfile e CI; digest `sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132`; runtime `scratch`, binário estático sem shell |
 | govulncheck | 1.8.0 | Scanner oficial de desenvolvimento/CI, instalado por versão e verificado pelo Go checksum database; fora do módulo runtime |
 
 ## Pendências
@@ -38,7 +38,7 @@ Runner XLSX implementado na P03, com aceite/PR no roadmap. DDD, SAGA e Object Ca
 
 ## Go e ferramentas de carga — adoção P06
 
-Go 1.27.2 e `net/http` com executor nativo restrito foram adotados conforme [ADR-006](adrs/ADR-006-api-carga.md). O módulo independente usa somente biblioteca padrão em runtime; não instala Huma, Vegeta ou cliente Prometheus. A exposição textual de métricas tem nomes e labels finitos, com séries de recursos obtidas do processo; API e gerador compartilham essas medições. [HLD-006](hlds/HLD-006-api-carga.md) registra limites, contrato, fontes e pendências da etapa A. Não equivale a capacidade financeira ou RNF04 comprovado.
+Go 1.27.3 e `net/http` com executor nativo restrito foram adotados conforme [ADR-006](adrs/ADR-006-api-carga.md). O módulo independente usa somente biblioteca padrão em runtime; não instala Huma, Vegeta ou cliente Prometheus. A exposição textual de métricas tem nomes e labels finitos, com séries de recursos obtidas do processo; API e gerador compartilham essas medições. [HLD-006](hlds/HLD-006-api-carga.md) registra limites, contrato, fontes e pendências da etapa A. Não equivale a capacidade financeira ou RNF04 comprovado.
 
 Experimento descartável com Go 1.27.2, Huma 2.39.1/humago e Vegeta 12.12.0: contratos válidos/negativos, sanitização e OpenAPI; streaming contínuo demonstrou que `MaxBody` limita retenção, mas mantém drenagem, e `Stop` não abortou imediatamente a leitura. Executor nativo usa leitura limitada e contexto cancelável; a decisão e os limites de interpretação ficam no ADR. Essas dependências pertencem somente ao experimento fora do repositório.
 
@@ -49,6 +49,8 @@ Builder oficial fixado por digest consultado no registry Docker Hub; CI usa a me
 Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam container. Node local 24.16.0. CI usa runner hospedado `ubuntu-24.04` gratuito com Compose compatível com `!override`; consulte [CI](rules.md#ci-e-runner).
 
 ## Override de segurança
+
+Go 1.27.3 substitui 1.27.2 no módulo/builder/CI para corrigir [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809), detectada pelo govulncheck em 2026-10-21. O digest do índice OCI foi conferido no registry oficial `library/golang`; o histórico do experimento em 1.27.2 permanece inalterado. A atualização mantém código e contratos da ferramenta de carga; resultados do scanner e regressões ficam no PR #27.
 
 LZ4 1.11.4 substitui 1.11.1 gerida transitivamente pelo baseline. A auditoria Trivy identificou CVE-2026-106451; o [advisory do mantenedor](https://github.com/yawkat/lz4-java/security/advisories/GHSA-mcr4-qmvw-px4g) indica correção em 1.11.4. Reavaliar e remover o override quando o BOM passar a incorporar uma versão corrigida. O scanner classificou HIGH; o mantenedor classifica LOW e condiciona a exploração ao ambiente de diretório temporário compartilhado.
 

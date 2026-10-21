@@ -353,7 +353,7 @@ Saída JSON no stdout; códigos de saída: `0` sucesso, `1` cenário falhou, `2`
 
 ### API de carga técnica — P06, etapa A
 
-A ferramenta em `ferramentas/carga` usa Go 1.27.2, `net/http` e executor nativo, com [OpenAPI](ferramentas/carga/openapi.json) explícito. Oferece carga apenas sobre `GET /api/v1/sistema` dos quatro MS, uma execução global, até cinco estágios, 60 s, 100 RPS, 16 VUs, 32 chamadas em voo e 6000 chamadas. No modo fechado, RPS limita oportunidades globais e VUs limita ocupação; se os VUs estiverem bloqueados, a vazão diminui. VUs não comprovam usuários autenticados. O relatório separa oferta prevista/percorrida, contagens, quantis e janelas com duração planejada e observada; aquecimento e medição não se sobrepõem. [Decisão e experimento](docs/adrs/ADR-006-api-carga.md), [contrato completo](docs/hlds/HLD-006-api-carga.md).
+A ferramenta em `ferramentas/carga` usa Go 1.27.3, `net/http` e executor nativo, com [OpenAPI](ferramentas/carga/openapi.json) explícito. Oferece carga apenas sobre `GET /api/v1/sistema` dos quatro MS, uma execução global, até cinco estágios, 60 s, 100 RPS, 16 VUs, 32 chamadas em voo e 6000 chamadas. No modo fechado, RPS limita oportunidades globais e VUs limita ocupação; se os VUs estiverem bloqueados, a vazão diminui. VUs não comprovam usuários autenticados. O relatório separa oferta prevista/percorrida, contagens, quantis e janelas com duração planejada e observada; aquecimento e medição não se sobrepõem. [Decisão e experimento](docs/adrs/ADR-006-api-carga.md), [contrato completo](docs/hlds/HLD-006-api-carga.md).
 
 Com a stack local já disponível, preparar as chaves e iniciar somente a ferramenta:
 

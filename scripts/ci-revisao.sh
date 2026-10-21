@@ -13,5 +13,5 @@ docker run --rm --user "$(id -u):$(id -g)" --memory=1g --cpus=2 --pids-limit=128
   --network=none --read-only --tmpfs /tmp:rw,size=536870912 \
   -e GOCACHE=/tmp/go-build -e GOTOOLCHAIN=local \
   -v "$PWD/ferramentas/carga:/src:ro" -w /src \
-  golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 sh -ec 'test -z "$(gofmt -l .)"; go vet ./...'
+  golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 sh -ec 'test -z "$(gofmt -l .)"; go vet ./...'
 printf '%s\n' 'Revisão determinística: documentação, skills, fronteiras, Compose e formatação conferidos.'
