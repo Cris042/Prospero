@@ -37,7 +37,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         // RNF04 (RF05d): do registro da ordem agressora até a projeção do seu primeiro negócio, no mesmo relógio.
         this.boletaNegocio = Timer.builder("prospero.ordens.boleta_negocio")
                 .description("Recebimento da ordem agressora até a projeção do primeiro negócio")
-                .publishPercentiles(0.5, 0.95, 0.99).publishPercentileHistogram()
+                .publishPercentileHistogram()
                 .serviceLevelObjectives(Duration.ofMillis(50)).register(metricas);
     }
 

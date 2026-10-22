@@ -4,7 +4,8 @@
 Contraparte já em repouso (CONTA-003) e agressores Limit IOC de 1 unidade (CONTA-002) enviados em sequência, cada um
 só depois do terminal do anterior: mede processamento, não espera por contraparte nem fila. Os percentis saem da
 diferença dos histogramas Prometheus antes/depois da fase medida (aquecimento excluído) e são limites superiores do
-bucket. Não declara cumprimento: o veredito compara o p99 com a meta e registra causa quando não cumprida.
+bucket. O veredito compara o p99 com a meta; em ambiente compartilhado (`--contexto ci-hospedado`) é só indicativo.
+Atenção: redefine as carteiras de teste CONTA-002/003 (preparação local), apagando o estado delas.
 """
 import argparse
 import json
@@ -90,14 +91,14 @@ def executar(args):
         mercado.aguardar_campos(args.origem, comprador, f"/api/v1/ordens/{ordem['id']}", {"estado": "EXECUTADA"})
         if i >= args.aquecimento:
             cliente.append(time.perf_counter() - inicio)
-    time.sleep(2)  # projeção do último negócio já ocorreu (terminal observado); folga para o scrape.
     depois = {n: buckets(origens[n], n) for n in nomes}
     resultado = {"ambiente": ambiente(), "plano": vars(args), "metricas": {}}
+    prefixo = "indicativo: " if args.contexto == "ci-hospedado" else ""
     for n in nomes:
         p50, amostras = percentil(antes[n], depois[n], 0.50)
         p99, _ = percentil(antes[n], depois[n], 0.99)
         resultado["metricas"][n] = {"amostras": amostras, "p50_max_s": p50, "p99_max_s": p99, "meta_s": METAS[n],
-                                    "veredito": None if p99 is None else ("cumprido" if p99 <= METAS[n] else "não cumprido")}
+                                    "veredito": None if p99 is None else prefixo + ("cumprido" if p99 <= METAS[n] else "não cumprido")}
     cliente.sort()
     resultado["cliente_ate_terminal_observado_s"] = {
         "amostras": len(cliente), "p50": cliente[len(cliente) // 2], "p99": cliente[min(len(cliente) - 1, int(len(cliente) * 0.99))],
@@ -114,6 +115,8 @@ def main(argv=None):
     parser.add_argument("--preco", default="10.00")
     parser.add_argument("--amostras", type=int, default=200)
     parser.add_argument("--aquecimento", type=int, default=30)
+    parser.add_argument("--contexto", choices=["dedicado", "ci-hospedado"], default="dedicado",
+                        help="ambiente da execução; em ci-hospedado o veredito é só indicativo")
     args = parser.parse_args(argv)
     if not 1 <= args.amostras <= 800 or not 0 <= args.aquecimento <= 150:
         parser.error("Amostras 1–800 e aquecimento 0–150: o teto de 1000 ordens por conta e sessão vale aqui.")

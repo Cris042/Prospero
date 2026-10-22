@@ -77,7 +77,7 @@ public class ProcessadorMatching implements HealthCheck {
         falhas = metricas.counter("prospero.matching.falhas");
         // RNF04 (RF05d): núcleo + serialização do comando, sem poll nem publicação; p99 é o critério de < 1 ms.
         nucleo = io.micrometer.core.instrument.Timer.builder("prospero.matching.comando")
-                .description("Processamento de um comando no motor, sem I/O").publishPercentiles(0.5, 0.95, 0.99)
+                .description("Processamento de um comando no motor, sem I/O")
                 .publishPercentileHistogram().minimumExpectedValue(java.time.Duration.ofNanos(1_000))
                 .maximumExpectedValue(java.time.Duration.ofSeconds(1))
                 .serviceLevelObjectives(java.time.Duration.ofMillis(1)).register(metricas);
