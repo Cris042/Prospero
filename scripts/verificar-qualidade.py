@@ -959,7 +959,11 @@ def main(argv=None):
         print("--gerar-baseline com --servico gravaria baseline parcial; gere-a para todos os serviços.",
               file=sys.stderr)
         return 2
-    baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
+    try:
+        baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
+    except (OSError, ValueError) as erro:
+        print(f"Baseline ilegível: {args.baseline} ({erro.__class__.__name__})", file=sys.stderr)
+        return 2
     relatorio = analisar(args.raiz, carregar_configuracao(args.config), usar_git=not args.sem_git,
                          servicos=args.servico, baseline=baseline)
     if args.gerar_baseline:

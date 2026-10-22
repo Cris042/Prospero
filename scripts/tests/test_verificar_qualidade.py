@@ -461,6 +461,9 @@ class EvolucaoFitnessTest(unittest.TestCase):
         self.assertEqual(codigo, 0)
         self.assertIn("Baseline desatualizada: 1 entrada(s)", saida)
         self.assertEqual(self.executar("--gerar-baseline", baseline, "--servico", "front-office")[0], 2)
+        Path(baseline).write_text("{", encoding="utf-8")
+        self.assertEqual(self.executar("--gate", "--baseline", baseline)[0], 2)
+        self.assertEqual(self.executar("--gate", "--baseline", baseline + ".ausente")[0], 2)
 
     def test_hotspots_combinam_commits_e_complexidade(self):
         commits = [["a.java", "b.java"], ["a.java"], ["b.java"], ["a.java"]]
