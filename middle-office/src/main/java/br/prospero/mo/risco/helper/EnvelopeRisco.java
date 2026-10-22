@@ -45,15 +45,7 @@ public final class EnvelopeRisco {
     }
 
     public static ComandoRisco comando(byte[] bytes) {
-        if (bytes == null || bytes.length > TAMANHO_MAXIMO) {
-            throw new EnvelopeInvalidoException("tamanho");
-        }
-        JsonNode raiz;
-        try {
-            raiz = JSON.readTree(new String(bytes, StandardCharsets.UTF_8));
-        } catch (JsonProcessingException erro) {
-            throw new EnvelopeInvalidoException("json");
-        }
+        JsonNode raiz = ler(bytes);
         exigirCampos(raiz, CAMPOS, "envelope");
         if (!"AVALIAR_RISCO".equals(texto(raiz, "tipo")) || !raiz.get("versao").isInt() || (raiz.get("versao").intValue() != 1 && raiz.get("versao").intValue() != 2)) {
             throw new EnvelopeInvalidoException("tipo ou versao");
@@ -67,15 +59,40 @@ public final class EnvelopeRisco {
         JsonNode dados = raiz.get("dados");
         boolean v2 = raiz.get("versao").intValue() == 2;
         exigirCampos(dados, v2 ? Set.of("ticker", "lado", "precoBase", "ordens", "dataSessao") : CAMPOS_COMANDO, "dados");
-        java.time.LocalDate sessao = null;
+        java.time.LocalDate sessao = v2 ? sessao(dados) : null;
+        List<Perna> pernas = pernas(dados.get("ordens"), v2);
         if (v2) {
-            try {
-                String data = texto(dados, "dataSessao");
-                sessao = java.time.LocalDate.parse(data);
-                if (!sessao.toString().equals(data)) throw new IllegalArgumentException();
-            } catch (RuntimeException e) { throw new EnvelopeInvalidoException("dataSessao"); }
+            exigirValidadesV2(pernas, dados);
         }
-        JsonNode ordens = dados.get("ordens");
+        if (pernas.size() == 2) {
+            exigirParOco(pernas.get(0), pernas.get(1));
+        }
+        return new ComandoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, padrao(dados, "ticker", TICKER),
+                enumeracao(dados, "lado", Lado.class), preco(dados, "precoBase"), pernas, traceparent, sessao);
+    }
+
+    private static JsonNode ler(byte[] bytes) {
+        if (bytes == null || bytes.length > TAMANHO_MAXIMO) {
+            throw new EnvelopeInvalidoException("tamanho");
+        }
+        try {
+            return JSON.readTree(new String(bytes, StandardCharsets.UTF_8));
+        } catch (JsonProcessingException erro) {
+            throw new EnvelopeInvalidoException("json");
+        }
+    }
+
+    private static java.time.LocalDate sessao(JsonNode dados) {
+        try {
+            String data = texto(dados, "dataSessao");
+            java.time.LocalDate sessao = java.time.LocalDate.parse(data);
+            if (!sessao.toString().equals(data)) throw new IllegalArgumentException();
+            return sessao;
+        } catch (RuntimeException e) { throw new EnvelopeInvalidoException("dataSessao"); }
+    }
+
+    /** Uma ou duas pernas, cada uma com os campos da versão e os preços que o tipo exige. */
+    private static List<Perna> pernas(JsonNode ordens, boolean v2) {
         if (!ordens.isArray() || ordens.isEmpty() || ordens.size() > 2) {
             throw new EnvelopeInvalidoException("ordens");
         }
@@ -93,26 +110,24 @@ public final class EnvelopeRisco {
             exigirPrecosDoTipo(perna);
             pernas.add(perna);
         }
-        if (v2) {
-            for (Perna perna : pernas) {
-                boolean stop = perna.tipo().stop();
-                if ((stop && perna.validade() != br.prospero.mo.risco.dominio.Validade.DIA)
-                        || (perna.tipo() == TipoOrdem.MARKET && perna.validade() == br.prospero.mo.risco.dominio.Validade.DIA)) {
-                    throw new EnvelopeInvalidoException("validade");
-                }
-                if (perna.tipo() == TipoOrdem.STOP_LIMIT) {
-                    int comparacao = perna.precoLimite().compareTo(perna.precoGatilho());
-                    if (enumeracao(dados, "lado", Lado.class) == Lado.COMPRA ? comparacao < 0 : comparacao > 0) {
-                        throw new EnvelopeInvalidoException("limite e gatilho");
-                    }
+        return pernas;
+    }
+
+    /** v2: Market nunca DIA, stops só DIA e Stop Limit com limite do lado certo do gatilho. */
+    private static void exigirValidadesV2(List<Perna> pernas, JsonNode dados) {
+        for (Perna perna : pernas) {
+            boolean stop = perna.tipo().stop();
+            if ((stop && perna.validade() != br.prospero.mo.risco.dominio.Validade.DIA)
+                    || (perna.tipo() == TipoOrdem.MARKET && perna.validade() == br.prospero.mo.risco.dominio.Validade.DIA)) {
+                throw new EnvelopeInvalidoException("validade");
+            }
+            if (perna.tipo() == TipoOrdem.STOP_LIMIT) {
+                int comparacao = perna.precoLimite().compareTo(perna.precoGatilho());
+                if (enumeracao(dados, "lado", Lado.class) == Lado.COMPRA ? comparacao < 0 : comparacao > 0) {
+                    throw new EnvelopeInvalidoException("limite e gatilho");
                 }
             }
         }
-        if (pernas.size() == 2) {
-            exigirParOco(pernas.get(0), pernas.get(1));
-        }
-        return new ComandoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, padrao(dados, "ticker", TICKER),
-                enumeracao(dados, "lado", Lado.class), preco(dados, "precoBase"), pernas, traceparent, sessao);
     }
 
     public static String resultado(UUID id, Decisao decisao, Instant agora, String traceparent) {
