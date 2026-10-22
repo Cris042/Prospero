@@ -17,9 +17,11 @@ public final class SessaoMatching {
     private final MotorMatching motor = new MotorMatching(parametros());
     private final Map<UUID, EnvelopeMatching.Comando> ordens = new HashMap<>();
     private final Map<UUID, UUID> intencoes = new HashMap<>();
+    private final java.util.Set<String> encerrados = new java.util.HashSet<>();
     private LocalDate sessao;
 
     public List<byte[]> processar(EnvelopeMatching.Comando comando) {
+        if (comando.encerramento() != null) return encerrar(comando);
         var a = comando.admissao();
         if (sessao != null && !sessao.equals(a.sessao())) throw new IllegalArgumentException("Uma sessão por log.");
         var anterior = ordens.get(a.ordem());
@@ -42,6 +44,21 @@ public final class SessaoMatching {
         var eventos = comando.oco() ? motor.processarOco(new AdmissaoOco(a, comando.stopLoss())) : motor.processar(a);
         List<byte[]> envelopes = new ArrayList<>(eventos.size());
         for (int i = 0; i < eventos.size(); i++) envelopes.add(EnvelopeMatching.evento(comando, eventos.get(i), i, ordens));
+        return List.copyOf(envelopes);
+    }
+
+    /**
+     * Encerramento (RF05c.4): expira o ativo e publica o marco uma vez. Repetição e data diferente da sessão do log
+     * não têm efeito, sem parar o escritor; abrir nova data continua fora (uma sessão por log).
+     */
+    private List<byte[]> encerrar(EnvelopeMatching.Comando comando) {
+        var e = comando.encerramento();
+        if (sessao != null && !sessao.equals(e.sessao()) || !encerrados.add(e.ticker())) return List.of();
+        sessao = e.sessao();
+        var eventos = motor.encerrarSessao(e.ticker(), e.sessao());
+        List<byte[]> envelopes = new ArrayList<>(eventos.size() + 1);
+        for (int i = 0; i < eventos.size(); i++) envelopes.add(EnvelopeMatching.evento(comando, eventos.get(i), i, ordens));
+        envelopes.add(EnvelopeMatching.marco(comando, eventos.size(), eventos.size()));
         return List.copyOf(envelopes);
     }
 

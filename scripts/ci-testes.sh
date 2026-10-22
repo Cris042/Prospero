@@ -86,4 +86,6 @@ export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 playwright_deps=()
 [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
 (cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium && npm run test:e2e)
+# RF05c.4: encerramento por último; o ativo passa a recusar ordens na data (uma sessão por log), não repetível.
+rodar_workbook sessao sessao
 printf '%s\n' 'Testes independentes, aplicação empacotada e observabilidade validados.'

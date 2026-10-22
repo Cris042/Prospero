@@ -841,3 +841,22 @@ test('planilhas financeiras optam em preparação 200 e preservam a prova de 409
   }
   assert.equal(bloqueados, 2, 'PreparoBloqueado409 e ContaDaTela403 permanecem sem polling');
 });
+
+test('planilha de sessão compila encerramento só por APIs, com espera observável e captura da data', async () => {
+  const servicos = Object.fromEntries(
+    ['ordens-a', 'sessao'].map((nome) => [nome, { origem: 'http://127.0.0.1:8081' }]),
+  );
+  const sheets = await readWorkbook(new URL('./exemplos/sessao.xlsx', import.meta.url).pathname);
+  const plan = compile(sheets, { servicos });
+  const fluxo = plan.find((c) => c.name === 'EncerramentoExpiraEPassaARecusar');
+  assert.ok(fluxo);
+  const encerrar = fluxo.steps.find((s) => s.id === 'Encerrar');
+  assert.equal(encerrar.method, 'POST');
+  assert.equal(encerrar.service, 'sessao');
+  assert.equal(encerrar.expected.status, 202);
+  assert.ok(fluxo.steps.find((s) => s.id === 'OfertaExpirada').deadline > 0);
+  assert.equal(
+    fluxo.steps.find((s) => s.id === 'TardiaRejeitada').expected.body['/motivoRejeicao'],
+    'SESSAO_ENCERRADA',
+  );
+});
