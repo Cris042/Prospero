@@ -68,6 +68,12 @@ rodar_workbook matching risco
 rodar_workbook matching risco
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
 mo_origem="http://$("${compose[@]}" port middle-office 8080)"
+# RF05d: primeira medição RNF04, informativa (runner hospedado, ruidoso): nunca é gate de latência.
+me_origem="http://$("${compose[@]}" port matching-engine 8080)"
+mkdir -p .ci-evidencias
+python3 scripts/medir-rnf04.py --origem "$fo_origem" --origem-mo "$mo_origem" --origem-me "$me_origem" \
+  > .ci-evidencias/rnf04.json
+python3 -c 'import json,sys; r=json.load(open(".ci-evidencias/rnf04.json")); print(json.dumps(r["metricas"], ensure_ascii=False))'
 python3 scripts/mercado.py verificar-matching --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"
 python3 scripts/mercado.py verificar-concorrencia --origem-mo "$mo_origem" --projeto "$project"
 python3 scripts/mercado.py verificar-recuperacao --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"
