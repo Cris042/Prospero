@@ -215,7 +215,7 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 		if parent.Err() != nil {
 			category = "cancelada"
 		} else if errors.Is(ctx.Err(), context.DeadlineExceeded) || expirou(doErr) {
-			// ResponseHeaderTimeout usa o mesmo prazo e pode disparar antes do contexto: também é timeout.
+			// ResponseHeaderTimeout e o Dialer usam o mesmo prazo e podem disparar antes do contexto: também é timeout.
 			category = "timeout"
 		}
 	}
