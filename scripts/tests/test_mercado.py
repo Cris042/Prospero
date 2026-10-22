@@ -50,6 +50,16 @@ class PrepararCarteiraTest(unittest.TestCase):
     def preparar(self, **kwargs):
         return mercado.preparar_carteira(self.origem, "CONTA-002", "1000.00", {"ALFA3": 100}, **kwargs)
 
+    def test_demo_prepara_somente_namespace_sintetico_da_fixture(self):
+        self.respostas = [(200, {})]
+        namespace = mercado.preparar_demo(self.origem)
+        self.assertEqual(namespace, mercado.NAMESPACE_DEMO)
+        self.assertNotEqual(namespace, "00000000-0000-0000-0000-000000000000")
+        self.assertEqual(len(self.pedidos), len(mercado.DEMO))
+        self.assertEqual({caminho for caminho, _ in self.pedidos}, {
+            f"/api/v1/preparacoes-mercado/{namespace}/ativos/{ticker}" for ticker in mercado.DEMO
+        })
+
     def test_repete_reserva_viva_transitoria_ate_preparar(self):
         self.respostas = [(409, {"codigo": "RESERVA_VIVA"}), (200, {"saldoTotal": "1000.00"})]
         self.assertEqual(self.preparar(prazo=1), {"saldoTotal": "1000.00"})

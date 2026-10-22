@@ -41,6 +41,7 @@ public class PrepararMercadoActor {
     }
 
     public PreparacaoResponseDTO preparar(UUID namespace, String ticker, SnapshotRequestDTO pedido) {
+        exigirSintetico(namespace);
         Ativo ativo = repositorio.buscarAtivo(ticker)
                 .orElseThrow(() -> new RegraMercadoException("ATIVO_DESCONHECIDO", "Ativo não cadastrado."));
         if (pedido.ofertas().size() > 2 * ValidadorSnapshot.MAX_OFERTAS_POR_LADO
@@ -64,7 +65,14 @@ public class PrepararMercadoActor {
         return new PreparacaoResponseDTO(namespace, ativo.ticker(), revisao, agora);
     }
 
+    private static void exigirSintetico(UUID namespace) {
+        if (new UUID(0, 0).equals(namespace)) {
+            throw new RegraMercadoException("NAMESPACE_REAL", "Namespace principal é exclusivo da cotação real do matching.");
+        }
+    }
+
     public void limpar(UUID namespace) {
+        exigirSintetico(namespace);
         repositorio.remover(namespace);
     }
 }

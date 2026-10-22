@@ -39,7 +39,7 @@ O [HLD-002](../hlds/HLD-002-front-office.md) previa Redis como projeção futura
 - `FO_TOKEN_LEITURA` vale 365 dias e só é revogado trocando a chave; ao expirar, remover a linha do `.env` e rodar `preparar-ambiente.py`. Ele fica visível em `docker inspect` e no `/tmp` do container Nginx, aceitável para ambiente local de dados fictícios.
 - Em `quarkus dev` não há chave configurada e o Quarkus gera um par RSA: tokens HS256 locais são recusados. Use o Compose para testar autenticação.
 - Dívida: o adaptador JPA não roda no `mvnw verify` (datasource inativo em teste); upsert, JSONB e consultas são cobertos pelo workbook XLSX e E2E no gate de testes. Testcontainers/Dev Services podem ser adotados quando o runner suportar Docker no build.
-- Atualização por negócios reais e eventos fica para a RF06; o snapshot sintético não alimenta risco nem matching.
+- A RF06a implementa a projeção real em validação conforme proposta [ADR-014](ADR-014-cotacao-real-fo.md); o namespace principal passa a ser real e UUIDs não nulos preservam os snapshots sintéticos. O snapshot sintético não alimenta risco, túnel nem matching.
 
 ## Revisão
 

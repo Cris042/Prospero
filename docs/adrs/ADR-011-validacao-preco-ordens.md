@@ -32,3 +32,7 @@
 ## Revisão
 
 Revisar na RF04 (motivos de rejeição assíncrona no MO), RF05 (faixa de execução da Market) e RF06 (fonte real do último negócio e atualização da referência).
+
+## Fonte real na RF06a
+
+A implementação em validação da proposta [ADR-014](ADR-014-cotacao-real-fo.md) conecta `FonteUltimoPrecoCotacao` à projeção PostgreSQL do FO. Usa somente o último negócio real da sessão solicitada; sem negócio mantém `REFERENCIA`. O preço persistido na ordem registra a base observada naquele envio, mesmo se a projeção avançar depois. Snapshots sintéticos continuam isolados; defasagem e Kafka PLAINTEXT são limitações explícitas, sem aceite adicional presumido.

@@ -34,6 +34,8 @@ POR_CONTA = {"ordens", "risco"}
 ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
 CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"}
 VALIDADE_MAXIMA = 3600
+# Fixture histórica da tela: namespace separado do mercado real (ADR-014).
+NAMESPACE_DEMO = "8d3df0f3-76d3-4ac0-b9a8-26f040e5721c"
 
 
 def token(escopo, validade, conta=None):
@@ -64,20 +66,21 @@ DEMO = {
 
 
 def preparar_demo(origem):
-    # Namespace principal (UUID nulo), somente via API local; OMEGA3 permanece sem dados.
+    # Namespace sintético exclusivo da demonstração; OMEGA3 permanece sem dados.
     token_prep = token("preparacao", 120)
     sessao = datetime.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
     for ticker, (ofertas, negocios) in DEMO.items():
         corpo = json.dumps({"sessao": sessao,
                             "ofertas": [{"lado": l, "preco": p, "quantidade": q} for l, p, q in ofertas],
                             "negocios": [{"preco": p, "quantidade": q} for p, q in negocios]}).encode()
-        pedido = urllib.request.Request(f"{origem}/api/v1/preparacoes-mercado/00000000-0000-0000-0000-000000000000/ativos/{ticker}",
+        pedido = urllib.request.Request(f"{origem}/api/v1/preparacoes-mercado/{NAMESPACE_DEMO}/ativos/{ticker}",
                                         data=corpo, method="PUT", headers={
                                             "Authorization": "Bearer " + token_prep, "Content-Type": "application/json"})
         with urllib.request.urlopen(pedido, timeout=5) as resposta:
             if resposta.status != 200:
                 raise SystemExit(f"Falha ao preparar {ticker}: HTTP {resposta.status}")
-    print("Namespace principal preparado com dados sintéticos de demonstração.")
+    print(f"Namespace sintético de demonstração preparado: {NAMESPACE_DEMO}")
+    return NAMESPACE_DEMO
 
 
 def verificar_ordens(origem):
@@ -598,7 +601,7 @@ def main():
     b = sub.add_parser("verificar-robo", help="Sobe o robô formador (CONTA-004) em DELTA3 e verifica reposição e reinício.")
     b.add_argument("--origem", default="http://127.0.0.1:8081")
     b.add_argument("--projeto", help="Projeto Compose de CI (usa docker-compose.ci.yml).")
-    d = sub.add_parser("preparar-demo", help="Prepara o namespace principal com dados sintéticos.")
+    d = sub.add_parser("preparar-demo", help="Prepara o UUID sintético da fixture histórica da tela; preserva o mercado real.")
     d.add_argument("--origem", default="http://127.0.0.1:8081")
     args = parser.parse_args()
     if args.comando in {"preparar-demo", "verificar-ordens", "verificar-risco", "verificar-concorrencia",
@@ -648,7 +651,8 @@ def main():
                                "ordens-b": bearer(token("ordens", args.validade, "CONTA-003")),
                                "risco-a": risco(token("risco", args.validade, "CONTA-002")),
                                "risco-b": risco(token("risco", args.validade, "CONTA-003")),
-                               "preparacao-risco": risco(token("risco-preparacao", args.validade))}}
+                               "preparacao-risco": risco(token("risco-preparacao", args.validade)),
+                               "mercado": bearer(token("leitura", args.validade))}}
     escrever_config(args.destino, json.dumps(config, indent=2) + "\n")
     print("Configuração do runner gravada; token não exibido.")
 

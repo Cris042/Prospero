@@ -12,6 +12,7 @@ public class RegraMercadoException extends RegraNegocioException {
     private static Categoria categoria(String codigo) {
         return switch (codigo) {
             case "ATIVO_DESCONHECIDO", "PREPARACAO_DESABILITADA" -> Categoria.NAO_ENCONTRADO;
+            case "NAMESPACE_REAL" -> Categoria.CONFLITO;
             case "NAMESPACE_INVALIDO" -> Categoria.ENTRADA_INVALIDA;
             case "LIMITE_NAMESPACES" -> Categoria.LIMITE_ATINGIDO;
             default -> Categoria.REGRA_VIOLADA;
