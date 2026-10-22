@@ -10,7 +10,9 @@ linha de base. Reimplementação léxica com a stdlib, sem AST nem rede; limiare
 """
 import argparse
 import bisect
+import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
@@ -26,9 +28,10 @@ DECISAO_RE = re.compile(r"\b(?:if|for|while|case|catch)\b|&&|\|\||\?(?!\s*(?:ext
 PALAVRAS = {"if", "for", "while", "switch", "catch", "synchronized", "return", "new", "try", "else", "do"}
 IF_RE = re.compile(r"\bif\s*\(")
 SWITCH_RE = re.compile(r"\bswitch\s*\(")
-ANONIMA_RE = re.compile(r"\bnew\s+([\w.]+)\s*(?:<[^(]*>)?\s*\([^()]*\)\s*\{")
+# Genéricos limitados a 256 caracteres sem `(){};`: evita custo quadrático em `new A<new A<...`.
+ANONIMA_RE = re.compile(r"\bnew\s+([\w.]+)\s*(?:<[^(){};]{0,256}>)?\s*\([^()]*\)\s*\{")
 CONSTANTE_RE = re.compile(r"[!=]=\s*(?:[A-Z]\w*\.)*[A-Z][A-Z0-9_]+\b|\b[A-Z][A-Z0-9_]+\s*[!=]=|\.equals\(\s*\"|\"\s*\.equals\(")
-IDENT_FIM_RE = re.compile(r"([A-Za-z_]\w*)\s*(?:\[\s*\]\s*)*$")
+LITERAL_LONGO_RE = re.compile(r'"(?:[^"\\\n]|\\.){17,}"')
 USO_RE = re.compile(r"(?:(?<![\w.])|(?<=this\.))([A-Za-z_]\w*)\b(?!\s*\()")
 CHAMADA_RE = re.compile(r"(?:(?<![\w.])|(?<=this\.))([A-Za-z_]\w*)\s*\(")
 
@@ -152,16 +155,37 @@ def dividir(trecho):
     return [p.strip() for p in partes if p.strip()]
 
 
+def ident_fim(texto):
+    """(nome, início) do identificador final, ignorando `[]`; varredura reversa linear, sem regex quadrática."""
+    fim = len(texto.rstrip())
+    while texto[:fim].endswith("]"):
+        antes = texto[:fim - 1].rstrip()
+        if not antes.endswith("["):
+            return None
+        fim = len(antes[:-1].rstrip())
+    inicio = fim
+    while inicio > 0 and (texto[inicio - 1].isalnum() or texto[inicio - 1] == "_"):
+        inicio -= 1
+    while inicio < fim and not (texto[inicio].isascii() and (texto[inicio].isalpha() or texto[inicio] == "_")):
+        inicio += 1
+    return (texto[inicio:fim], inicio) if inicio < fim else None
+
+
+def mascarar(texto):
+    """Literal com mais de 16 caracteres vira hash curto estável: o relatório não reproduz possíveis segredos."""
+    return LITERAL_LONGO_RE.sub(lambda m: '"#' + hashlib.sha256(m.group(0).encode()).hexdigest()[:8] + '"', texto)
+
+
 def assinatura(cabecalho, nome_tipo):
     """Retorna (nome, parâmetros, posição do nome, construtor) ou None se não for método."""
     abre = cabecalho.find("(")
     if abre < 0:
-        m = IDENT_FIM_RE.search(cabecalho)
-        if m and m.group(1) == nome_tipo:  # construtor compacto de record
-            return nome_tipo, 0, m.start(1), True
+        m = ident_fim(cabecalho)
+        if m and m[0] == nome_tipo:  # construtor compacto de record
+            return nome_tipo, 0, m[1], True
         return None
-    m = IDENT_FIM_RE.search(cabecalho[:abre])
-    if not m or m.group(1) in PALAVRAS or "=" in cabecalho[:abre] or "->" in cabecalho[:abre]:
+    m = ident_fim(cabecalho[:abre])
+    if not m or m[0] in PALAVRAS or "=" in cabecalho[:abre] or "->" in cabecalho[:abre]:
         return None
     fecha = pares(cabecalho[abre:], "(", ")").get(0)
     if fecha is None:
@@ -169,17 +193,17 @@ def assinatura(cabecalho, nome_tipo):
     resto = cabecalho[abre + fecha + 1:].strip()
     if resto and not re.fullmatch(r"(?:throws\s+[\w.<>,\s]+|default\b.*)", resto, re.S):
         return None
-    nome = m.group(1)
-    return nome, len(dividir(cabecalho[abre + 1:abre + fecha])), m.start(1), nome == nome_tipo
+    nome = m[0]
+    return nome, len(dividir(cabecalho[abre + 1:abre + fecha])), m[1], nome == nome_tipo
 
 
 def nomes_campos(cabecalho):
     antes = re.split(r"(?<![=!<>])=(?!=)", cabecalho, maxsplit=1)[0]
     nomes = []
     for parte in dividir(antes):
-        m = IDENT_FIM_RE.search(parte)
-        if m and m.group(1) not in PALAVRAS:
-            nomes.append(m.group(1))
+        m = ident_fim(parte)
+        if m and m[0] not in PALAVRAS:
+            nomes.append(m[0])
     return nomes
 
 
@@ -246,12 +270,12 @@ def switches(limpo, bruto):
                 profundidade -= 1
             elif profundidade == 0 and re.match(r"\bcase\b", limpo[i:i + 5]) and not re.match(r"\w", limpo[i - 1]):
                 fim = fim_rotulo(limpo, i + 4, fecha)
-                rotulos |= {normalizar_rotulo(bruto[a:b]) for a, b in partes_no_nivel(limpo, i + 4, fim)}
+                rotulos |= {mascarar(normalizar_rotulo(bruto[a:b])) for a, b in partes_no_nivel(limpo, i + 4, fim)}
                 i = fim
                 continue
             i += 1
         rotulos -= {"", "default", "null"}
-        resultado.append((" ".join(bruto[abre_p + 1:fecha_p].split()), tuple(sorted(rotulos))))
+        resultado.append((mascarar(" ".join(bruto[abre_p + 1:fecha_p].split())), tuple(sorted(rotulos))))
     return resultado
 
 
@@ -262,7 +286,7 @@ def condicoes_discriminantes(limpo, bruto):
         fecha = parenteses.get(m.end() - 1)
         if fecha is None:
             continue
-        condicao = " ".join(bruto[m.end():fecha].split())
+        condicao = mascarar(" ".join(bruto[m.end():fecha].split()))
         condicao = re.sub(r"(\binstanceof\s+[\w.]+(?:<[^>]*>)?)\s+[a-z_]\w*", r"\1", condicao)
         if re.search(r"\binstanceof\b", condicao) or CONSTANTE_RE.search(condicao):
             resultado.append(condicao)
@@ -713,6 +737,7 @@ def analisar(raiz, cfg, usar_git=True, servicos=None, baseline=None):
                    "alertas": sum(a["nivel"] == "alerta" for a in achados),
                    "falhas_novas": sum(a["nivel"] == "falha" and a.get("novo", True) for a in achados),
                    "servicos": sorted({a.servico for a in arquivos}), "baseline": baseline is not None,
+                   "commits_historico": len(commits) if commits is not None else None,
                    "baseline_obsoletas": baseline_obsoletas},
         "achados": achados,
         "metodos": metodos,
@@ -908,6 +933,9 @@ def formatar(relatorio, limite):
                     f"Ce {c['dependencias']:>2} Ca {c['dependentes']:>2} {c['arquivo']}")
     if relatorio["hotspots"] is None:
         linhas += ["", "## Hotspots (commits × maior CC)", "  (histórico Git indisponível ou desativado)"]
+    elif r["commits_historico"] < relatorio["configuracao"]["hotspots"]["min_commits"]:
+        linhas += ["", "## Hotspots (commits × maior CC)",
+                   f"  (histórico insuficiente: {r['commits_historico']} commit(s); clone raso?)"]
     else:
         secao("Hotspots (commits × maior CC)", relatorio["hotspots"],
               lambda h: f"{h['pontuacao']:>4} = {h['commits']} commits × CC {h['cc_max']} {h['arquivo']}")
@@ -932,6 +960,23 @@ def formatar(relatorio, limite):
                    "métodos/classes dentro dos limites e mudança isolada não justificam interface, camada ou "
                    "biblioteca compartilhada; duplicação entre serviços é esperada (serviços independentes)."]
     return "\n".join(linhas)
+
+
+def ler_baseline(caminho):
+    """Baseline com `achados` de regra/valor numérico finito; NaN/Infinity ou formato inesperado são recusados."""
+    def recusar(constante):
+        raise ValueError(constante)
+    dados = json.loads(Path(caminho).read_text(encoding="utf-8"), parse_constant=recusar)
+    achados = dados.get("achados") if isinstance(dados, dict) else dados
+    if not isinstance(achados, list):
+        raise ValueError("achados")
+    for achado in achados:
+        valor = achado.get("valor") if isinstance(achado, dict) else None
+        if (not isinstance(achado, dict) or not isinstance(achado.get("regra"), str)
+                or isinstance(valor, bool) or not isinstance(valor, (int, float)) or not math.isfinite(valor)
+                or not isinstance(achado.get("chave") or achado.get("alvo"), str)):
+            raise ValueError("achado")
+    return dados
 
 
 def main(argv=None):
@@ -960,12 +1005,17 @@ def main(argv=None):
               file=sys.stderr)
         return 2
     try:
-        baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
+        baseline = ler_baseline(args.baseline) if args.baseline else None
     except (OSError, ValueError) as erro:
         print(f"Baseline ilegível: {args.baseline} ({erro.__class__.__name__})", file=sys.stderr)
         return 2
-    relatorio = analisar(args.raiz, carregar_configuracao(args.config), usar_git=not args.sem_git,
-                         servicos=args.servico, baseline=baseline)
+    try:
+        relatorio = analisar(args.raiz, carregar_configuracao(args.config), usar_git=not args.sem_git,
+                             servicos=args.servico, baseline=baseline)
+    except (RecursionError, UnicodeDecodeError) as erro:
+        # Entrada patológica (tipos aninhados demais, arquivo não UTF-8): falha fechada com mensagem curta.
+        print(f"Análise interrompida: {erro.__class__.__name__}", file=sys.stderr)
+        return 2
     if args.gerar_baseline:
         compacta = {"achados": sorted(({k: a[k] for k in ("regra", "chave", "nivel", "valor")}
                                        for a in relatorio["achados"]),

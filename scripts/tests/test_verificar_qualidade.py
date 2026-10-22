@@ -475,5 +475,135 @@ class EvolucaoFitnessTest(unittest.TestCase):
         self.assertIsNone(qualidade.hotspots(None, metodos, {"min_commits": 2}))
 
 
+class BordasQaSegurancaTest(unittest.TestCase):
+    """Casos de borda apontados pelos pareceres de QA e segurança do gate."""
+
+    setUp, tearDown = EvolucaoFitnessTest.setUp, EvolucaoFitnessTest.tearDown
+    analisar, regras, executar, metodo = (EvolucaoFitnessTest.analisar, EvolucaoFitnessTest.regras,
+                                          EvolucaoFitnessTest.executar, EvolucaoFitnessTest.metodo)
+
+    def fonte(self, pacote, nome, corpo, servico="front-office"):
+        return escrever(self.raiz, servico, pacote, nome, f"package {pacote};\n{corpo}\n")
+
+    def test_baseline_lista_sem_chave_renomeacao_e_promocao_de_alerta(self):
+        complexo = lambda n: "class Gate {\n    int f(int x) {\n" + "".join(
+            f"        if (x == {i}) return {i};\n" for i in range(n)) + "        return 0;\n    }\n}\n"
+        gate = self.fonte("br.prospero.fo.ordens.helper", "Gate", complexo(15))
+        relatorio = self.analisar()
+        # Formato lista com `alvo` (linha incluída) e sem `chave`: a linha é descartada na comparação.
+        baseline = [{"regra": a["regra"], "alvo": a["alvo"], "valor": a["valor"]} for a in relatorio["achados"]]
+        caminho = Path(self.raiz, "lista.json")
+        caminho.write_text(json.dumps(baseline), encoding="utf-8")
+        self.assertFalse(any(a["novo"] for a in self.analisar(baseline=baseline)["achados"]))
+        self.fonte("br.prospero.fo.ordens.helper", "Gate", complexo(22))  # alerta (CC 16) vira falha (CC 23)
+        codigo, saida = self.executar("--gate", "--baseline", str(caminho))
+        self.assertEqual(codigo, 1)
+        self.assertIn("[novo] metodo_complexidade 23 > 20", saida)
+        self.fonte("br.prospero.fo.ordens.helper", "Gate", complexo(15))
+        gate.rename(gate.with_name("Portao.java"))  # renomear: chave muda, achado aparece como novo
+        self.assertTrue(all(a["novo"] for a in self.analisar(baseline=baseline)["achados"]))
+
+    def test_baseline_com_valor_nao_finito_ou_formato_invalido_retorna_2(self):
+        self.fonte("br.prospero.fo.ordens.helper", "Vazio", "class Vazio {}")
+        caminho = Path(self.raiz, "b.json")
+        for conteudo in ('{"achados": [{"regra": "metodo_linhas", "chave": "x", "valor": Infinity}]}',
+                         '{"achados": [{"regra": "metodo_linhas", "chave": "x", "valor": "61"}]}',
+                         '{"achados": [{"regra": "metodo_linhas", "valor": 1}]}', '{"achados": 3}'):
+            caminho.write_text(conteudo, encoding="utf-8")
+            self.assertEqual(self.executar("--gate", "--baseline", str(caminho))[0], 2, conteudo)
+
+    def test_entrada_patologica_falha_fechada_sem_traceback(self):
+        aninhado = "".join(f"class C{i} {{ " for i in range(1500)) + "}" * 1500
+        self.fonte("br.prospero.fo.ordens.helper", "C0", aninhado)
+        self.assertEqual(self.executar("--gate")[0], 2)
+        Path(self.raiz, "front-office/src/main/java/br/prospero/fo/ordens/helper/C0.java").write_bytes(b"class \xff {}")
+        self.assertEqual(self.executar("--gate")[0], 2)
+
+    def test_identificador_e_genericos_longos_em_tempo_linear(self):
+        import time
+        inicio = time.perf_counter()
+        self.assertEqual(qualidade.ident_fim("x" * 200_000 + " [ ] []"), ("x" * 200_000, 0))
+        self.assertIsNone(qualidade.assinatura("a" * 200_000 + "(", "T"))
+        list(qualidade.ANONIMA_RE.finditer("new A<" * 20_000))
+        self.assertLess(time.perf_counter() - inicio, 5)  # antes: ~8 s só para 20 mil caracteres
+        self.assertEqual(qualidade.ident_fim("int[] 9valores"), ("valores", 7))
+        self.assertIsNone(qualidade.ident_fim("lista]"))
+
+    def test_literal_longo_mascarado_no_relatorio(self):
+        segredo = "texto-literal-bem-comprido"
+        corpo = "".join(f'    boolean m{i}(String s) {{ if (s.equals("{segredo}")) return true; return false; }}\n'
+                        for i in range(3))
+        self.fonte("br.prospero.fo.ordens.helper", "Chaves", f"class Chaves {{\n{corpo}}}")
+        relatorio = self.analisar()
+        texto = json.dumps(relatorio["achados"])
+        self.assertNotIn(segredo, texto)
+        self.assertEqual(len(self.regras(relatorio, "condicao_repetida")), 1)  # hash estável ainda agrupa
+        self.assertEqual(qualidade.mascarar('x.equals("COMPRA")'), 'x.equals("COMPRA")')
+
+    def test_switch_com_padroes_blocos_classicos_e_minimo_de_rotulos(self):
+        self.fonte("br.prospero.mo.risco.helper", "Formas", """class Formas {
+    double area(Forma f) { return switch (f) { case Circulo c when c.r() > 0 -> 1; case Quadrado q -> 2; default -> 0; }; }
+    String nome(Forma f) { return switch (f) { case Circulo c -> "c"; case Quadrado q -> "q"; default -> ""; }; }
+    int antigo(Tipo t) { switch (t) { case A: { return 1; } case B: return 2; default: return 0; } }
+    int classico(Tipo t) { switch (t) { case A: return 3; case B: { return 4; } } return 0; }
+    int unico(Tipo t) { switch (t) { case A -> { return 1; } default -> { return 0; } } }
+    int unico2(Tipo t) { return switch (t) { case A -> 2; default -> 0; }; }
+}""", servico="middle-office")
+        alvos = sorted(a["alvo"] for a in self.regras(self.analisar(), "switch_repetido"))
+        self.assertEqual(alvos, ["middle-office: case A, B", "middle-office: case Circulo, Quadrado"])
+
+    def test_interface_anonima_generica_sealed_e_sem_implementacao(self):
+        pacote = "br.prospero.bo.a.helper"
+        self.fonte(pacote, "Porta", "public interface Porta<T> { T f(); }", servico="back-office")
+        self.fonte(pacote, "UsaPorta", "class UsaPorta { Porta<String> p = new Porta<String>() { public String f() "
+                   "{ return \"\"; } }; }", servico="back-office")
+        self.fonte(pacote, "Generica", "public interface Generica<T> { T f(); }", servico="back-office")
+        self.fonte(pacote, "GenericaImpl", "class GenericaImpl implements Generica<String> { public String f() "
+                   "{ return \"\"; } }", servico="back-office")
+        self.fonte(pacote, "Fechada", "public sealed interface Fechada permits Unica { }", servico="back-office")
+        self.fonte(pacote, "Unica", "final class Unica implements Fechada { }", servico="back-office")
+        self.fonte(pacote, "Livre", "public interface Livre { void f(); }", servico="back-office")
+        self.fonte(pacote, "DubleAnonimo", "public interface DubleAnonimo { void f(); }", servico="back-office")
+        self.fonte(pacote, "DubleImpl", "class DubleImpl implements DubleAnonimo { public void f() {} }",
+                   servico="back-office")
+        teste = Path(self.raiz, "back-office/src/test/java/br/prospero/bo/a/DubleTest.java")
+        teste.parent.mkdir(parents=True, exist_ok=True)
+        teste.write_text("class DubleTest { DubleAnonimo d = new DubleAnonimo() { public void f() {} }; }\n")
+        nomes = sorted(a["alvo"].rsplit("#", 1)[1] for a in self.regras(self.analisar(), "interface_unica_implementacao"))
+        # Anônima conta como implementação; sealed com um único permitido é sinalizada (revisão humana);
+        # sem implementação ou com dublê anônimo em src/test não gera alerta.
+        self.assertEqual(nomes, ["Fechada", "Generica", "Porta"])
+
+    def test_else_if_literais_declaracao_multipla_dto_e_classe_aninhada(self):
+        self.fonte("br.prospero.fo.ordens.helper", "Ramos", """class Ramos {
+    // else em comentário não conta
+    String texto = "else";
+    int f(int x) { if (x > 1) { return 1; } else if (x > 0) { return 2; } else { return 3; } }
+    int g() { return texto.length(); }
+}""")
+        self.fonte("br.prospero.fo.ordens.dominio", "Muitos", """class Muitos {
+    private int a, b, c;
+    private final Runnable tarefa = () -> { a++; };
+    static class Interna { int x; int y; int z; }
+}""")
+        self.fonte("br.prospero.fo.ordens.dto", "Resposta", "class Resposta { int a; int b; int c; }")
+        relatorio = self.analisar()
+        self.assertEqual((self.metodo(relatorio, "f")["else"], self.metodo(relatorio, "g")["else"]), (2, 0))
+        campos = {a["alvo"].rsplit("#", 1)[1]: a["valor"] for a in self.regras(relatorio, "classe_campos")}
+        self.assertEqual(campos, {"Muitos": 4, "Muitos.Interna": 3})
+
+    def test_hotspots_com_historico_insuficiente_no_clone_raso(self):
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+               "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        git = lambda *args: subprocess.run(["git", "-C", self.raiz, *args], check=True, capture_output=True, env=env)
+        git("init", "-q")
+        self.fonte("br.prospero.fo.ordens.helper", "A", "class A { int f(int x) { if (x > 0) return 1; return 0; } }")
+        git("add", "-A")
+        git("commit", "-q", "-m", "unico")
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            qualidade.main(["--raiz", self.raiz])
+        self.assertIn("histórico insuficiente: 1 commit(s)", saida.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
