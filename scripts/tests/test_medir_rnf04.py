@@ -32,7 +32,40 @@ class LeituraDosBuckets(unittest.TestCase):
             'outro_seconds_bucket{le="0.05"} 7.0',
         ])
         self.assertEqual(medir.ler_buckets(texto, "x_seconds"),
-                         {"soma": 6.0, 0.05: 0.0, 0.357913941: 20.0, float("inf"): 20.0})
+                         {"soma": 6.0, "contagem": 20.0, "ignoradas": 0, 0.05: 0.0, 0.357913941: 20.0, float("inf"): 20.0})
+
+    def test_series_somadas_por_le_e_rotulo_terminado_em_le_nao_confunde(self):
+        texto = "\n".join([
+            'x_bucket{handle="a",le="0.1"} 3',
+            'x_bucket{handle="b",uri="/a}b",le="0.1"} 4',
+            'x_bucket{handle="a",le="+Inf"} 3',
+            'x_bucket{handle="b",uri="/a}b",le="+Inf"} 5',
+        ])
+        self.assertEqual(medir.ler_buckets(texto, "x"),
+                         {"soma": None, "contagem": None, "ignoradas": 0, 0.1: 7.0, float("inf"): 8.0})
+
+    def test_linhas_malformadas_sao_ignoradas_e_contadas(self):
+        texto = "\n".join(['x_bucket{handle="a"} 3', 'x_bucket{le="abc"} 1', 'x_bucket{le="0.1"} NaN',
+                           'x_bucket{le="0.1"}', 'x_bucket{le="+Inf"} 2'])
+        self.assertEqual(medir.ler_buckets(texto, "x"),
+                         {"soma": None, "contagem": None, "ignoradas": 3, float("inf"): 2.0})
+
+
+class MediaIndependente(unittest.TestCase):
+    def test_media_por_sum_e_count(self):
+        self.assertAlmostEqual(medir.media_independente({"soma": 1.0, "contagem": 10}, {"soma": 3.0, "contagem": 30}), 0.1)
+
+    def test_sem_sum_ou_contador_reiniciado_nao_inventa_media(self):
+        self.assertIsNone(medir.media_independente({"soma": None, "contagem": 1}, {"soma": None, "contagem": 2}))
+        self.assertIsNone(medir.media_independente({"soma": 5.0, "contagem": 50}, {"soma": 1.0, "contagem": 4}))
+
+
+class Origens(unittest.TestCase):
+    def test_somente_http_com_host(self):
+        self.assertEqual(medir.origem_http("http://127.0.0.1:8081/"), "http://127.0.0.1:8081")
+        for invalida in ("file:///etc/passwd", "ftp://h", "http://"):
+            with self.assertRaises(medir.argparse.ArgumentTypeError):
+                medir.origem_http(invalida)
 
 
 if __name__ == "__main__":

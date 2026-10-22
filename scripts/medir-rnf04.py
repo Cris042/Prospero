@@ -9,11 +9,14 @@ Atenção: redefine as carteiras de teste CONTA-002/003 (preparação local), ap
 """
 import argparse
 import json
+import math
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 import uuid
 from importlib import import_module
@@ -25,30 +28,58 @@ mercado = import_module("mercado")
 METAS = {"prospero_ordens_boleta_negocio_seconds": 0.050, "prospero_matching_comando_seconds": 0.001}
 
 
+LINHA = re.compile(r'^(?P<serie>[A-Za-z_:][A-Za-z0-9_:]*)(?:\{(?P<rotulos>(?:[^}"]|"(?:[^"\\]|\\.)*")*)\})?\s+(?P<valor>\S+)')
+LE = re.compile(r'(?:^|,)\s*le="([^"]*)"')
+TETO_METRICAS = 8 * 1024 * 1024
+
+
 def buckets(origem, nome):
     """Contagens cumulativas por limite `le` do histograma Prometheus do serviço e a soma `_sum` em segundos."""
     with urllib.request.urlopen(origem + "/q/metrics", timeout=10) as resposta:
-        return ler_buckets(resposta.read().decode(), nome)
+        texto = resposta.read(TETO_METRICAS + 1)
+    if len(texto) > TETO_METRICAS:
+        raise SystemExit(f"/q/metrics de {origem} excede {TETO_METRICAS} bytes.")
+    return ler_buckets(texto.decode("utf-8", "replace"), nome)
 
 
 def ler_buckets(texto, nome):
-    """O valor é o primeiro após os rótulos; o exemplar opcional (`# {...} valor timestamp`) é ignorado."""
-    contagens = {"soma": 0.0}
+    """Soma as séries do histograma por `le`; o valor é o primeiro após os rótulos (exemplar `# {...}` ignorado).
+
+    Linhas malformadas ou valores não finitos são ignorados e contados em `ignoradas`; `soma` e `contagem` (de `_sum`
+    e `_count`, independentes dos buckets) ficam None quando ausentes.
+    """
+    contagens = {"soma": None, "contagem": None, "ignoradas": 0}
+    agregadas = {nome + "_sum": "soma", nome + "_count": "contagem"}
     for linha in texto.splitlines():
-        serie, _, resto = linha.partition("}") if "{" in linha else linha.partition(" ")
-        if serie.startswith(nome + "_bucket{"):
-            le = serie.split('le="', 1)[1].split('"', 1)[0]
-            contagens[float("inf") if le == "+Inf" else float(le)] = float(resto.split()[0])
-        elif serie.split("{", 1)[0] == nome + "_sum":
-            contagens["soma"] = float(resto.split()[0])
+        achado = LINHA.match(linha)
+        if not achado or achado["serie"] not in (nome + "_bucket", *agregadas):
+            continue
+        le = LE.search(achado["rotulos"] or "")
+        try:
+            valor = float(achado["valor"])
+            chave = agregadas.get(achado["serie"]) or (float(le[1]) if le else None)
+        except ValueError:
+            chave = None
+        if chave is None or not math.isfinite(valor) or (not isinstance(chave, str) and math.isnan(chave)):
+            contagens["ignoradas"] += 1
+            continue
+        contagens[chave] = (contagens.get(chave) or 0) + valor
     return contagens
+
+
+def media_independente(antes, depois):
+    """Média por `_sum`/`_count`, sem usar buckets; None se ausente, sem amostras ou com contador reiniciado."""
+    valores = (antes.get("soma"), depois.get("soma"), antes.get("contagem"), depois.get("contagem"))
+    if None in valores or valores[3] - valores[2] <= 0 or valores[1] < valores[0]:
+        return None
+    return (valores[1] - valores[0]) / (valores[3] - valores[2])
 
 
 def percentil(antes, depois, q):
     """Menor limite de bucket que cobre a fração q das amostras novas; None sem amostras."""
-    limites = sorted(le for le in depois if le != "soma")
+    limites = sorted(le for le in depois if not isinstance(le, str))
     total = depois.get(float("inf"), 0) - antes.get(float("inf"), 0)
-    if total <= 0:
+    if total <= 0:  # sem amostras novas ou contador reiniciado entre as leituras
         return None, 0
     for le in limites:
         if depois[le] - antes.get(le, 0) >= q * total:
@@ -104,9 +135,9 @@ def executar(args):
     for n in nomes:
         p50, amostras = percentil(antes[n], depois[n], 0.50)
         p99, _ = percentil(antes[n], depois[n], 0.99)
-        media = (depois[n]["soma"] - antes[n]["soma"]) / amostras if amostras else None
+        media = media_independente(antes[n], depois[n])
         resultado["metricas"][n] = {"amostras": amostras, "p50_max_s": p50, "p99_max_s": p99, "meta_s": METAS[n],
-                                    "media_s": media,
+                                    "media_s": media, "linhas_ignoradas": depois[n]["ignoradas"],
                                     "veredito": None if p99 is None else prefixo + ("cumprido" if p99 <= METAS[n] else "não cumprido")}
     cliente.sort()
     resultado["cliente_ate_terminal_observado_s"] = {
@@ -115,11 +146,19 @@ def executar(args):
     return resultado
 
 
+def origem_http(valor):
+    """Somente http(s) com host: as origens vêm do Compose local, nunca de `file://` ou outro esquema."""
+    partes = urllib.parse.urlsplit(valor)
+    if partes.scheme not in ("http", "https") or not partes.hostname:
+        raise argparse.ArgumentTypeError("origem precisa ser http(s)://host[:porta]")
+    return valor.rstrip("/")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--origem", default="http://127.0.0.1:8081", help="front office")
-    parser.add_argument("--origem-mo", default="http://127.0.0.1:8082", help="middle office")
-    parser.add_argument("--origem-me", default="http://127.0.0.1:8083", help="matching engine")
+    parser.add_argument("--origem", type=origem_http, default="http://127.0.0.1:8081", help="front office")
+    parser.add_argument("--origem-mo", type=origem_http, default="http://127.0.0.1:8082", help="middle office")
+    parser.add_argument("--origem-me", type=origem_http, default="http://127.0.0.1:8083", help="matching engine")
     parser.add_argument("--ticker", default="ALFA3")
     parser.add_argument("--preco", default="10.00")
     parser.add_argument("--amostras", type=int, default=200)
