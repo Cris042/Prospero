@@ -13,7 +13,12 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -24,10 +29,16 @@ import java.util.UUID;
 @ApplicationScoped
 public class RepositorioMatchingJpa implements RepositorioMatching {
     private final Instance<EntityManager> gerenciadores;
+    private final Timer boletaNegocio;
 
     @Inject
-    public RepositorioMatchingJpa(Instance<EntityManager> gerenciadores) {
+    public RepositorioMatchingJpa(Instance<EntityManager> gerenciadores, MeterRegistry metricas) {
         this.gerenciadores = gerenciadores;
+        // RNF04 (RF05d): do registro da ordem agressora até a projeção do seu primeiro negócio, no mesmo relógio.
+        this.boletaNegocio = Timer.builder("prospero.ordens.boleta_negocio")
+                .description("Recebimento da ordem agressora até a projeção do primeiro negócio")
+                .publishPercentileHistogram()
+                .serviceLevelObjectives(Duration.ofMillis(50)).register(metricas);
     }
 
     private EntityManager em() {
@@ -132,6 +143,9 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             Ordem antiga = RepositorioOrdensJpa.ordem(entidades.get(i));
             atualizadas.add(ProjetarMatching.aplicar(antiga, e, alvos.get(i), (BigDecimal) p[0], ((Number) p[1]).longValue()));
         }
+        if (e.detalhe() instanceof EventoMatching.Negocio n) {
+            medirPrimeiroNegocioDoAgressor(n, alvos, entidades);
+        }
         for (int i = 0; i < entidades.size(); i++) {
             OrdemEntity entidade = entidades.get(i);
             Ordem nova = atualizadas.get(i);
@@ -148,6 +162,17 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         }
         registrar(e);
         return true;
+    }
+
+    private void medirPrimeiroNegocioDoAgressor(EventoMatching.Negocio n, List<EventoMatching.Alvo> alvos,
+                                                List<OrdemEntity> entidades) {
+        var agressora = n.agressor() == br.prospero.fo.ordens.dominio.LadoOrdem.COMPRA ? n.compra() : n.venda();
+        for (int i = 0; i < alvos.size(); i++) {
+            OrdemEntity o = entidades.get(i);
+            if (alvos.get(i).equals(agressora) && o.quantidadeExecutada == 0 && o.recebidaEm != null) {
+                boletaNegocio.record(Duration.between(o.recebidaEm, Instant.now()));
+            }
+        }
     }
 
     private boolean repetida(String tabela, Object id, String assinatura) {

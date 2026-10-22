@@ -61,6 +61,7 @@ public class ProcessadorMatching implements HealthCheck {
     private final Counter comandos;
     private final Counter eventos;
     private final Counter falhas;
+    private final io.micrometer.core.instrument.Timer nucleo;
     private volatile boolean parar;
     private volatile String estado = "inicializando";
     private volatile KafkaConsumer<String, byte[]> consumidor;
@@ -74,6 +75,12 @@ public class ProcessadorMatching implements HealthCheck {
         comandos = metricas.counter("prospero.matching.comandos");
         eventos = metricas.counter("prospero.matching.eventos");
         falhas = metricas.counter("prospero.matching.falhas");
+        // RNF04 (RF05d): núcleo + serialização do comando, sem poll nem publicação; p99 é o critério de < 1 ms.
+        nucleo = io.micrometer.core.instrument.Timer.builder("prospero.matching.comando")
+                .description("Processamento de um comando no motor, sem I/O")
+                .publishPercentileHistogram().minimumExpectedValue(java.time.Duration.ofNanos(1_000))
+                .maximumExpectedValue(java.time.Duration.ofSeconds(1))
+                .serviceLevelObjectives(java.time.Duration.ofMillis(1)).register(metricas);
         metricas.gauge("prospero.matching.pronto", this, p -> p.estado.equals("pronto") ? 1 : 0);
     }
 
@@ -131,7 +138,9 @@ public class ProcessadorMatching implements HealthCheck {
                             int destino = Utils.toPositive(Utils.murmur2(registro.key().getBytes(StandardCharsets.UTF_8))) % 3;
                             if (destino != p.partition()) throw new IllegalArgumentException("Partição da chave divergente.");
                             LocalDate sessaoCheckpoint = SessaoMatching.sessaoDoCheckpoint(comando, sessaoPersistida);
+                            long inicio = System.nanoTime();
                             var resultado = motor.processar(comando);
+                            nucleo.record(System.nanoTime() - inicio, TimeUnit.NANOSECONDS);
                             long checkpoint = checkpoints.get(p.partition());
                             if (registro.offset() > checkpoint) {
                                 // Valida posse/conexão e identidades ANTES de qualquer publicação; erro aborta o motor inteiro.
