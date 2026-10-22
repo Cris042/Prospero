@@ -1,4 +1,41 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
+
+interface CotacaoAlfa {
+  ticker: string;
+  ultimoPreco: string | null;
+  precoReferencia: string;
+  tick: string;
+  volumeQuantidade: number | null;
+}
+
+function centavos(preco: string): bigint {
+  expect(preco).toMatch(/^\d+\.\d{2}$/);
+  return BigInt(preco.replace('.', ''));
+}
+
+function decimal(valor: bigint): string {
+  return `${valor / 100n}.${(valor % 100n).toString().padStart(2, '0')}`;
+}
+
+function faixaAtual(cotacao: CotacaoAlfa) {
+  const base = centavos(cotacao.ultimoPreco ?? cotacao.precoReferencia);
+  const tick = centavos(cotacao.tick);
+  expect(tick).toBeGreaterThan(0n);
+  const divisor = 100n * tick;
+  const minimo = ((base * 90n + divisor - 1n) / divisor) * tick;
+  const maximo = ((base * 110n) / divisor) * tick;
+  const gatilho = ((base * 95n + divisor - 1n) / divisor) * tick;
+  return { minimo, maximo, gatilho, tick };
+}
+
+async function consultarAlfa(request: APIRequestContext): Promise<CotacaoAlfa> {
+  const resposta = await request.get('/servicos/front-office/api/v1/ativos');
+  expect(resposta.status()).toBe(200);
+  const ativos: CotacaoAlfa[] = await resposta.json();
+  const alfa = ativos.find((ativo) => ativo.ticker === 'ALFA3');
+  expect(alfa).toBeDefined();
+  return alfa!;
+}
 
 test('registra ordem Limit pela boleta, sem credencial no navegador nem envio duplicado', async ({
   page,
@@ -88,15 +125,48 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
   await boleta.getByLabel('Preço limite (R$)').fill('1e3');
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
   await expect(page.getByRole('alert')).toContainText('Preço inválido');
-  await boleta.getByLabel('Preço limite (R$)').fill('12,00');
+  const faixa = faixaAtual(await consultarAlfa(page.request));
+  await boleta.getByLabel('Preço limite (R$)').fill(decimal(faixa.maximo + faixa.tick));
+  const recusa = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
+  );
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
-  await expect(page.getByRole('alert')).toContainText('Faixa aceita: 9,00 a 11,00.');
+  const respostaRecusa = await recusa;
+  expect(respostaRecusa.status()).toBe(422);
+  expect(await respostaRecusa.json()).toMatchObject({
+    codigo: 'PRECO_FORA_DO_TUNEL',
+    detalhes: { minimo: decimal(faixa.minimo), maximo: decimal(faixa.maximo) },
+  });
+  await expect(page.getByRole('alert')).toContainText(
+    `Faixa aceita: ${decimal(faixa.minimo).replace('.', ',')} a ${decimal(faixa.maximo).replace('.', ',')}.`,
+  );
 
   await page.getByRole('button', { name: 'OCO (Take Profit + Stop Loss)' }).click();
   const oco = page.getByRole('form', { name: 'Ordem OCO' });
-  await oco.getByLabel('Alvo — Take Profit (R$)').fill('11.00');
-  await oco.getByLabel('Preço de disparo (R$)').fill('9.50');
+  await oco.getByLabel('Alvo — Take Profit (R$)').fill(decimal(faixa.maximo));
+  await oco.getByLabel('Preço de disparo (R$)').fill(decimal(faixa.gatilho));
+  const respostaOco = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/ordens-oco') && r.request().method() === 'POST',
+  );
   await oco.getByRole('button', { name: 'Registrar OCO' }).click();
+  const registroOco = await respostaOco;
+  expect(registroOco.status()).toBe(202);
+  const grupoOco = await registroOco.json();
+  // A próxima prova Market100 encontra o TP100 em repouso também no projeto mobile.
+  await expect
+    .poll(
+      async () => {
+        const consulta = await page.request.get(
+          `/servicos/front-office/api/v1/ordens-oco/${grupoOco.grupoOco}`,
+        );
+        expect(consulta.status()).toBe(200);
+        const grupo = await consulta.json();
+        return grupo.ordens.find((ordem: { papelOco: string }) => ordem.papelOco === 'TAKE_PROFIT')
+          ?.estado;
+      },
+      { timeout: 15000 },
+    )
+    .toBe('ABERTA');
   await expect(page.getByRole('status')).toContainText('Take Profit: Venda 100 ALFA3');
   await expect(page.getByRole('status')).toContainText('Stop Loss: Venda 100 ALFA3');
 });
@@ -118,13 +188,41 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
     'FOK (tudo ou nada)',
   ]);
   await expect(boleta.getByLabel('Preço limite (R$)')).toHaveCount(0);
+  const antesMarket = await consultarAlfa(page.request);
+  const respostaMarket = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
+  );
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  const registroMarket = await respostaMarket;
+  expect(registroMarket.status()).toBe(202);
+  const market = await registroMarket.json();
   await expect(page.getByRole('status')).toContainText('Mercado');
+  // Consumidores de ordens e cotação são distintos: esperar ambos antes de derivar o próximo preço.
+  await expect
+    .poll(
+      async () => {
+        const resposta = await page.request.get(
+          `/servicos/front-office/api/v1/ordens/${market.id}`,
+        );
+        expect(resposta.status()).toBe(200);
+        const ordem = await resposta.json();
+        return { estado: ordem.estado, executada: ordem.quantidadeExecutada };
+      },
+      { timeout: 15000 },
+    )
+    .toEqual({ estado: 'EXECUTADA', executada: market.quantidade });
+  const volumeEsperado = BigInt(antesMarket.volumeQuantidade ?? 0) + BigInt(market.quantidade);
+  await expect
+    .poll(async () => String((await consultarAlfa(page.request)).volumeQuantidade), {
+      timeout: 15000,
+    })
+    .toBe(String(volumeEsperado));
+  const faixa = faixaAtual(await consultarAlfa(page.request));
 
   await boleta.getByLabel('Tipo').selectOption('STOP_LIMIT');
   await expect(boleta.getByLabel('Validade').locator('option')).toHaveText(['Dia']);
-  await boleta.getByLabel('Preço limite (R$)').fill('9,55');
-  await boleta.getByLabel('Preço de disparo (R$)').fill('9,50');
+  await boleta.getByLabel('Preço limite (R$)').fill(decimal(faixa.gatilho + faixa.tick));
+  await boleta.getByLabel('Preço de disparo (R$)').fill(decimal(faixa.gatilho));
   let falhou = false;
   await page.route('**/servicos/front-office/api/v1/ordens', (rota) => {
     if (rota.request().method() === 'POST' && !falhou) {
@@ -135,7 +233,17 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
   });
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
   await expect(page.getByRole('alert')).toContainText('o reenvio não duplica a ordem');
+  const respostaStopLimit = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
+  );
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  const registroStopLimit = await respostaStopLimit;
+  expect(registroStopLimit.status()).toBe(202);
+  expect(await registroStopLimit.json()).toMatchObject({
+    tipo: 'STOP_LIMIT',
+    precoLimite: decimal(faixa.gatilho + faixa.tick),
+    precoGatilho: decimal(faixa.gatilho),
+  });
   await expect(page.getByRole('status')).toContainText('Stop Limit');
   expect(chaves).toHaveLength(3);
   expect(chaves[2]).toBe(chaves[1]);
