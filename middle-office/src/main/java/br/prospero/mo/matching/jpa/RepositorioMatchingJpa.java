@@ -39,6 +39,10 @@ public class RepositorioMatchingJpa {
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void aplicar(JsonNode evento) {
+        if (texto(evento,"tipo").equals("SESSAO_ENCERRADA")) {
+            aplicarMarco(evento);
+            return;
+        }
         JsonNode d=evento.get("dados");
         boolean negocio=texto(evento,"tipo").equals("NEGOCIO");
         var contas= negocio ? java.util.stream.Stream.of(texto(d,"contaCompra"),texto(d,"contaVenda"))
@@ -46,11 +50,13 @@ public class RepositorioMatchingJpa {
         contas.distinct().sorted().forEach(c -> em().createNativeQuery("SELECT conta FROM conta_risco WHERE conta=:c FOR UPDATE").setParameter("c",c).getResultList());
         String hash=assinatura(evento);
         if (duplicado("matching_evento","id",uuid(evento,"id"),hash)) return;
+        boolean v4 = evento.get("versao").intValue() == 4;
+        if (v4) exigirCausacaoEncerramento(evento);
         exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
                 .setParameter("a",uuid(evento,"correlacao")).setParameter("t",texto(evento,"ticker"))
                 .setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList().isEmpty(),"correlacao");
         boolean v2 = evento.get("versao").intValue() >= 2;
-        if (v2) exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
+        if (v2 && !v4) exigir(!em().createNativeQuery("SELECT 1 FROM reserva WHERE admissao=:a AND ticker=:t AND data_sessao=:s")
                 .setParameter("a",uuid(evento,"causacao")).setParameter("t",texto(evento,"ticker"))
                 .setParameter("s",LocalDate.parse(texto(evento,"dataSessao"))).getResultList().isEmpty(),"causacao");
         if (negocio) {
@@ -83,7 +89,7 @@ public class RepositorioMatchingJpa {
             }
         } else {
             Reserva r=reserva(uuid(d,"intencao"));
-            validarVersao(evento,r);
+            if (!v4) validarVersao(evento,r);
             validar(r,evento,d,"");
             if (r.oco()) {
                 aplicarPerna(evento,d,r,perna(r,uuid(d,"ordem")));
@@ -109,6 +115,12 @@ public class RepositorioMatchingJpa {
                     exigir(inteiro(d,"executada",0,1000000)==r.inicial()-r.restante(),"executada");
                     exigir(inteiro(d,"cancelada",0,1000000)==r.restante(),"cancelada");
                     String motivo=texto(d,"motivo");
+                    if (motivo.equals("EXPIRADA_DIA")) {
+                        // Expira ofertas DIA e stops pendentes; libera exatamente o saldo restante.
+                        exigir(r.validade().equals("DIA"),"expiracao validade");
+                        encerrar(r);
+                        break;
+                    }
                     boolean excesso=motivo.equals("LIMITE_CASCATA");
                     exigir(!excesso || stop(r) && !r.acionada() && r.inicial()==r.restante(),"cascata");
                     exigir(!stop(r) || excesso || r.acionada(),"terminal stop nao acionado");
@@ -131,6 +143,18 @@ public class RepositorioMatchingJpa {
             }
         }
         inserir("matching_evento","id",uuid(evento,"id"),hash);
+    }
+
+    /** Marco do encerramento (v4): sem conta nem reserva; só o fato deduplicado (RF05c.4). */
+    private void aplicarMarco(JsonNode evento) {
+        exigirCausacaoEncerramento(evento);
+        exigir(uuid(evento,"correlacao").equals(uuid(evento,"causacao")),"correlacao encerramento");
+        String hash=assinatura(evento);
+        if (!duplicado("matching_evento","id",uuid(evento,"id"),hash)) inserir("matching_evento","id",uuid(evento,"id"),hash);
+    }
+
+    private static void exigirCausacaoEncerramento(JsonNode evento) {
+        exigir(uuid(evento,"causacao").equals(encerramento(texto(evento,"ticker"),texto(evento,"dataSessao"))),"causacao encerramento");
     }
 
     /** v3 exatamente quando a raiz ou um alvo é OCO; senão v2 exatamente quando há stop (ADR-013). */
@@ -223,6 +247,7 @@ public class RepositorioMatchingJpa {
                 String motivo=texto(d,"motivo");
                 Perna outra=irma(p);
                 switch (motivo) {
+                    case "EXPIRADA_DIA" -> { }
                     case "CANCELADA_OCO" -> exigir(p.takeProfit() ? outra.viva() : !outra.viva() && !p.acionada() && p.executada()==0,"cancelamento oco");
                     case "LIMITE_CASCATA" -> exigir(stopLoss && !p.acionada() && p.executada()==0 && !outra.viva(),"cascata");
                     default -> {

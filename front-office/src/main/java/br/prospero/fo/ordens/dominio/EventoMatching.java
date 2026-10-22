@@ -19,7 +19,15 @@ public record EventoMatching(UUID id, UUID correlacao, String ticker, LocalDate 
     }
 
     public sealed interface Detalhe permits Aceita, Oferta, Rejeitada, Encerrada, Negocio, StopPendente, StopAcionado,
-            Reduzida {
+            Reduzida, SessaoEncerrada {
+    }
+
+    /** Marco v4 do encerramento de um ativo/data (RF05c.4); não altera ordens. */
+    public record SessaoEncerrada(long expiradas) implements Detalhe { }
+
+    /** Causação determinística do encerramento (ADR-013 RF05c.4). */
+    public static UUID encerramento(String ticker, LocalDate sessao) {
+        return UUID.nameUUIDFromBytes(("encerramento:" + ticker + ":" + sessao).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /** Stop Loss reduzido pela execução do Take Profit (v3); restante é a nova quantidade vigente. */
