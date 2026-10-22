@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -66,14 +67,30 @@ func (r *Robo) Handler() http.Handler {
 	return m
 }
 
+func consultar(opcao string) int {
+	c := http.Client{Timeout: time.Second}
+	caminho := map[string]string{"--healthcheck": "/healthz", "--estado": "/estado"}[opcao]
+	resposta, e := c.Get("http://" + enderecoEstado + caminho)
+	if e != nil {
+		return 1
+	}
+	defer resposta.Body.Close()
+	if opcao == "--estado" {
+		_, _ = io.Copy(os.Stdout, io.LimitReader(resposta.Body, 4096))
+	}
+	if resposta.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
+}
+
+// Estado só no loopback do container: nada fora dele o alcança (sem DNS rebinding nem exposição no host).
+const enderecoEstado = "127.0.0.1:8080"
+
 func main() {
-	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
-		c := http.Client{Timeout: time.Second}
-		resposta, e := c.Get("http://127.0.0.1:8080/healthz")
-		if e != nil || resposta.StatusCode != http.StatusOK {
-			os.Exit(1)
-		}
-		return
+	// Sem porta publicada (rede interna): healthcheck e leitura do estado usam o próprio binário via exec.
+	if len(os.Args) == 2 && (os.Args[1] == "--healthcheck" || os.Args[1] == "--estado") {
+		os.Exit(consultar(os.Args[1]))
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, cliente, intervalo, e := configurar()
@@ -82,7 +99,7 @@ func main() {
 		os.Exit(1)
 	}
 	robo := &Robo{cfg: cfg, cliente: cliente, agora: time.Now, sit: Situacao{Estado: EstadoIniciando, Conta: "CONTA-004"}}
-	servidor := &http.Server{Addr: ":8080", Handler: robo.Handler(), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second,
+	servidor := &http.Server{Addr: enderecoEstado, Handler: robo.Handler(), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second,
 		WriteTimeout: 3 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8192}
 	go func() {
 		if e := servidor.ListenAndServe(); e != nil && !errors.Is(e, http.ErrServerClosed) {

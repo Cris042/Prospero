@@ -1,4 +1,4 @@
-# Opt-in (RF05d, ADR-013): docker compose -f docker-compose.yml -f docker-compose.robo.yml --profile robo up -d robo-formador
+# Opt-in (RF05d, ADR-013): docker compose -f docker-compose.yml -f docker-compose.robo.yml --profile robo up -d --wait robo-formador
 # Fala só com o FO por HTTP, com o token próprio da CONTA-004 (FO_TOKEN_ROBO); nunca passa pelo Nginx.
 services:
   front-office:
@@ -22,9 +22,8 @@ services:
     mem_limit: 64m
     cpus: 0.25
     pids_limit: 16
-    # Estado observável (GET /estado) somente em loopback; não aceita comandos.
-    ports:
-      - '127.0.0.1:${PROSPERO_ROBO_PORTA:-8091}:8080'
+    # Sem porta publicada: Docker não publica porta de rede interna. Estado só leitura via
+    # docker compose ... exec robo-formador /robo-formador --estado
     networks:
       - robo
     environment:

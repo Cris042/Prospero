@@ -213,7 +213,8 @@ const limit = (ticker, lado, quantidade, precoLimite) => ({
 }
 
 // 4. OCO de compra: uma reserva pelo maior custo (Stop 42,00 → teto 46,20 × 10 = 462,00 > alvo 38,00 × 10).
-// RF05c.3b: o par é admitido e fica vivo em DELTA3, ativo em que nenhuma prova posterior negocia.
+// RF05c.3b: o par é admitido e fica vivo em DELTA3; a única prova posterior que negocia DELTA3 (verificar-robo)
+// fica entre 39,94 e 40,06, longe dos preços e gatilhos 38,00/42,00.
 {
   const c = 'OcoReservaUnica';
   preparar(c, '1000.00', {}, 'CONTA-003');

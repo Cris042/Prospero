@@ -205,7 +205,8 @@ def verificar_risco(origem, origem_mo):
     oco = enviar({"ticker": "DELTA3", "lado": "VENDA", "quantidade": 5, "validade": "DIA",
                    "takeProfit": {"precoLimite": "42.00"}, "stopLoss": {"tipo": "STOP", "precoGatilho": "38.00"}},
                   "/api/v1/ordens-oco")
-    # RF05c.3b: o par é admitido inteiro; TP repousa e SL aguarda o gatilho (DELTA3 sem negócio que o acione).
+    # RF05c.3b: o par é admitido inteiro; TP repousa e SL aguarda o gatilho. O verificar-robo negocia DELTA3 só a 40,05,
+    # dentro de 38,00–42,00: nenhum negócio aciona o gatilho nem cruza o TP.
     limite = time.monotonic() + 20.0
     while True:
         par = aguardar_decisao(origem, tok, f"/api/v1/ordens-oco/{oco['grupoOco']}")
@@ -498,7 +499,9 @@ def verificar_matching(origem, origem_mo, projeto):
 def verificar_robo(origem, projeto):
     """RF05d.2: robô formador (CONTA-004) cota DELTA3, repõe só o nível consumido e não duplica após reinício.
 
-    DELTA3 não é usado pelas provas seguintes; o robô para ao fim, deixando as ofertas DIA para o encerramento."""
+    Verificação pelo FO (ordens da CONTA-004); /estado (via exec, sem porta publicada) só confirma o estado e os ciclos.
+    DELTA3: OCOs vivas do risco.xlsx (TP 42,00/38,00, gatilhos 38,00/42,00) ficam fora da grade 39,94–40,06 e da
+    agressão a 40,05, sem cruzar nem acionar. O robô para ao fim; as ofertas DIA ficam vivas (encerramento só de GAMA3)."""
     base = compose(projeto) + ([] if projeto else ["-f", str(RAIZ / "docker-compose.robo.yml")]) + ["--profile", "robo"]
     ambiente_robo = {**os.environ, "ROBO_ATIVOS": "DELTA3:40.00:0.01:10", "ROBO_NIVEIS": "2", "ROBO_INTERVALO_MS": "500"}
     robo_tok = token("ordens", 300, "CONTA-004")
@@ -506,49 +509,48 @@ def verificar_robo(origem, projeto):
     def ordens_robo():
         return [o for o in http("GET", origem + "/api/v1/ordens?limite=100", robo_tok)["ordens"] if o["ticker"] == "DELTA3"]
 
-    def estado(esperado, prazo=60.0, ciclos_minimos=0):
-        porta = subprocess.run(base + ["port", "robo-formador", "8080"], check=True, capture_output=True, text=True,
-                               env=ambiente_robo).stdout.strip()
+    def estado(ciclos_minimos, prazo=60.0):
         limite = time.monotonic() + prazo
         while time.monotonic() < limite:
+            saida = subprocess.run(base + ["exec", "-T", "robo-formador", "/robo-formador", "--estado"],
+                                   capture_output=True, text=True, env=ambiente_robo)
             try:
-                with urllib.request.urlopen(f"http://{porta}/estado", timeout=5) as resposta:
-                    corpo = json.load(resposta)
-                if all(corpo.get(k) == v for k, v in esperado.items()) and corpo.get("ciclos", 0) >= ciclos_minimos:
-                    return corpo
-            except (urllib.error.URLError, ConnectionError, ValueError):
-                pass
+                corpo = json.loads(saida.stdout) if saida.returncode == 0 else {}
+            except ValueError:
+                corpo = {}
+            if corpo.get("estado") == "ATIVO" and corpo.get("ciclos", 0) >= ciclos_minimos:
+                return corpo
             time.sleep(0.5)
-        raise SystemExit(f"Robô: /estado não atingiu {esperado} em {prazo:.0f} s.")
+        raise SystemExit(f"Robô: /estado não ficou ATIVO com {ciclos_minimos} ciclos em {prazo:.0f} s.")
 
-    def vivas(esperadas, prazo=30.0):
+    def vivas(esperadas, total, prazo=30.0):
         limite = time.monotonic() + prazo
+        ordens = []
         while time.monotonic() < limite:
             ordens = ordens_robo()
-            if sorted((o["lado"], o["precoLimite"]) for o in ordens if o["estado"] == "ABERTA") == esperadas:
+            if (sorted((o["lado"], o["precoLimite"]) for o in ordens if o["estado"] == "ABERTA") == esperadas
+                    and len(ordens) == total):
                 return ordens
             time.sleep(0.5)
-        raise SystemExit(f"Robô: ofertas abertas diferentes de {esperadas} em {prazo:.0f} s.")
+        raise SystemExit(f"Robô: esperadas {total} ordens com abertas {esperadas}; obtidas {len(ordens)} em {prazo:.0f} s.")
 
     niveis = [("COMPRA", "39.94"), ("COMPRA", "39.95"), ("VENDA", "40.05"), ("VENDA", "40.06")]
     try:
         # Sem --no-deps: localmente o FO pode ser recriado para entrar na rede interna do robô.
         subprocess.run(base + ["up", "-d", "--wait", "--wait-timeout", "120", "robo-formador"], check=True,
                        env=ambiente_robo)
-        estado({"estado": "ATIVO", "enviadas": 4})
-        if len(vivas(niveis)) != 4:
-            raise SystemExit("Robô: cotação inicial duplicada.")
+        estado(1)
+        vivas(niveis, 4)
         demo = token("ordens", 120, "CONTA-001")
         compra = http("POST", origem + "/api/v1/ordens", demo, {"ticker": "DELTA3", "lado": "COMPRA", "tipo": "LIMIT",
                       "validade": "IOC", "quantidade": 10, "precoLimite": "40.05"}, {"X-Idempotency-Key": "robo-" + uuid.uuid4().hex})
         aguardar_campos(origem, demo, f"/api/v1/ordens/{compra['id']}", {"estado": "EXECUTADA", "quantidadeExecutada": 10})
-        estado({"estado": "ATIVO", "enviadas": 5})
-        depois = vivas(niveis)
-        if len(depois) != 5 or sum(o["estado"] == "EXECUTADA" for o in depois) != 1:
+        depois = vivas(niveis, 5)
+        if sum(o["estado"] == "EXECUTADA" for o in depois) != 1:
             raise SystemExit("Robô: reposição deveria criar exatamente uma oferta nova no nível consumido.")
         subprocess.run(base + ["restart", "robo-formador"], check=True, env=ambiente_robo)
-        # Após o reinício o contador do processo recomeça: ciclos completos sem envio provam que nada foi duplicado.
-        estado({"estado": "ATIVO", "enviadas": 0}, ciclos_minimos=3)
+        # Ciclos completos após o reinício sem ordem nova provam que as chaves determinísticas não duplicaram.
+        estado(3)
         if len(ordens_robo()) != 5:
             raise SystemExit("Robô: reinício duplicou ofertas.")
     finally:

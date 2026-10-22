@@ -108,6 +108,14 @@ class TokenRoboTest(PrepararAmbienteTest):
         ambiente.main()
         self.assertEqual(arquivo.read_text(), ambiente.ler(self.env)["FO_TOKEN_ROBO"])
 
+    def test_symlink_no_lugar_do_diretorio_privado_falha_fechado(self):
+        alvo = Path(self.dir.name) / "alheio"
+        alvo.mkdir()
+        (self.env.parent / ".robo-local").symlink_to(alvo)
+        with self.assertRaises(SystemExit):
+            ambiente.main()
+        self.assertEqual(list(alvo.iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

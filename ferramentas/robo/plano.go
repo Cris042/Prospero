@@ -17,6 +17,10 @@ const (
 	EstadoAtivo        = "ATIVO"
 	EstadoEsgotado     = "ESGOTADO"
 	EstadoIndisponivel = "FO_INDISPONIVEL"
+	// Ofertas DIA de sessão anterior ainda vivas: não dobra exposição/reservas antes do encerramento manual.
+	EstadoAguardandoEncerramento = "AGUARDANDO_ENCERRAMENTO"
+	// 401/403: token expirado, renovado ou revogado; terminal até reiniciar com a credencial nova.
+	EstadoCredencialRecusada = "CREDENCIAL_RECUSADA"
 )
 
 // Rejeições que indicam recurso ou limite da CONTA-004 esgotado: sem recarga até a RF08, o robô para de forma limpa.
@@ -69,6 +73,9 @@ type nivel struct {
 	quantidade                  int64
 }
 
+// Nivel identifica um nível pela combinação ativo/lado/preço, a mesma usada pelas recusas síncronas.
+func Nivel(ticker, lado, preco string) string { return ticker + "|" + lado + "|" + preco }
+
 func (c Config) niveis() []nivel {
 	var todos []nivel
 	for _, a := range c.Ativos {
@@ -79,7 +86,8 @@ func (c Config) niveis() []nivel {
 				if lado == "VENDA" {
 					preco, prefixo = a.Referencia+desvio, "V"
 				}
-				todos = append(todos, nivel{a.Ticker, lado, prefixo + strconv.Itoa(k), formatar(preco), a.Quantidade})
+				// O preço entra na chave: mudar a grade na mesma sessão não reutiliza chave com corpo diferente (409).
+				todos = append(todos, nivel{a.Ticker, lado, prefixo + strconv.FormatInt(preco, 10), formatar(preco), a.Quantidade})
 			}
 		}
 	}
@@ -88,8 +96,9 @@ func (c Config) niveis() []nivel {
 
 // Planejar repõe apenas níveis sem ordem viva cuja última ordem foi executada (ou que nunca tiveram ordem).
 // A geração da chave é o número de execuções do nível na sessão: reinício reproduz as mesmas chaves e o FO
-// devolve a ordem já registrada, sem duplicar.
-func Planejar(c Config, sessao string, ordens []Ordem) Plano {
+// devolve a ordem já registrada, sem duplicar. `recusados` são níveis que o FO recusou de forma síncrona (4xx sem
+// ordem gravada), retirados na sessão como os rejeitados.
+func Planejar(c Config, sessao string, ordens []Ordem, recusados map[string]bool) Plano {
 	plano := Plano{Estado: EstadoAtivo}
 	usadas := 0
 	type historico struct {
@@ -108,7 +117,7 @@ func Planejar(c Config, sessao string, ordens []Ordem) Plano {
 		if o.Tipo != "LIMIT" || o.Validade != "DIA" {
 			continue
 		}
-		chave := o.Ticker + "|" + o.Lado + "|" + o.PrecoLimite
+		chave := Nivel(o.Ticker, o.Lado, o.PrecoLimite)
 		h := porNivel[chave]
 		if h == nil {
 			h = &historico{}
@@ -128,8 +137,8 @@ func Planejar(c Config, sessao string, ordens []Ordem) Plano {
 	}
 	compacta := strings.ReplaceAll(sessao, "-", "")
 	for _, n := range c.niveis() {
-		h := porNivel[n.ticker+"|"+n.lado+"|"+n.preco]
-		if h != nil && h.retirado && !h.vivo {
+		h := porNivel[Nivel(n.ticker, n.lado, n.preco)]
+		if (h != nil && h.retirado && !h.vivo) || (h == nil && recusados[Nivel(n.ticker, n.lado, n.preco)]) {
 			plano.Retirados++
 			continue
 		}

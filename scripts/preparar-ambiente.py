@@ -55,6 +55,9 @@ def ler(arquivo):
 def exportar_token_robo(token):
     """Bind individual do secret do robô (ADR-013): diretório privado 0700 e arquivo 0444 legível pelo UID 65532."""
     privado = path.parent / ".robo-local"
+    # Mesmo cuidado da carga: symlink ou diretório alheio no lugar do privado falha fechado.
+    if privado.is_symlink() or (privado.exists() and (not privado.is_dir() or privado.stat().st_uid != os.getuid())):
+        raise SystemExit(".robo-local precisa ser diretório próprio, sem symlink; remova-o e execute novamente.")
     privado.mkdir(mode=0o700, exist_ok=True)
     privado.chmod(0o700)
     arquivo = privado / "token"

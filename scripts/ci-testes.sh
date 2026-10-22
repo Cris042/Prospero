@@ -9,9 +9,9 @@ df -h / "${RUNNER_TEMP:-/tmp}" || true
 docker system df || true
 export PROSPERO_CI_TAG="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 project="prospero-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-# RF05d: o arquivo do robô entra desde o início (FO já na rede dele); o perfil opt-in só liga no fim, com tag/porta da execução.
+# RF05d: o arquivo do robô entra desde o início (FO já na rede dele); o perfil opt-in só liga no fim, com tag da execução.
 compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.robo.yml)
-export PROSPERO_ROBO_TAG="$PROSPERO_CI_TAG" PROSPERO_ROBO_PORTA=0
+export PROSPERO_ROBO_TAG="$PROSPERO_CI_TAG"
 compose_robo=("${compose[@]}" --profile robo)
 mkdir -p .ci-evidencias
 cleanup() {
@@ -20,7 +20,7 @@ cleanup() {
   if [ "$code" -ne 0 ]; then
     "${compose[@]}" logs --no-color --tail=80 > .ci-evidencias/compose.log 2>&1 || true
   fi
-  "${compose[@]}" down --volumes --remove-orphans || true
+  "${compose_robo[@]}" down --volumes --remove-orphans || true
   rm -rf -- "${runner_cfg:-}"
   for service in front-office middle-office matching-engine back-office frontend runner-planilhas robo-formador; do
     docker image rm "prospero/$service:$PROSPERO_CI_TAG" >/dev/null 2>&1 || true
@@ -98,7 +98,7 @@ export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 playwright_deps=()
 [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
 (cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium && npm run test:e2e)
-# RF05d.2: robô em DELTA3, que nenhuma prova seguinte usa; para ao fim e as ofertas DIA expiram no encerramento.
+# RF05d.2: robô em DELTA3, que nenhuma prova seguinte usa; para ao fim, com as ofertas DIA vivas (o encerramento é só GAMA3).
 "${compose_robo[@]}" build robo-formador
 python3 scripts/mercado.py verificar-robo --origem "$fo_origem" --projeto "$project"
 # RF05c.4: encerramento por último; o ativo passa a recusar ordens na data (uma sessão por log), não repetível.

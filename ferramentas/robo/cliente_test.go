@@ -16,13 +16,15 @@ const tokenTeste = "token-de-teste-com-mais-de-vinte"
 
 // foFalso guarda ordens como o FO: POST idempotente por chave, listagem mais recentes primeiro, teto por sessão.
 type foFalso struct {
-	mu      sync.Mutex
-	ordens  []Ordem
-	chaves  map[string]bool
-	posts   int
-	teto    int
-	status  int
-	cabecas []http.Header
+	mu         sync.Mutex
+	ordens     []Ordem
+	chaves     map[string]bool
+	posts      int
+	teto       int
+	status     int
+	statusPost int
+	sessao     string
+	cabecas    []http.Header
 }
 
 func (f *foFalso) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +58,10 @@ func (f *foFalso) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ordens": lista[inicio:fim], "proximoCursor": cursor})
 	case http.MethodPost:
 		f.posts++
+		if f.statusPost != 0 {
+			w.WriteHeader(f.statusPost)
+			return
+		}
 		var corpo map[string]any
 		dados, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(dados, &corpo)
@@ -67,10 +73,17 @@ func (f *foFalso) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			f.chaves[chave] = true
 			f.ordens = append(f.ordens, Ordem{Ticker: corpo["ticker"].(string), Lado: corpo["lado"].(string), Tipo: "LIMIT",
-				Validade: "DIA", PrecoLimite: corpo["precoLimite"].(string), Estado: "ABERTA", DataSessao: "2026-10-22"})
+				Validade: "DIA", PrecoLimite: corpo["precoLimite"].(string), Estado: "ABERTA", DataSessao: f.diaSessao()})
 		}
 		w.WriteHeader(http.StatusAccepted)
 	}
+}
+
+func (f *foFalso) diaSessao() string {
+	if f.sessao == "" {
+		return "2026-10-22"
+	}
+	return f.sessao
 }
 
 func roboContra(t *testing.T, f *foFalso) *Robo {
@@ -107,8 +120,8 @@ func TestCicloCotaUmaVezEReinicioNaoDuplica(t *testing.T) {
 		t.Fatalf("reposição única; o outro robô vê o nível vivo: ordens=%d posts=%d", len(f.ordens), f.posts)
 	}
 	// Reenvio após falha entre o POST e a leitura usa a mesma chave: o FO devolve a ordem existente.
-	plano := Planejar(cfgTeste, "2026-10-22", append([]Ordem(nil), f.ordens[:4]...))
-	if len(plano.Envios) != 1 || plano.Envios[0].Chave != "robo-20261022-ALFA3-V0-1" {
+	plano := Planejar(cfgTeste, "2026-10-22", append([]Ordem(nil), f.ordens[:4]...), nil)
+	if len(plano.Envios) != 1 || plano.Envios[0].Chave != "robo-20261022-ALFA3-V1005-1" {
 		t.Fatalf("%+v", plano.Envios)
 	}
 	if _, e := r.cliente.Enviar(context.Background(), plano.Envios[0]); e != nil || len(f.ordens) != 5 {
@@ -187,5 +200,65 @@ func TestEstadoExpostoSemToken(t *testing.T) {
 	r.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/estado", nil))
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("somente GET: %d", w.Code)
+	}
+}
+
+func TestRecusaSincronaNaoSeRepeteACadaCiclo(t *testing.T) {
+	f := &foFalso{statusPost: http.StatusUnprocessableEntity}
+	r := roboContra(t, f)
+	r.Ciclo(context.Background())
+	r.Ciclo(context.Background())
+	if f.posts != 4 || r.Situacao().Recusadas != 4 || r.Situacao().NiveisRetirados != 4 || r.Situacao().Estado != EstadoAtivo {
+		t.Fatalf("422/409 retira o nível na sessão: posts=%d %+v", f.posts, r.Situacao())
+	}
+}
+
+func TestCredencialRecusadaETerminal(t *testing.T) {
+	f := &foFalso{status: http.StatusUnauthorized}
+	r := roboContra(t, f)
+	r.Ciclo(context.Background())
+	f.status = 0
+	r.Ciclo(context.Background())
+	if r.Situacao().Estado != EstadoCredencialRecusada || f.posts != 0 {
+		t.Fatalf("401 para de vez, sem martelar o FO: %+v posts=%d", r.Situacao(), f.posts)
+	}
+}
+
+func TestOfertaVivaDaSessaoAnteriorImpedeNovaGrade(t *testing.T) {
+	f := &foFalso{sessao: "2026-10-21"}
+	r := roboContra(t, f)
+	r.agora = func() time.Time { return time.Date(2026, 10, 22, 2, 59, 0, 0, time.UTC) } // 23:59 de 21/10 em São Paulo
+	r.Ciclo(context.Background())
+	if len(f.ordens) != 4 || r.Situacao().Sessao != "2026-10-21" {
+		t.Fatalf("cota a sessão local de São Paulo: %+v", r.Situacao())
+	}
+	r.agora = func() time.Time { return time.Date(2026, 10, 22, 3, 1, 0, 0, time.UTC) } // 00:01 de 22/10
+	r.Ciclo(context.Background())
+	if len(f.ordens) != 4 || r.Situacao().Estado != EstadoAguardandoEncerramento {
+		t.Fatalf("não dobra exposição antes do encerramento: ordens=%d %+v", len(f.ordens), r.Situacao())
+	}
+	for i := range f.ordens {
+		f.ordens[i].Estado = "CANCELADA"
+	}
+	f.sessao = "2026-10-22"
+	r.Ciclo(context.Background())
+	if len(f.ordens) != 8 || r.Situacao().Estado != EstadoAtivo || r.Situacao().Sessao != "2026-10-22" {
+		t.Fatalf("após a expiração cota a nova sessão: ordens=%d %+v", len(f.ordens), r.Situacao())
+	}
+}
+
+func TestEsgotadoDuraAteAViradaDaSessao(t *testing.T) {
+	f := &foFalso{teto: 1}
+	r := roboContra(t, f)
+	r.Ciclo(context.Background())
+	if r.Situacao().Estado != EstadoEsgotado {
+		t.Fatalf("%+v", r.Situacao())
+	}
+	f.teto, f.sessao = 0, "2026-10-23"
+	f.ordens[0].Estado = "CANCELADA"
+	r.agora = func() time.Time { return time.Date(2026, 10, 23, 15, 0, 0, 0, time.UTC) }
+	r.Ciclo(context.Background())
+	if r.Situacao().Estado != EstadoAtivo || r.Situacao().Sessao != "2026-10-23" {
+		t.Fatalf("nova sessão tem novo orçamento: %+v", r.Situacao())
 	}
 }

@@ -379,10 +379,10 @@ O controle da ferramenta usa JWT com **HS256 fixado pelo servidor**: rejeita `no
 ```bash
 python3 scripts/preparar-ambiente.py   # gera FO_TOKEN_ROBO e .robo-local/token
 docker compose -f docker-compose.yml -f docker-compose.robo.yml --profile robo up -d --wait robo-formador
-curl -s 127.0.0.1:8091/estado          # ATIVO, ESGOTADO ou FO_INDISPONIVEL e contadores
+docker compose -f docker-compose.yml -f docker-compose.robo.yml --profile robo exec robo-formador /robo-formador --estado
 ```
 
-`ROBO_ATIVOS` (`TICKER:REFERENCIA:TICK:QUANTIDADE`, padrão `ALFA3:10.00:0.01:100`), `ROBO_NIVEIS`, `ROBO_DISTANCIA_TICKS`, `ROBO_PASSO_TICKS` e `ROBO_INTERVALO_MS` ajustam a grade. O FO entra na rede interna do robô; ao incluir o arquivo pela primeira vez, ele é recriado. Ao atingir o teto de 1000 ordens da sessão ou falta de saldo/custódia, o robô para em `ESGOTADO`, sem recarga até a RF08. As ofertas DIA expiram no encerramento manual da sessão. [Regras e limites](docs/adrs/ADR-013-matching-execucao.md#detalhamento-técnico-do-robô--rf05d2-2026-10-22).
+`ROBO_ATIVOS` (`TICKER:REFERENCIA:TICK:QUANTIDADE`, padrão `ALFA3:10.00:0.01:100`), `ROBO_NIVEIS`, `ROBO_DISTANCIA_TICKS`, `ROBO_PASSO_TICKS` e `ROBO_INTERVALO_MS` ajustam a grade. O estado (`ATIVO`, `ESGOTADO`, `AGUARDANDO_ENCERRAMENTO`, `FO_INDISPONIVEL` ou `CREDENCIAL_RECUSADA`) e os contadores saem só pelo `exec`, sem porta publicada: o robô vive numa rede interna compartilhada apenas com o FO, que é recriado na primeira inclusão do arquivo. Ao atingir o teto de 1000 ordens da sessão ou faltar saldo/custódia, para em `ESGOTADO` até a sessão seguinte, sem recarga até a RF08. Ofertas DIA vivas de sessão anterior bloqueiam a nova grade até o encerramento manual. Após renovar o token (`preparar-ambiente.py`), reinicie o container. [Regras e limites](docs/adrs/ADR-013-matching-execucao.md#detalhamento-técnico-do-robô--rf05d2-2026-10-22).
 
 ### Destaque: durabilidade custa I/O — medir fsync antes de dimensionar
 

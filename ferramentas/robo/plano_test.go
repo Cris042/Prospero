@@ -13,12 +13,12 @@ func ordem(lado, preco, estado string, sessao string) Ordem {
 }
 
 func TestPlanoInicialCotaTodosOsNiveisEmOrdemDeterministica(t *testing.T) {
-	p := Planejar(cfgTeste, "2026-10-22", nil)
+	p := Planejar(cfgTeste, "2026-10-22", nil, nil)
 	esperado := []Envio{
-		{Chave: "robo-20261022-ALFA3-C0-0", Ticker: "ALFA3", Lado: "COMPRA", Preco: "9.95", Quantidade: 100},
-		{Chave: "robo-20261022-ALFA3-C1-0", Ticker: "ALFA3", Lado: "COMPRA", Preco: "9.94", Quantidade: 100},
-		{Chave: "robo-20261022-ALFA3-V0-0", Ticker: "ALFA3", Lado: "VENDA", Preco: "10.05", Quantidade: 100},
-		{Chave: "robo-20261022-ALFA3-V1-0", Ticker: "ALFA3", Lado: "VENDA", Preco: "10.06", Quantidade: 100},
+		{Chave: "robo-20261022-ALFA3-C995-0", Ticker: "ALFA3", Lado: "COMPRA", Preco: "9.95", Quantidade: 100},
+		{Chave: "robo-20261022-ALFA3-C994-0", Ticker: "ALFA3", Lado: "COMPRA", Preco: "9.94", Quantidade: 100},
+		{Chave: "robo-20261022-ALFA3-V1005-0", Ticker: "ALFA3", Lado: "VENDA", Preco: "10.05", Quantidade: 100},
+		{Chave: "robo-20261022-ALFA3-V1006-0", Ticker: "ALFA3", Lado: "VENDA", Preco: "10.06", Quantidade: 100},
 	}
 	if !reflect.DeepEqual(p.Envios, esperado) || p.Estado != EstadoAtivo {
 		t.Fatalf("plano inesperado: %+v", p)
@@ -29,7 +29,7 @@ func TestPlanoInicialCotaTodosOsNiveisEmOrdemDeterministica(t *testing.T) {
 			t.Fatalf("chave fora do contrato do FO: %s", e.Chave)
 		}
 	}
-	if !reflect.DeepEqual(Planejar(cfgTeste, "2026-10-22", nil), p) {
+	if !reflect.DeepEqual(Planejar(cfgTeste, "2026-10-22", nil, nil), p) {
 		t.Fatal("mesmo estado deve gerar o mesmo plano")
 	}
 }
@@ -42,8 +42,8 @@ func TestNivelVivoNaoERepostoEConsumidoRepoeComNovaGeracao(t *testing.T) {
 		ordem("VENDA", "10.05", "EXECUTADA", "2026-10-22"),
 		ordem("VENDA", "10.06", "RECEBIDA", "2026-10-22"),
 	}
-	p := Planejar(cfgTeste, "2026-10-22", ordens)
-	esperado := []Envio{{Chave: "robo-20261022-ALFA3-V0-2", Ticker: "ALFA3", Lado: "VENDA", Preco: "10.05", Quantidade: 100}}
+	p := Planejar(cfgTeste, "2026-10-22", ordens, nil)
+	esperado := []Envio{{Chave: "robo-20261022-ALFA3-V1005-2", Ticker: "ALFA3", Lado: "VENDA", Preco: "10.05", Quantidade: 100}}
 	if !reflect.DeepEqual(p.Envios, esperado) {
 		t.Fatalf("somente o nível consumido volta, com geração 2: %+v", p.Envios)
 	}
@@ -56,7 +56,7 @@ func TestCanceladaOuRejeitadaRetiraONivelSemReposicao(t *testing.T) {
 		ordem("VENDA", "10.05", "ABERTA", "2026-10-22"),
 		ordem("VENDA", "10.06", "ABERTA", "2026-10-22"),
 	}
-	p := Planejar(cfgTeste, "2026-10-22", ordens)
+	p := Planejar(cfgTeste, "2026-10-22", ordens, nil)
 	if len(p.Envios) != 0 || p.Retirados != 2 || p.Estado != EstadoAtivo {
 		t.Fatalf("níveis expirados/rejeitados não voltam: %+v", p)
 	}
@@ -66,7 +66,7 @@ func TestRejeicaoPorRecursoOuLimiteEsgotaORobo(t *testing.T) {
 	for _, motivo := range []string{"SALDO_INSUFICIENTE", "CUSTODIA_INSUFICIENTE", "LIMITE_ORDENS_ATIVAS"} {
 		o := ordem("COMPRA", "9.95", "REJEITADA", "2026-10-22")
 		o.MotivoRejeicao = motivo
-		p := Planejar(cfgTeste, "2026-10-22", []Ordem{o})
+		p := Planejar(cfgTeste, "2026-10-22", []Ordem{o}, nil)
 		if p.Estado != EstadoEsgotado || len(p.Envios) != 0 {
 			t.Fatalf("%s deve esgotar sem novos envios: %+v", motivo, p)
 		}
@@ -78,15 +78,15 @@ func TestOrcamentoDeOrdensDaSessaoLimitaEnviosEEsgota(t *testing.T) {
 	for len(ordens) < LimiteOrdensSessao-1 {
 		ordens = append(ordens, ordem("COMPRA", "1.00", "CANCELADA", "2026-10-22"))
 	}
-	p := Planejar(cfgTeste, "2026-10-22", ordens)
-	if len(p.Envios) != 1 || p.Envios[0].Chave != "robo-20261022-ALFA3-C0-0" || p.Estado != EstadoEsgotado {
+	p := Planejar(cfgTeste, "2026-10-22", ordens, nil)
+	if len(p.Envios) != 1 || p.Envios[0].Chave != "robo-20261022-ALFA3-C995-0" || p.Estado != EstadoEsgotado {
 		t.Fatalf("restava uma ordem no orçamento: %+v", p)
 	}
 }
 
 func TestOrdensDeOutraSessaoSaoIgnoradas(t *testing.T) {
 	ordens := []Ordem{ordem("COMPRA", "9.95", "ABERTA", "2026-10-21"), ordem("COMPRA", "9.95", "REJEITADA", "2026-10-21")}
-	p := Planejar(cfgTeste, "2026-10-22", ordens)
+	p := Planejar(cfgTeste, "2026-10-22", ordens, nil)
 	if len(p.Envios) != 4 || p.Estado != EstadoAtivo {
 		t.Fatalf("sessão anterior não conta: %+v", p)
 	}
@@ -119,5 +119,25 @@ func TestConfiguracaoDeAtivosValidaEDentroDosLimites(t *testing.T) {
 	}
 	if e := (Config{Niveis: 2, DistanciaTicks: 900, PassoTicks: 1, Ativos: a}).validar(); e == nil {
 		t.Fatal("preço da compra precisa ficar positivo")
+	}
+}
+
+func TestRecusaSincronaRetiraSoONivelRecusadoNaSessao(t *testing.T) {
+	p := Planejar(cfgTeste, "2026-10-22", nil, map[string]bool{Nivel("ALFA3", "VENDA", "10.05"): true})
+	if len(p.Envios) != 3 || p.Retirados != 1 {
+		t.Fatalf("nível recusado com 422/409 não volta a cada ciclo: %+v", p)
+	}
+}
+
+func TestMudarAGradeNaSessaoGeraChavesNovas(t *testing.T) {
+	outra := cfgTeste
+	outra.DistanciaTicks = 7
+	a, b := Planejar(cfgTeste, "2026-10-22", nil, nil), Planejar(outra, "2026-10-22", nil, nil)
+	for _, x := range a.Envios {
+		for _, y := range b.Envios {
+			if x.Chave == y.Chave && x.Preco != y.Preco {
+				t.Fatalf("mesma chave com corpo diferente geraria 409: %s", x.Chave)
+			}
+		}
 	}
 }

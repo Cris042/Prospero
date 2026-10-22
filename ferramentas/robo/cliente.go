@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -19,7 +18,10 @@ const (
 	paginasMaximo = LimiteOrdensSessao/100 + 1
 )
 
-var errIndisponivel = errors.New("front office indisponivel")
+var (
+	errIndisponivel = errors.New("front office indisponivel")
+	errCredencial   = errors.New("FO recusou a credencial do robo")
+)
 
 // Cliente fala só com o FO, com o token da CONTA-004; não segue redirecionamentos nem lê respostas ilimitadas.
 type Cliente struct {
@@ -63,9 +65,16 @@ func (c *Cliente) pedir(ctx context.Context, metodo, caminho string, corpo []byt
 	return resposta.StatusCode, dados, nil
 }
 
-// OrdensDaSessao percorre as páginas (mais recentes primeiro) até a primeira ordem de sessão anterior.
-func (c *Cliente) OrdensDaSessao(ctx context.Context, sessao string) ([]Ordem, error) {
-	var todas []Ordem
+// Observacao é o que o FO mostra da CONTA-004: ordens da sessão e se há oferta viva de sessão anterior.
+type Observacao struct {
+	Ordens          []Ordem
+	AnterioresVivas bool
+}
+
+// OrdensDaSessao percorre as páginas (mais recentes primeiro) dentro do orçamento de páginas; ordens de sessão
+// anterior só são inspecionadas para detectar ofertas ainda vivas.
+func (c *Cliente) OrdensDaSessao(ctx context.Context, sessao string) (Observacao, error) {
+	var obs Observacao
 	cursor := ""
 	for pagina := 0; pagina < paginasMaximo; pagina++ {
 		caminho := "/api/v1/ordens?limite=100"
@@ -73,31 +82,36 @@ func (c *Cliente) OrdensDaSessao(ctx context.Context, sessao string) ([]Ordem, e
 			caminho += "&cursor=" + url.QueryEscape(cursor)
 		}
 		status, dados, e := c.pedir(ctx, http.MethodGet, caminho, nil, "")
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			return obs, errCredencial
+		}
 		if e != nil || status != http.StatusOK {
-			return nil, errIndisponivel
+			return obs, errIndisponivel
 		}
 		var p struct {
 			Ordens        []Ordem `json:"ordens"`
 			ProximoCursor *string `json:"proximoCursor"`
 		}
 		if json.Unmarshal(dados, &p) != nil {
-			return nil, errIndisponivel
+			return obs, errIndisponivel
 		}
 		for _, o := range p.Ordens {
-			if o.DataSessao < sessao {
-				return todas, nil
+			switch {
+			case o.DataSessao == sessao:
+				obs.Ordens = append(obs.Ordens, o)
+			case o.DataSessao < sessao && vivos[o.Estado]:
+				obs.AnterioresVivas = true
 			}
-			todas = append(todas, o)
 		}
-		if p.ProximoCursor == nil {
-			return todas, nil
+		if p.ProximoCursor == nil || obs.AnterioresVivas {
+			return obs, nil
 		}
 		cursor = *p.ProximoCursor
 	}
-	return todas, nil
+	return obs, nil
 }
 
-// Resultado de um envio: aceito (202), recusado pelo contrato (4xx sem efeito) ou limite da sessão (429).
+// Resultado de um envio: aceito (202), recusado pelo contrato (4xx sem ordem gravada) ou limite da sessão (429).
 type Resultado int
 
 const (
@@ -118,7 +132,7 @@ func (c *Cliente) Enviar(ctx context.Context, e Envio) (Resultado, error) {
 	case status == http.StatusTooManyRequests:
 		return LimiteSessao, nil
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return Recusado, fmt.Errorf("FO recusou a credencial do robo (HTTP %d)", status)
+		return Recusado, errCredencial
 	default:
 		return Recusado, nil
 	}
@@ -140,12 +154,14 @@ type Situacao struct {
 type Robo struct {
 	cfg     Config
 	cliente interface {
-		OrdensDaSessao(context.Context, string) ([]Ordem, error)
+		OrdensDaSessao(context.Context, string) (Observacao, error)
 		Enviar(context.Context, Envio) (Resultado, error)
 	}
 	agora func() time.Time
-	mu    sync.Mutex
-	sit   Situacao
+	// Níveis recusados de forma síncrona na sessão corrente; zerados na virada da sessão.
+	recusados map[string]bool
+	mu        sync.Mutex
+	sit       Situacao
 }
 
 func (r *Robo) Situacao() Situacao {
@@ -160,25 +176,39 @@ func (r *Robo) atualizar(f func(*Situacao)) {
 	f(&r.sit)
 }
 
-// Ciclo observa o FO, planeja e envia; ESGOTADO é terminal até o processo reiniciar.
+// Ciclo observa o FO, planeja e envia. ESGOTADO vale até a virada da sessão; CREDENCIAL_RECUSADA até reiniciar.
 func (r *Robo) Ciclo(ctx context.Context) {
-	if r.Situacao().Estado == EstadoEsgotado {
-		return
-	}
 	momento := r.agora()
 	sessao := momento.In(saoPaulo).Format(time.DateOnly)
-	ordens, e := r.cliente.OrdensDaSessao(ctx, sessao)
-	if e != nil {
-		r.atualizar(func(s *Situacao) { s.Estado, s.UltimoErro = EstadoIndisponivel, e.Error() })
+	anterior := r.Situacao()
+	if anterior.Estado == EstadoCredencialRecusada || (anterior.Estado == EstadoEsgotado && anterior.Sessao == sessao) {
 		return
 	}
-	plano := Planejar(r.cfg, sessao, ordens)
+	if anterior.Sessao != sessao {
+		r.recusados = map[string]bool{}
+	}
+	obs, e := r.cliente.OrdensDaSessao(ctx, sessao)
+	if e != nil {
+		estado := EstadoIndisponivel
+		if errors.Is(e, errCredencial) {
+			estado = EstadoCredencialRecusada
+		}
+		r.atualizar(func(s *Situacao) { s.Estado, s.UltimoErro = estado, e.Error() })
+		return
+	}
+	plano := Plano{Estado: EstadoAguardandoEncerramento}
+	if !obs.AnterioresVivas {
+		plano = Planejar(r.cfg, sessao, obs.Ordens, r.recusados)
+	}
 	estado, erro := plano.Estado, ""
 	var enviadas, recusadas int64
 envios:
 	for _, envio := range plano.Envios {
 		resultado, e := r.cliente.Enviar(ctx, envio)
 		switch {
+		case errors.Is(e, errCredencial):
+			estado, erro = EstadoCredencialRecusada, e.Error()
+			break envios
 		case e != nil:
 			estado, erro = EstadoIndisponivel, e.Error()
 			break envios
@@ -189,6 +219,7 @@ envios:
 			enviadas++
 		default:
 			recusadas++
+			r.recusados[Nivel(envio.Ticker, envio.Lado, envio.Preco)] = true
 		}
 	}
 	r.atualizar(func(s *Situacao) {
