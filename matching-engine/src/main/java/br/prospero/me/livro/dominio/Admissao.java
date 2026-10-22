@@ -25,6 +25,39 @@ public record Admissao(UUID ordem, UUID intencao, String conta, String ticker, L
                 precoGatilho, sessao);
     }
 
+    /**
+     * Combinação tipo × validade × preços × lado (ADR-010/013): Market nunca DIA; stops só DIA; cada tipo com
+     * exatamente os preços que lhe cabem; preço máximo só na compra; Stop Limit com limite do lado certo do gatilho
+     * (compra: limite ≥ gatilho; venda: limite ≤ gatilho). Fonte única para o parser do comando e para o núcleo.
+     */
+    public boolean combinacaoValida() {
+        boolean compra = lado == Lado.COMPRA;
+        if ((tipo == TipoOrdem.MARKET && validade == Validade.DIA) || (tipo.stop() && validade != Validade.DIA)
+                || tipo.comLimite() != (precoLimite != null) || tipo.stop() != (precoGatilho != null)
+                || compra != (precoMaximo != null)) {
+            return false;
+        }
+        if (tipo != TipoOrdem.STOP_LIMIT) {
+            return true;
+        }
+        int comparacao = precoLimite.compareTo(precoGatilho);
+        return compra ? comparacao >= 0 : comparacao <= 0;
+    }
+
+    /** Compra com limite acima do preço unitário máximo reservado; pressupõe {@link #combinacaoValida()}. */
+    public boolean limiteAcimaDaReserva() {
+        return lado == Lado.COMPRA && tipo.comLimite() && precoLimite.compareTo(precoMaximo) > 0;
+    }
+
+    /** OCO (ADR-010): alvo deste Take Profit além do gatilho do Stop Loss — venda acima, compra abaixo. */
+    public boolean alvoAlemDoGatilho(Admissao stopLoss) {
+        if (precoLimite == null || stopLoss.precoGatilho == null) {
+            return false;
+        }
+        int comparacao = precoLimite.compareTo(stopLoss.precoGatilho);
+        return lado == Lado.VENDA ? comparacao > 0 : comparacao < 0;
+    }
+
     public Admissao {
         Objects.requireNonNull(ordem);
         Objects.requireNonNull(intencao);

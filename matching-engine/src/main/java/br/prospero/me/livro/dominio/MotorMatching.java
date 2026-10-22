@@ -171,14 +171,10 @@ public final class MotorMatching {
 
     /** Guardas do par (ADR-010) e de cada perna; vagas do par inteiro, conservadoras para o Stop Loss. */
     private static MotivoRejeicao recusaPar(Admissao tp, Admissao sl, EstadoAtivo e, ParametrosAtivo p) {
-        boolean venda = tp.lado() == Lado.VENDA;
         if (!tp.conta().equals(sl.conta()) || !tp.intencao().equals(sl.intencao()) || !tp.ticker().equals(sl.ticker())
                 || tp.lado() != sl.lado() || tp.quantidade() != sl.quantidade() || !tp.sessao().equals(sl.sessao())
                 || tp.tipo() != TipoOrdem.LIMIT || tp.validade() != Validade.DIA || !sl.tipo().stop()
-                || !mesmoPreco(tp.precoMaximo(), sl.precoMaximo())
-                || tp.precoLimite() == null || sl.precoGatilho() == null
-                || (venda ? tp.precoLimite().compareTo(sl.precoGatilho()) <= 0
-                          : tp.precoLimite().compareTo(sl.precoGatilho()) >= 0)) {
+                || !mesmoPreco(tp.precoMaximo(), sl.precoMaximo()) || !tp.alvoAlemDoGatilho(sl)) {
             return MotivoRejeicao.COMBINACAO_INVALIDA;
         }
         MotivoRejeicao recusa = recusa(tp, e, p);
@@ -344,27 +340,16 @@ public final class MotorMatching {
                 || !precoValido(a.precoGatilho(), p)) {
             return MotivoRejeicao.PRECO_INVALIDO;
         }
-        boolean market = a.tipo() == TipoOrdem.MARKET;
-        boolean stop = a.tipo().stop();
-        boolean limit = a.tipo().comLimite();
-        boolean compra = a.lado() == Lado.COMPRA;
-        if ((market && a.validade() == Validade.DIA) || (stop && a.validade() != Validade.DIA)
-                || limit != (a.precoLimite() != null) || stop != (a.precoGatilho() != null)
-                || compra != (a.precoMaximo() != null)) {
+        if (!a.combinacaoValida()) {
             return MotivoRejeicao.COMBINACAO_INVALIDA;
         }
-        if (a.tipo() == TipoOrdem.STOP_LIMIT && (compra
-                ? a.precoLimite().compareTo(a.precoGatilho()) < 0
-                : a.precoLimite().compareTo(a.precoGatilho()) > 0)) {
-            return MotivoRejeicao.COMBINACAO_INVALIDA;
-        }
-        if (compra && limit && a.precoLimite().compareTo(a.precoMaximo()) > 0) {
+        if (a.limiteAcimaDaReserva()) {
             return MotivoRejeicao.PRECO_ACIMA_DA_RESERVA;
         }
         if (e.ativas(a.conta()) >= MAX_ORDENS_ATIVAS_POR_CONTA) {
             return MotivoRejeicao.LIMITE_ORDENS_ATIVAS;
         }
-        if (stop && !StopsPendentes.acionavel(a, e.ultimo) && e.stops.quantidade() >= MAX_STOPS_PENDENTES) {
+        if (a.tipo().stop() && !StopsPendentes.acionavel(a, e.ultimo) && e.stops.quantidade() >= MAX_STOPS_PENDENTES) {
             return MotivoRejeicao.LIMITE_STOPS_PENDENTES;
         }
         return null;

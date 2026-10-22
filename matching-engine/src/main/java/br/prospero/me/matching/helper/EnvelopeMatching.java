@@ -101,14 +101,7 @@ public final class EnvelopeMatching {
                     TipoOrdem.valueOf(tipo), Validade.valueOf(texto(dados, "validade")), q.longValue(),
                     preco(dados, "precoLimite"), preco(dados, "precoMaximo"),
                     stop ? preco(dados, "precoGatilho") : null, LocalDate.parse(data));
-            boolean compra = a.lado() == Lado.COMPRA, limit = a.tipo().comLimite();
-            if (limit != (a.precoLimite() != null) || compra != (a.precoMaximo() != null)
-                    || (stop && (a.precoGatilho() == null || a.validade() != Validade.DIA))
-                    || (!stop && !limit && a.validade() == Validade.DIA)
-                    || (a.tipo() == TipoOrdem.STOP_LIMIT && (compra
-                        ? a.precoLimite().compareTo(a.precoGatilho()) < 0
-                        : a.precoLimite().compareTo(a.precoGatilho()) > 0))
-                    || (compra && limit && a.precoLimite().compareTo(a.precoMaximo()) > 0)) throw invalido();
+            if (!admissivel(a)) throw invalido();
             return new Comando(id, ocorrido, trace, a);
         } catch (Exception erro) {
             // Não incluir conteúdo, IDs ou exceções de parser no diagnóstico.
@@ -142,17 +135,15 @@ public final class EnvelopeMatching {
         TipoOrdem tipoStop = TipoOrdem.valueOf(texto(sl, "tipo"));
         BigDecimal alvo = preco(tp, "precoLimite"), limiteStop = preco(sl, "precoLimite"), gatilho = preco(sl, "precoGatilho");
         UUID ordemTp = uuid(tp, "ordem"), ordemSl = uuid(sl, "ordem");
-        if (alvo == null || gatilho == null || ordemTp.equals(ordemSl)
-                || (tipoStop == TipoOrdem.STOP_LIMIT) != (limiteStop != null)
-                || (compra ? alvo.compareTo(gatilho) >= 0 : alvo.compareTo(gatilho) <= 0)
-                || (limiteStop != null && (compra ? limiteStop.compareTo(gatilho) < 0 : limiteStop.compareTo(gatilho) > 0))
-                || (compra && (alvo.compareTo(maximo) > 0 || limiteStop != null && limiteStop.compareTo(maximo) > 0))) {
-            throw invalido();
-        }
         Admissao takeProfit = new Admissao(ordemTp, intencao, conta, ticker, lado, TipoOrdem.LIMIT, Validade.DIA, q,
                 alvo, maximo, null, sessao);
         Admissao stopLoss = new Admissao(ordemSl, intencao, conta, ticker, lado, tipoStop, Validade.DIA, q,
                 limiteStop, maximo, gatilho, sessao);
+        // Mesmas guardas do núcleo (Admissao): o par admitido nunca é recusado por combinação no MotorMatching.
+        if (ordemTp.equals(ordemSl) || !admissivel(takeProfit) || !admissivel(stopLoss)
+                || !takeProfit.alvoAlemDoGatilho(stopLoss)) {
+            throw invalido();
+        }
         return new Comando(id, ocorrido, trace, takeProfit, stopLoss);
     }
 
@@ -196,6 +187,11 @@ public final class EnvelopeMatching {
         raiz.putObject("dados").put("expiradas", expiradas);
         raiz.put("tipo", "SESSAO_ENCERRADA");
         return raiz.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** Combinação válida e limite dentro da reserva: o envelope rejeita o que o núcleo recusaria por combinação. */
+    private static boolean admissivel(Admissao admissao) {
+        return admissao.combinacaoValida() && !admissao.limiteAcimaDaReserva();
     }
 
     private static long quantidade(JsonNode no) {
