@@ -212,7 +212,8 @@ class VerificarQualidadeTest(unittest.TestCase):
         relatorio = self.analisar()
         self.assertEqual([(a["nivel"], a["regra"], a["valor"]) for a in relatorio["achados"]],
                          [("alerta", "metodo_complexidade", 13)])
-        self.assertTrue(any("extrair método" in s["acao"] for s in relatorio["quando_abstrair"]))
+        self.assertFalse(any("extrair método" in s["acao"] for s in relatorio["quando_abstrair"]),
+                         "alerta não sugere abstração; só falha")
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(qualidade.main(["--raiz", self.raiz, "--gate", "--sem-git"]), 0)
             config = Path(self.raiz, "q.json")
@@ -251,6 +252,16 @@ class VerificarQualidadeTest(unittest.TestCase):
         self.assertTrue(any("revisar fronteira" in s["acao"] for s in relatorio["quando_abstrair"]))
         self.assertIsNone(self.analisar(git=False)["mudanca_conjunta"])
 
+
+class CasosLimiteQa(unittest.TestCase):
+    def test_text_block_com_aspas_escapadas_nao_esconde_o_arquivo(self):
+        limpo = qualidade.limpar('class T { String s = """\n  a \\""" b """; int z() { if (x) {} return 0; } }')
+        self.assertIn("int z()", limpo)
+        self.assertIn("if (x)", limpo)
+
+    def test_raiz_inexistente_retorna_erro(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(qualidade.main(["--raiz", "/nao/existe/prospero", "--sem-git"]), 2)
 
 if __name__ == "__main__":
     unittest.main()

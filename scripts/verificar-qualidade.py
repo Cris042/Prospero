@@ -53,8 +53,7 @@ def limpar(fonte):
             j = n if j < 0 else j + 2
             saida.append(branco(fonte[i:j]))
         elif fonte.startswith('"""', i):
-            j = fonte.find('"""', i + 3)
-            j = n if j < 0 else j + 3
+            j = fecha_text_block(fonte, i + 3)
             saida.append('"' + branco(fonte[i + 1:j - 1]) + '"')
         elif fonte[i] in "\"'":
             aspa, j = fonte[i], i + 1
@@ -70,6 +69,21 @@ def limpar(fonte):
             saida.append(fonte[i])
         i = j
     return "".join(saida)
+
+
+def fecha_text_block(fonte, inicio):
+    """Fim do text block: o primeiro \"\"\" não escapado (número par de barras antes dele)."""
+    j = inicio
+    while True:
+        k = fonte.find('"""', j)
+        if k < 0:
+            return len(fonte)
+        barras = 0
+        while k - barras - 1 >= inicio and fonte[k - barras - 1] == "\\":
+            barras += 1
+        if barras % 2 == 0:
+            return k + 3
+        j = k + 1
 
 
 def pares(texto, abre="{", fecha="}"):
@@ -460,7 +474,9 @@ def carregar_configuracao(caminho):
 
 def analisar(raiz, cfg, usar_git=True):
     raiz = Path(raiz)
-    arquivos = [Arquivo(raiz, p) for p in sorted(raiz.glob("*/src/main/java/**/*.java"))]
+    # Symlinks ficam fora: o diagnóstico lê só arquivos reais dentro da raiz.
+    arquivos = [Arquivo(raiz, p) for p in sorted(raiz.glob("*/src/main/java/**/*.java"))
+                if not p.is_symlink() and p.resolve().is_relative_to(raiz.resolve())]
     conhecidos, por_pacote = {}, defaultdict(dict)
     for arquivo in arquivos:
         for tipo in arquivo.tipos:
@@ -561,7 +577,8 @@ def quando_abstrair(achados, dups, conjuntas, cfg):
     """Sugestões apenas com evidência acima dos gates; abaixo deles a recomendação é não abstrair."""
     sugestoes = []
     for achado in achados:
-        if achado["regra"] in ("metodo_complexidade", "metodo_linhas", "metodo_aninhamento"):
+        # Alerta é sinal para a revisão; extração só é sugerida acima do limite de falha (playbook).
+        if achado["regra"] in ("metodo_complexidade", "metodo_linhas", "metodo_aninhamento") and achado["nivel"] == "falha":
             sugestoes.append({"evidencia": f"{achado['regra']}={achado['valor']} > {achado['limite']}",
                               "alvo": achado["alvo"], "acao": "extrair método privado ou Helper puro no mesmo contexto"})
         elif achado["regra"] == "coesao_lcom4":
@@ -642,11 +659,18 @@ def main(argv=None):
     parser.add_argument("--sem-git", action="store_true", help="não lê o histórico para mudança conjunta")
     parser.add_argument("--limite", type=int, default=10, help="itens por seção no texto")
     args = parser.parse_args(argv)
+    if not Path(args.raiz).is_dir():
+        print(f"Raiz inexistente: {args.raiz}", file=sys.stderr)
+        return 2
     relatorio = analisar(args.raiz, carregar_configuracao(args.config), usar_git=not args.sem_git)
-    if args.json:
-        print(json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True))
-    else:
-        print(formatar(relatorio, args.limite))
+    try:
+        if args.json:
+            print(json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True))
+        else:
+            print(formatar(relatorio, args.limite))
+    except BrokenPipeError:
+        # Saída cortada (ex.: `| head`): sem traceback.
+        sys.stderr.close()
     return 1 if args.gate and relatorio["resumo"]["falhas"] else 0
 
 
