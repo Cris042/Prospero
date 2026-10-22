@@ -68,6 +68,9 @@ rodar_workbook() {
     runner-planilhas "runner/exemplos/$workbook.xlsx" --config /config/runner.json
 }
 rodar_workbook mercado mercado
+# RF06a: livro real, VWAP e repetição sem zerar acumuladores ou reservas.
+rodar_workbook cotacao risco
+rodar_workbook cotacao risco
 # Repetição deliberada comprova limpeza por negócios reais, sem apagar reservas/livro.
 rodar_workbook matching risco
 rodar_workbook matching risco

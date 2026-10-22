@@ -24,6 +24,14 @@ public record AtivoResponseDTO(
         @Schema(nullable = true) LocalDate sessao,
         @Schema(nullable = true) Long revisao,
         @Schema(nullable = true) Instant preparadoEm,
-        @Schema(description = "Snapshot mais antigo que a idade máxima configurada.") boolean defasado,
-        @Schema(nullable = true, enumeration = {"PREPARACAO_SINTETICA"}) String origem) {
+        @Schema(description = "MATCHING: consumidor atrasado, sessão anterior ou encerrada; sintético: idade máxima ou sessão anterior.") boolean defasado,
+        @Schema(nullable = true, enumeration = {"PREPARACAO_SINTETICA", "MATCHING"}) String origem,
+        @Schema(nullable = true, description = "VWAP da sessão; quatro casas HALF_EVEN.") String vwap) {
+    public AtivoResponseDTO(String ticker, String nome, String precoReferencia, String tick, long lote,
+                            String ultimoPreco, String variacao, String variacaoPercentual, String melhorCompra,
+                            String melhorVenda, String spread, Long volumeQuantidade, String volumeFinanceiro,
+                            String estadoLivro, LocalDate sessao, Long revisao, Instant preparadoEm, boolean defasado, String origem) {
+        this(ticker, nome, precoReferencia, tick, lote, ultimoPreco, variacao, variacaoPercentual, melhorCompra,
+                melhorVenda, spread, volumeQuantidade, volumeFinanceiro, estadoLivro, sessao, revisao, preparadoEm, defasado, origem, null);
+    }
 }

@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { STEP_COLUMNS, RESULT_COLUMNS } from '../contract.mjs';
 
 // RF03 (ADR-011): fronteiras do túnel, lote/tick (OMEGA3), Stop Limit, OCO e Market. Perfil `ordens` do runner;
-// chaves derivam de ${cenario}. Poucas ordens aceitas por execução para não pressionar o teto diário.
+// Pré-condição CI: após matching/RNF04, ALFA3 tem último negócio da sessão em 10,00.
+// Chaves derivam de ${cenario}. Deixa ordens vivas; não antecipar às provas com preparação de carteiras.
 const workbook = new ExcelJS.Workbook();
 workbook.created = workbook.modified = new Date('2026-10-17T00:00:00Z');
 const carga = workbook.addWorksheet('Carga');
@@ -59,7 +60,7 @@ const ordem = (ticker, lado, tipo, validade, quantidade, precoLimite, precoGatil
     chave: '${cenario}-1',
     corpo: ordem('ALFA3', 'COMPRA', 'LIMIT', 'DIA', 1, '9.00'),
     status: 202,
-    esperado: { '/precoBaseTunel': '10.00', '/origemBase': 'REFERENCIA' },
+    esperado: { '/precoBaseTunel': '10.00', '/origemBase': 'ULTIMO' },
   });
   passo(passos, c, 'Maximo', 'ordens-a', 'POST', '/api/v1/ordens', {
     chave: '${cenario}-2',
@@ -74,7 +75,7 @@ const ordem = (ticker, lado, tipo, validade, quantidade, precoLimite, precoGatil
       '/codigo': 'PRECO_FORA_DO_TUNEL',
       '/detalhes/minimo': '9.00',
       '/detalhes/maximo': '11.00',
-      '/detalhes/origemBase': 'REFERENCIA',
+      '/detalhes/origemBase': 'ULTIMO',
     },
   });
   passo(passos, c, 'AcimaDoMaximo', 'ordens-a', 'POST', '/api/v1/ordens', {
@@ -104,7 +105,7 @@ const ordem = (ticker, lado, tipo, validade, quantidade, precoLimite, precoGatil
     chave: '${cenario}-3',
     corpo: ordem('ALFA3', 'COMPRA', 'STOP_LIMIT', 'DIA', 1, '9.55', '9.50'),
     status: 202,
-    esperado: { '/estado': 'RECEBIDA', '/origemBase': 'REFERENCIA' },
+    esperado: { '/estado': 'RECEBIDA', '/origemBase': 'ULTIMO' },
   });
 }
 

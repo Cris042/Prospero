@@ -52,6 +52,7 @@ public class PreparacaoMercadoResource {
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "422", description = "Preço, tick, lote, limites ou livro cruzado.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
+    @APIResponse(responseCode = "409", description = "Namespace principal reservado à cotação real.")
     @APIResponse(responseCode = "429", description = "Limite de namespaces atingido.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "401", description = "Token ausente ou inválido.")
@@ -66,7 +67,8 @@ public class PreparacaoMercadoResource {
 
     @DELETE
     @Operation(summary = "Remover todos os snapshots do namespace (idempotente)")
-    @APIResponse(responseCode = "204", description = "Namespace limpo; repetir também retorna 204.")
+    @APIResponse(responseCode = "204", description = "Namespace sintético limpo; repetir também retorna 204.")
+    @APIResponse(responseCode = "409", description = "Namespace principal reservado à cotação real.")
     @APIResponse(responseCode = "400", description = "Namespace inválido.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "404", description = "Preparação desabilitada.",

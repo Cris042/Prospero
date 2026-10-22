@@ -35,15 +35,19 @@ public class ConsultarMercadoActor {
     private static final ZoneId SESSAO = ZoneId.of("America/Sao_Paulo");
     private final RepositorioMercado repositorio;
     private final Duration idadeMaxima;
+    private final br.prospero.fo.cotacao.actor.ConsultarCotacaoActor cotacoes;
 
     @Inject
     public ConsultarMercadoActor(RepositorioMercado repositorio,
-                                 @ConfigProperty(name = "prospero.mercado.idade-maxima", defaultValue = "PT24H") Duration idadeMaxima) {
+                                 @ConfigProperty(name = "prospero.mercado.idade-maxima", defaultValue = "PT24H") Duration idadeMaxima,
+                                 br.prospero.fo.cotacao.actor.ConsultarCotacaoActor cotacoes) {
         this.repositorio = repositorio;
         this.idadeMaxima = idadeMaxima;
+        this.cotacoes = cotacoes;
     }
 
     public List<AtivoResponseDTO> listar(UUID namespace) {
+        if (new UUID(0, 0).equals(namespace)) return cotacoes.listar();
         Map<String, SnapshotMercado> snapshots = repositorio.snapshots(namespace).stream()
                 .collect(Collectors.toMap(SnapshotMercado::ticker, Function.identity()));
         Instant agora = Instant.now();
@@ -52,6 +56,7 @@ public class ConsultarMercadoActor {
     }
 
     public LivroResponseDTO livro(UUID namespace, String ticker) {
+        if (new UUID(0, 0).equals(namespace)) return cotacoes.livro(ticker);
         Ativo ativo = repositorio.buscarAtivo(ticker)
                 .orElseThrow(() -> new RegraMercadoException("ATIVO_DESCONHECIDO", "Ativo não cadastrado."));
         SnapshotMercado snapshot = repositorio.snapshot(namespace, ativo.ticker()).orElse(null);

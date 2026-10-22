@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-// Pré-condição: namespace principal preparado por `python3 scripts/mercado.py preparar-demo`.
-test('consulta mercado real pelo proxy, sem credencial no navegador', async ({
+// Pré-condição: fixture UUID preparada por `python3 scripts/mercado.py preparar-demo`.
+const NAMESPACE_DEMO = '8d3df0f3-76d3-4ac0-b9a8-26f040e5721c';
+test('consulta fixture sintética por HTTP real pelo proxy, sem credencial no navegador', async ({
   page,
 }, testInfo) => {
   const erros: string[] = [];
@@ -15,6 +16,19 @@ test('consulta mercado real pelo proxy, sem credencial no navegador', async ({
       autorizacoes.push(pedido.headers()['authorization']);
   });
 
+  // Mantém backend e proxy reais; acrescenta apenas o namespace da fixture histórica.
+  await page.route('**/servicos/front-office/api/v1/ativos**', async (route) => {
+    const url = new URL(route.request().url());
+    if (
+      route.request().method() === 'GET' &&
+      /^\/servicos\/front-office\/api\/v1\/ativos(?:\/[A-Z0-9]+\/livro)?$/.test(url.pathname)
+    ) {
+      url.searchParams.set('namespace', NAMESPACE_DEMO);
+      await route.continue({ url: url.toString() });
+      return;
+    }
+    await route.continue();
+  });
   await page.goto('/');
   const tabela = page.getByRole('table', { name: /Ativos com último preço/ });
   await expect(tabela.getByRole('row')).toHaveCount(6);
@@ -50,6 +64,64 @@ test('consulta mercado real pelo proxy, sem credencial no navegador', async ({
   await tabela.getByRole('button', { name: /ALFA3/ }).click();
   await expect(page.getByRole('region', { name: 'Livro de ALFA3' })).toContainText('10,30');
   await page.screenshot({ path: testInfo.outputPath('mercado.png'), fullPage: true });
+});
+
+// cotacao.xlsx gera negócios antes do navegador; outros E2Es podem negociar BETA3 depois.
+// Consulta o principal e confere seus acumuladores, sem depender da ordem dos E2Es.
+test('principal consulta cotação MATCHING pelo proxy', async ({ request }) => {
+  await expect
+    .poll(
+      async () => {
+        const resposta = await request.get('/servicos/front-office/api/v1/ativos');
+        expect(resposta.status()).toBe(200);
+        const ativos = await resposta.json();
+        const beta = ativos.find((ativo: { ticker: string }) => ativo.ticker === 'BETA3');
+        const volumePositivo =
+          Number.isSafeInteger(beta?.volumeQuantidade) && beta.volumeQuantidade > 0;
+        const financeiroValido =
+          typeof beta?.volumeFinanceiro === 'string' && /^\d+\.\d{2}$/.test(beta.volumeFinanceiro);
+        let vwapCalculado: string | null = null;
+        if (volumePositivo && financeiroValido) {
+          // Σp·q em centavos → preço com quatro casas; divisão inteira HALF_EVEN.
+          const numerador = BigInt(beta.volumeFinanceiro.replace('.', '')) * 100n;
+          const divisor = BigInt(beta.volumeQuantidade);
+          let quociente = numerador / divisor;
+          const dobroResto = (numerador % divisor) * 2n;
+          if (dobroResto > divisor || (dobroResto === divisor && quociente % 2n !== 0n)) {
+            quociente += 1n;
+          }
+          vwapCalculado = `${quociente / 10000n}.${(quociente % 10000n).toString().padStart(4, '0')}`;
+        }
+        return {
+          origem: beta?.origem,
+          ultimoValido:
+            typeof beta?.ultimoPreco === 'string' &&
+            /^\d+\.\d{2}$/.test(beta.ultimoPreco) &&
+            BigInt(beta.ultimoPreco.replace('.', '')) > 0n,
+          vwapConsistente:
+            typeof beta?.vwap === 'string' &&
+            /^\d+\.\d{4}$/.test(beta.vwap) &&
+            beta.vwap === vwapCalculado,
+          volumePositivo,
+          revisaoPositiva: Number.isSafeInteger(beta?.revisao) && beta.revisao > 0,
+        };
+      },
+      { timeout: 15000, intervals: [200, 500, 1000] },
+    )
+    .toEqual({
+      origem: 'MATCHING',
+      ultimoValido: true,
+      vwapConsistente: true,
+      volumePositivo: true,
+      revisaoPositiva: true,
+    });
+  const livro = await request.get('/servicos/front-office/api/v1/ativos/BETA3/livro');
+  expect(livro.status()).toBe(200);
+  const dados = await livro.json();
+  expect(dados.origem).toBe('MATCHING');
+  expect(dados.sessao).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(Number.isSafeInteger(dados.revisao)).toBe(true);
+  expect(dados.revisao).toBeGreaterThan(0);
 });
 
 test('preparação não é alcançável pelo proxy do navegador', async ({ request }) => {

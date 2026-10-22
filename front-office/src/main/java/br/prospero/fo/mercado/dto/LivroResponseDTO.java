@@ -13,6 +13,6 @@ public record LivroResponseDTO(String ticker, UUID namespace, String estadoLivro
                                @Schema(nullable = true) Long revisao,
                                @Schema(nullable = true) LocalDate sessao,
                                @Schema(nullable = true) Instant preparadoEm,
-                               @Schema(description = "Snapshot de sessão anterior ou mais antigo que a idade máxima.") boolean defasado,
-                               @Schema(nullable = true, enumeration = {"PREPARACAO_SINTETICA"}) String origem) {
+                               @Schema(description = "MATCHING: consumidor atrasado/quarentena, sessão anterior ou encerrada; sintético: idade máxima ou sessão anterior.") boolean defasado,
+                               @Schema(nullable = true, enumeration = {"PREPARACAO_SINTETICA", "MATCHING"}) String origem) {
 }

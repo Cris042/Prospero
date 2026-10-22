@@ -73,7 +73,7 @@ class MercadoResourceTest {
                 .body("[0].estadoLivro", equalTo("SEM_DADOS"))
                 .body("[0].ultimoPreco", nullValue())
                 .body("[0].volumeQuantidade", nullValue())
-                .body("[0].origem", nullValue());
+                .body("[0].origem", equalTo("MATCHING"));
     }
 
     @Test
