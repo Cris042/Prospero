@@ -54,8 +54,7 @@ public final class ProjetarMatching {
     }
 
     private static Ordem oferta(Ordem o, EventoMatching.Oferta e) {
-        if ((o.tipo() != TipoOrdem.LIMIT && o.tipo() != TipoOrdem.STOP_LIMIT)
-                || (stop(o) && !acionada(o)) || o.validade() != Validade.DIA || o.lado() != e.lado()
+        if (!o.tipo().comLimite() || (stop(o) && !acionada(o)) || o.validade() != Validade.DIA || o.lado() != e.lado()
                 || o.precoLimite().compareTo(e.preco()) != 0) {
             throw incoerente();
         }
@@ -79,7 +78,7 @@ public final class ProjetarMatching {
                 || n.quantidade() % lote != 0 || n.preco().remainder(tick).signum() != 0) {
             throw incoerente();
         }
-        if (o.tipo() == TipoOrdem.LIMIT || o.tipo() == TipoOrdem.STOP_LIMIT) {
+        if (o.tipo().comLimite()) {
             int comparacao = n.preco().compareTo(o.precoLimite());
             if (compra ? comparacao > 0 : comparacao < 0) {
                 throw incoerente();
@@ -130,7 +129,7 @@ public final class ProjetarMatching {
     }
 
     private static boolean stop(Ordem o) {
-        return o.tipo() == TipoOrdem.STOP || o.tipo() == TipoOrdem.STOP_LIMIT;
+        return o.tipo().stop();
     }
 
     private static boolean acionada(Ordem o) {

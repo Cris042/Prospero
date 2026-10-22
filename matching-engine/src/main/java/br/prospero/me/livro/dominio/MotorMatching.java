@@ -94,7 +94,7 @@ public final class MotorMatching {
         long sequencia = ++e.chegada;
         e.ativar(a.conta());
         contexto.eventos.add(new Evento.OrdemAceita(a.ordem(), a.ticker(), sequencia));
-        if (stop(a)) {
+        if (a.tipo().stop()) {
             receberStop(a, sequencia, e, contexto);
         } else {
             negociar(a, sequencia, e, p, contexto);
@@ -174,7 +174,7 @@ public final class MotorMatching {
         boolean venda = tp.lado() == Lado.VENDA;
         if (!tp.conta().equals(sl.conta()) || !tp.intencao().equals(sl.intencao()) || !tp.ticker().equals(sl.ticker())
                 || tp.lado() != sl.lado() || tp.quantidade() != sl.quantidade() || !tp.sessao().equals(sl.sessao())
-                || tp.tipo() != TipoOrdem.LIMIT || tp.validade() != Validade.DIA || !stop(sl)
+                || tp.tipo() != TipoOrdem.LIMIT || tp.validade() != Validade.DIA || !sl.tipo().stop()
                 || !mesmoPreco(tp.precoMaximo(), sl.precoMaximo())
                 || tp.precoLimite() == null || sl.precoGatilho() == null
                 || (venda ? tp.precoLimite().compareTo(sl.precoGatilho()) <= 0
@@ -243,10 +243,6 @@ public final class MotorMatching {
         e.desativar(sl.conta());
         eventos.add(new Evento.OrdemEncerrada(sl.ordem(), sl.ticker(), MotivoEncerramento.CANCELADA_OCO, 0,
                 sl.quantidade()));
-    }
-
-    private static boolean stop(Admissao a) {
-        return a.tipo() == TipoOrdem.STOP || a.tipo() == TipoOrdem.STOP_LIMIT;
     }
 
     private static void receberStop(Admissao a, long sequencia, EstadoAtivo e, ContextoComando contexto) {
@@ -349,8 +345,8 @@ public final class MotorMatching {
             return MotivoRejeicao.PRECO_INVALIDO;
         }
         boolean market = a.tipo() == TipoOrdem.MARKET;
-        boolean stop = stop(a);
-        boolean limit = a.tipo() == TipoOrdem.LIMIT || a.tipo() == TipoOrdem.STOP_LIMIT;
+        boolean stop = a.tipo().stop();
+        boolean limit = a.tipo().comLimite();
         boolean compra = a.lado() == Lado.COMPRA;
         if ((market && a.validade() == Validade.DIA) || (stop && a.validade() != Validade.DIA)
                 || limit != (a.precoLimite() != null) || stop != (a.precoGatilho() != null)

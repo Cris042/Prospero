@@ -95,7 +95,7 @@ public final class EnvelopeRisco {
         }
         if (v2) {
             for (Perna perna : pernas) {
-                boolean stop = perna.tipo() == TipoOrdem.STOP || perna.tipo() == TipoOrdem.STOP_LIMIT;
+                boolean stop = perna.tipo().stop();
                 if ((stop && perna.validade() != br.prospero.mo.risco.dominio.Validade.DIA)
                         || (perna.tipo() == TipoOrdem.MARKET && perna.validade() == br.prospero.mo.risco.dominio.Validade.DIA)) {
                     throw new EnvelopeInvalidoException("validade");
@@ -139,7 +139,7 @@ public final class EnvelopeRisco {
 
     /** OCO (ADR-010): Take Profit Limit + Stop Loss Stop/Stop Limit, ids distintos e mesma quantidade. */
     private static void exigirParOco(Perna alvo, Perna stop) {
-        boolean stopValido = stop.tipo() == TipoOrdem.STOP || stop.tipo() == TipoOrdem.STOP_LIMIT;
+        boolean stopValido = stop.tipo().stop();
         if (alvo.tipo() != TipoOrdem.LIMIT || !stopValido || alvo.id().equals(stop.id())
                 || alvo.quantidade() != stop.quantidade()) {
             throw new EnvelopeInvalidoException("par OCO");

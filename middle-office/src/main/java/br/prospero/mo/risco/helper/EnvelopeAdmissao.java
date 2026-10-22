@@ -27,8 +27,7 @@ public final class EnvelopeAdmissao {
         raiz.put("id", id(c.intencao()).toString());
         raiz.put("tipo", "ORDEM_ADMITIDA");
         var p = c.pernas().getFirst();
-        boolean stop = p.tipo() == br.prospero.mo.risco.dominio.TipoOrdem.STOP
-                || p.tipo() == br.prospero.mo.risco.dominio.TipoOrdem.STOP_LIMIT;
+        boolean stop = p.tipo().stop();
         raiz.put("versao", stop ? 2 : 1);
         raiz.put("origem", "middle-office");
         raiz.put("correlacao", c.intencao().toString());

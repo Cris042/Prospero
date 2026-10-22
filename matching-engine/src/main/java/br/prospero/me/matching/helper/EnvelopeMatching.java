@@ -101,7 +101,7 @@ public final class EnvelopeMatching {
                     TipoOrdem.valueOf(tipo), Validade.valueOf(texto(dados, "validade")), q.longValue(),
                     preco(dados, "precoLimite"), preco(dados, "precoMaximo"),
                     stop ? preco(dados, "precoGatilho") : null, LocalDate.parse(data));
-            boolean compra = a.lado() == Lado.COMPRA, limit = a.tipo() == TipoOrdem.LIMIT || a.tipo() == TipoOrdem.STOP_LIMIT;
+            boolean compra = a.lado() == Lado.COMPRA, limit = a.tipo().comLimite();
             if (limit != (a.precoLimite() != null) || compra != (a.precoMaximo() != null)
                     || (stop && (a.precoGatilho() == null || a.validade() != Validade.DIA))
                     || (!stop && !limit && a.validade() == Validade.DIA)
@@ -289,8 +289,7 @@ public final class EnvelopeMatching {
     }
 
     private static boolean stopPerna(Comando comando, UUID ordem) {
-        TipoOrdem tipo = comando.perna(ordem).tipo();
-        return tipo == TipoOrdem.STOP || tipo == TipoOrdem.STOP_LIMIT;
+        return comando.perna(ordem).tipo().stop();
     }
 
     private static java.util.List<UUID> envolvidos(Evento evento) {

@@ -23,7 +23,7 @@ public record ComandoRisco(UUID evento, UUID intencao, String conta, String tick
         }
         Perna alvo = pernas.get(0), stop = pernas.get(1);
         if (alvo.tipo() != TipoOrdem.LIMIT || alvo.validade() != Validade.DIA || alvo.precoLimite() == null
-                || (stop.tipo() != TipoOrdem.STOP && stop.tipo() != TipoOrdem.STOP_LIMIT)
+                || !stop.tipo().stop()
                 || stop.validade() != Validade.DIA || stop.precoGatilho() == null
                 || alvo.quantidade() != stop.quantidade() || alvo.id().equals(stop.id())
                 || (stop.tipo() == TipoOrdem.STOP_LIMIT) != (stop.precoLimite() != null)) {
@@ -44,7 +44,7 @@ public record ComandoRisco(UUID evento, UUID intencao, String conta, String tick
         }
         return dataSessao != null && pernas.size() == 1 && pernas.getFirst().validade() != null
                 && (pernas.getFirst().tipo() == TipoOrdem.LIMIT || pernas.getFirst().tipo() == TipoOrdem.MARKET
-                    || (pernas.getFirst().tipo() == TipoOrdem.STOP || pernas.getFirst().tipo() == TipoOrdem.STOP_LIMIT)
+                    || pernas.getFirst().tipo().stop()
                         && pernas.getFirst().validade() == Validade.DIA && pernas.getFirst().precoGatilho() != null);
     }
 
