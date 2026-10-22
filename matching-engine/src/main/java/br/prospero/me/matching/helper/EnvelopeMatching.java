@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -25,7 +26,12 @@ public final class EnvelopeMatching {
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final Set<String> RAIZ = Set.of("id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "conta", "traceparent", "dados");
     private static final Set<String> DADOS = Set.of("ordem", "ticker", "lado", "tipo", "validade", "quantidade", "precoLimite", "precoMaximo", "dataSessao");
+    private static final Set<String> DADOS_STOP = Set.of("ordem", "ticker", "lado", "tipo", "validade", "quantidade", "precoLimite", "precoMaximo", "precoGatilho", "dataSessao");
     private static final Set<String> ATIVOS = Set.of("ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3");
+    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004");
+    private static final String DATA = "[0-9]{4}-[0-9]{2}-[0-9]{2}";
+    private static final String TRACEPARENT = "00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}";
+    private static final int QUANTIDADE_MAXIMA = 1_000_000;
 
     private EnvelopeMatching() { }
 
@@ -64,129 +70,134 @@ public final class EnvelopeMatching {
         }
     }
 
+    /** Raiz já validada de uma admissão v1–v3: id determinístico pela intenção, conta conhecida e traceparent W3C. */
+    private record Cabecalho(UUID id, UUID intencao, String conta, Instant ocorridoEm, String traceparent, int versao) { }
+
     public static Comando comando(byte[] bytes, String chave) {
         try {
             if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES) throw invalido();
             JsonNode raiz = JSON.readTree(bytes);
-            if (raiz != null && raiz.path("tipo").isTextual() && raiz.get("tipo").textValue().equals("ENCERRAR_SESSAO")) {
-                return encerramento(raiz, chave);
-            }
-            campos(raiz, RAIZ);
-            int versao = raiz.path("versao").isInt() ? raiz.get("versao").intValue() : 0;
-            if (!texto(raiz, "tipo").equals("ORDEM_ADMITIDA") || !raiz.get("versao").isInt()
-                    || versao < 1 || versao > 3 || !texto(raiz, "origem").equals("middle-office")) throw invalido();
-            UUID id = uuid(raiz, "id"), intencao = uuid(raiz, "correlacao");
-            if (!id.equals(UUID.nameUUIDFromBytes(("admissao:" + intencao).getBytes(StandardCharsets.UTF_8)))) throw invalido();
-            String conta = texto(raiz, "conta");
-            if (!Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004").contains(conta)) throw invalido();
-            String trace = raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent");
-            if (trace != null && (!trace.matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}")
-                    || trace.substring(3, 35).equals("0".repeat(32)) || trace.substring(36, 52).equals("0".repeat(16)))) throw invalido();
-            Instant ocorrido = Instant.parse(texto(raiz, "ocorridoEm"));
+            if (encerramentoDeSessao(raiz)) return encerramento(raiz, chave);
+            Cabecalho cabecalho = cabecalho(raiz);
             JsonNode dados = raiz.get("dados");
-            if (versao == 3) return par(id, intencao, conta, ocorrido, trace, dados, chave);
-            Set<String> camposDados = new HashSet<>(DADOS);
-            if (versao == 2) camposDados.add("precoGatilho");
-            campos(dados, camposDados);
-            String ticker = texto(dados, "ticker");
-            if (!ATIVOS.contains(ticker) || !ticker.equals(chave)) throw invalido();
-            JsonNode q = dados.get("quantidade");
-            if (!q.isIntegralNumber() || !q.canConvertToLong() || q.longValue() <= 0 || q.longValue() > 1_000_000) throw invalido();
-            String data = texto(dados, "dataSessao");
-            if (!data.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) throw invalido();
-            String tipo = texto(dados, "tipo");
-            boolean stop = Set.of("STOP", "STOP_LIMIT").contains(tipo);
-            if (versao == 1 ? !Set.of("MARKET", "LIMIT").contains(tipo) : !stop) throw invalido();
-            Admissao a = new Admissao(uuid(dados, "ordem"), intencao, conta, ticker, Lado.valueOf(texto(dados, "lado")),
-                    TipoOrdem.valueOf(tipo), Validade.valueOf(texto(dados, "validade")), q.longValue(),
-                    preco(dados, "precoLimite"), preco(dados, "precoMaximo"),
-                    stop ? preco(dados, "precoGatilho") : null, LocalDate.parse(data));
-            if (!admissivel(a)) throw invalido();
-            return new Comando(id, ocorrido, trace, a);
+            if (cabecalho.versao() == 3) return par(cabecalho, dados, chave);
+            return simples(cabecalho, dados, chave);
         } catch (Exception erro) {
             // Não incluir conteúdo, IDs ou exceções de parser no diagnóstico.
             throw invalido();
         }
     }
 
+    private static boolean encerramentoDeSessao(JsonNode raiz) {
+        return raiz != null && raiz.path("tipo").isTextual() && raiz.get("tipo").textValue().equals("ENCERRAR_SESSAO");
+    }
+
+    private static Cabecalho cabecalho(JsonNode raiz) {
+        campos(raiz, RAIZ);
+        JsonNode versao = raiz.get("versao");
+        if (!texto(raiz, "tipo").equals("ORDEM_ADMITIDA") || !versao.isInt() || versao.intValue() < 1
+                || versao.intValue() > 3 || !daOrigemMiddleOffice(raiz)) throw invalido();
+        UUID id = uuid(raiz, "id");
+        UUID intencao = uuid(raiz, "correlacao");
+        if (!id.equals(uuidDeterministico("admissao:" + intencao))) throw invalido();
+        String conta = texto(raiz, "conta");
+        if (!CONTAS.contains(conta)) throw invalido();
+        String traceparent = trace(raiz);
+        return new Cabecalho(id, intencao, conta, Instant.parse(texto(raiz, "ocorridoEm")), traceparent,
+                versao.intValue());
+    }
+
+    /** Admissão simples: v1 só Market/Limit; v2 só Stop/Stop Limit, com gatilho. */
+    private static Comando simples(Cabecalho cabecalho, JsonNode dados, String chave) {
+        boolean contratoStop = cabecalho.versao() == 2;
+        campos(dados, contratoStop ? DADOS_STOP : DADOS);
+        String ticker = ticker(dados, chave);
+        long quantidade = quantidade(dados);
+        LocalDate sessao = sessao(dados);
+        TipoOrdem tipo = TipoOrdem.valueOf(texto(dados, "tipo"));
+        if (tipo.stop() != contratoStop) throw invalido();
+        Admissao admissao = new Admissao(uuid(dados, "ordem"), cabecalho.intencao(), cabecalho.conta(), ticker,
+                Lado.valueOf(texto(dados, "lado")), tipo, Validade.valueOf(texto(dados, "validade")), quantidade,
+                preco(dados, "precoLimite"), preco(dados, "precoMaximo"),
+                contratoStop ? preco(dados, "precoGatilho") : null, sessao);
+        if (!admissivel(admissao)) throw invalido();
+        return new Comando(cabecalho.id(), cabecalho.ocorridoEm(), cabecalho.traceparent(), admissao);
+    }
+
     /** Par OCO v3 (RF05c.3b): duas pernas em ordem fixa, mesmas guardas do núcleo antes de qualquer mutação. */
-    private static Comando par(UUID id, UUID intencao, String conta, Instant ocorrido, String trace, JsonNode dados,
-                               String chave) {
+    private static Comando par(Cabecalho cabecalho, JsonNode dados, String chave) {
         campos(dados, DADOS_OCO);
-        String ticker = texto(dados, "ticker");
-        if (!ATIVOS.contains(ticker) || !ticker.equals(chave)) throw invalido();
-        String data = texto(dados, "dataSessao");
-        if (!data.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) throw invalido();
-        LocalDate sessao = LocalDate.parse(data);
+        String ticker = ticker(dados, chave);
+        LocalDate sessao = sessao(dados);
         Lado lado = Lado.valueOf(texto(dados, "lado"));
         BigDecimal maximo = preco(dados, "precoMaximo");
-        boolean compra = lado == Lado.COMPRA;
-        if (compra != (maximo != null)) throw invalido();
         JsonNode pernas = dados.get("pernas");
         if (pernas == null || !pernas.isArray() || pernas.size() != 2) throw invalido();
-        JsonNode tp = pernas.get(0), sl = pernas.get(1);
-        campos(tp, TAKE_PROFIT);
-        campos(sl, STOP_LOSS);
-        if (!texto(tp, "papel").equals("TAKE_PROFIT") || !texto(sl, "papel").equals("STOP_LOSS")
-                || !texto(tp, "tipo").equals("LIMIT") || !Set.of("STOP", "STOP_LIMIT").contains(texto(sl, "tipo"))
-                || !texto(tp, "validade").equals("DIA") || !texto(sl, "validade").equals("DIA")) throw invalido();
-        long q = quantidade(tp);
-        if (q != quantidade(sl)) throw invalido();
-        TipoOrdem tipoStop = TipoOrdem.valueOf(texto(sl, "tipo"));
-        BigDecimal alvo = preco(tp, "precoLimite"), limiteStop = preco(sl, "precoLimite"), gatilho = preco(sl, "precoGatilho");
-        UUID ordemTp = uuid(tp, "ordem"), ordemSl = uuid(sl, "ordem");
-        Admissao takeProfit = new Admissao(ordemTp, intencao, conta, ticker, lado, TipoOrdem.LIMIT, Validade.DIA, q,
-                alvo, maximo, null, sessao);
-        Admissao stopLoss = new Admissao(ordemSl, intencao, conta, ticker, lado, tipoStop, Validade.DIA, q,
-                limiteStop, maximo, gatilho, sessao);
+        JsonNode dadosTakeProfit = pernas.get(0);
+        JsonNode dadosStopLoss = pernas.get(1);
+        campos(dadosTakeProfit, TAKE_PROFIT);
+        campos(dadosStopLoss, STOP_LOSS);
+        TipoOrdem tipoStop = TipoOrdem.valueOf(texto(dadosStopLoss, "tipo"));
+        if (!texto(dadosTakeProfit, "papel").equals("TAKE_PROFIT") || !texto(dadosStopLoss, "papel").equals("STOP_LOSS")
+                || !texto(dadosTakeProfit, "tipo").equals("LIMIT") || !tipoStop.stop()
+                || !texto(dadosTakeProfit, "validade").equals("DIA") || !texto(dadosStopLoss, "validade").equals("DIA")) {
+            throw invalido();
+        }
+        long quantidade = quantidade(dadosTakeProfit);
+        if (quantidade != quantidade(dadosStopLoss)) throw invalido();
+        Admissao takeProfit = new Admissao(uuid(dadosTakeProfit, "ordem"), cabecalho.intencao(), cabecalho.conta(),
+                ticker, lado, TipoOrdem.LIMIT, Validade.DIA, quantidade, preco(dadosTakeProfit, "precoLimite"), maximo,
+                null, sessao);
+        Admissao stopLoss = new Admissao(uuid(dadosStopLoss, "ordem"), cabecalho.intencao(), cabecalho.conta(),
+                ticker, lado, tipoStop, Validade.DIA, quantidade, preco(dadosStopLoss, "precoLimite"), maximo,
+                preco(dadosStopLoss, "precoGatilho"), sessao);
         // Mesmas guardas do núcleo (Admissao): o par admitido nunca é recusado por combinação no MotorMatching.
-        if (ordemTp.equals(ordemSl) || !admissivel(takeProfit) || !admissivel(stopLoss)
+        if (takeProfit.ordem().equals(stopLoss.ordem()) || !admissivel(takeProfit) || !admissivel(stopLoss)
                 || !takeProfit.alvoAlemDoGatilho(stopLoss)) {
             throw invalido();
         }
-        return new Comando(id, ocorrido, trace, takeProfit, stopLoss);
+        return new Comando(cabecalho.id(), cabecalho.ocorridoEm(), cabecalho.traceparent(), takeProfit, stopLoss);
     }
 
     /** Comando v1 do MO (RF05c.4): raiz sem conta, id = correlação = causação determinística do ativo/data. */
     private static Comando encerramento(JsonNode raiz, String chave) {
         campos(raiz, RAIZ_ENCERRAMENTO);
-        if (!raiz.get("versao").isInt() || raiz.get("versao").intValue() != 1
-                || !texto(raiz, "origem").equals("middle-office")) throw invalido();
+        if (!raiz.get("versao").isInt() || raiz.get("versao").intValue() != 1 || !daOrigemMiddleOffice(raiz)) {
+            throw invalido();
+        }
         JsonNode dados = raiz.get("dados");
         campos(dados, DADOS_ENCERRAMENTO);
-        String ticker = texto(dados, "ticker");
-        String data = texto(dados, "dataSessao");
-        if (!ATIVOS.contains(ticker) || !ticker.equals(chave) || !data.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) throw invalido();
-        LocalDate sessao = LocalDate.parse(data);
+        String ticker = ticker(dados, chave);
+        LocalDate sessao = sessao(dados);
         UUID id = uuid(raiz, "id");
-        UUID esperado = UUID.nameUUIDFromBytes(("encerramento:" + ticker + ":" + sessao).getBytes(StandardCharsets.UTF_8));
+        UUID esperado = uuidDeterministico("encerramento:" + ticker + ":" + sessao);
         if (!id.equals(esperado) || !uuid(raiz, "correlacao").equals(esperado)) throw invalido();
         return new Comando(id, Instant.parse(texto(raiz, "ocorridoEm")), trace(raiz), null, null,
                 new Encerramento(ticker, sessao));
     }
 
+    private static boolean daOrigemMiddleOffice(JsonNode raiz) {
+        return texto(raiz, "origem").equals("middle-office");
+    }
+
     private static String trace(JsonNode raiz) {
         String trace = raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent");
-        if (trace != null && (!trace.matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}")
+        if (trace != null && (!trace.matches(TRACEPARENT)
                 || trace.substring(3, 35).equals("0".repeat(32)) || trace.substring(36, 52).equals("0".repeat(16)))) throw invalido();
         return trace;
     }
 
-    /** Marco v4 do encerramento: correlação = causação = id do comando; id do evento derivado da causação. */
-    public static byte[] marco(Comando comando, int indice, long expiradas) {
-        ObjectNode raiz = JSON.createObjectNode();
-        raiz.put("id", UUID.nameUUIDFromBytes(("matching:" + comando.id() + ":" + indice).getBytes(StandardCharsets.UTF_8)).toString());
-        raiz.put("versao", 4);
-        raiz.put("origem", "matching-engine");
-        raiz.put("correlacao", comando.id().toString());
-        raiz.put("ocorridoEm", comando.ocorridoEm().toString());
-        raiz.put("ticker", comando.encerramento().ticker());
-        raiz.put("dataSessao", comando.sessao().toString());
-        raiz.put("traceparent", comando.traceparent());
-        raiz.put("causacao", comando.id().toString());
-        raiz.putObject("dados").put("expiradas", expiradas);
-        raiz.put("tipo", "SESSAO_ENCERRADA");
-        return raiz.toString().getBytes(StandardCharsets.UTF_8);
+    /** Ativo conhecido e igual à chave Kafka. */
+    private static String ticker(JsonNode dados, String chave) {
+        String ticker = texto(dados, "ticker");
+        if (!ATIVOS.contains(ticker) || !ticker.equals(chave)) throw invalido();
+        return ticker;
+    }
+
+    private static LocalDate sessao(JsonNode dados) {
+        String data = texto(dados, "dataSessao");
+        if (!data.matches(DATA)) throw invalido();
+        return LocalDate.parse(data);
     }
 
     /** Combinação válida e limite dentro da reserva: o envelope rejeita o que o núcleo recusaria por combinação. */
@@ -194,76 +205,130 @@ public final class EnvelopeMatching {
         return admissao.combinacaoValida() && !admissao.limiteAcimaDaReserva();
     }
 
+    /** Marco v4 do encerramento: correlação = causação = id do comando; id do evento derivado da causação. */
+    public static byte[] marco(Comando comando, int indice, long expiradas) {
+        ObjectNode raiz = cabecalhoEvento(comando, indice, 4, comando.id(), comando.encerramento().ticker());
+        raiz.putObject("dados").put("expiradas", expiradas);
+        raiz.put("tipo", "SESSAO_ENCERRADA");
+        return raiz.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
     private static long quantidade(JsonNode no) {
-        JsonNode q = no.get("quantidade");
-        if (!q.isIntegralNumber() || !q.canConvertToLong() || q.longValue() <= 0 || q.longValue() > 1_000_000) throw invalido();
-        return q.longValue();
+        JsonNode quantidade = no.get("quantidade");
+        if (!quantidade.isIntegralNumber() || !quantidade.canConvertToLong() || quantidade.longValue() <= 0
+                || quantidade.longValue() > QUANTIDADE_MAXIMA) throw invalido();
+        return quantidade.longValue();
     }
 
     public static byte[] evento(Comando comando, Evento evento, int indice, Map<UUID, Comando> ordens) {
         int versao = versao(comando, evento, ordens);
-        boolean v4 = versao == 4, v3 = versao == 3, v2 = versao == 2;
-        UUID alvo = switch (evento) {
-            case Evento.Negocio e -> e.agressor() == Lado.COMPRA ? e.ordemCompra() : e.ordemVenda();
-            default -> envolvidos(evento).getFirst();
-        };
-        // Fatos OCO existem somente em v3; invariantes violadas indicam defeito do núcleo, não entrada externa.
-        if (!v3 && (evento instanceof Evento.OrdemReduzida || (evento instanceof Evento.OrdemEncerrada fim
-                && fim.motivo() == MotivoEncerramento.CANCELADA_OCO))) {
-            throw new IllegalArgumentException("Evento OCO fora do contrato.");
-        }
-        if ((evento instanceof Evento.StopPendente || evento instanceof Evento.StopAcionado)
-                && !stopPerna(ordens.get(alvo), alvo)) throw new IllegalArgumentException("Evento stop sem admissão stop.");
-        ObjectNode raiz = JSON.createObjectNode();
-        raiz.put("id", UUID.nameUUIDFromBytes(("matching:" + comando.id() + ":" + indice).getBytes(StandardCharsets.UTF_8)).toString());
-        raiz.put("versao", versao);
-        raiz.put("origem", "matching-engine");
-        raiz.put("correlacao", (v2 || v3 || v4 ? ordens.get(alvo).id() : comando.id()).toString());
-        raiz.put("ocorridoEm", comando.ocorridoEm().toString());
-        raiz.put("ticker", evento.ticker());
-        raiz.put("dataSessao", comando.sessao().toString());
-        raiz.put("traceparent", comando.traceparent());
-        if (v2 || v3 || v4) raiz.put("causacao", comando.id().toString());
-        ObjectNode dados = raiz.putObject("dados");
-        switch (evento) {
-            case Evento.StopPendente e -> {
-                raiz.put("tipo", "STOP_PENDENTE"); ordem(dados, e.ordem(), ordens);
-                dados.put("precoGatilho", decimal(e.precoGatilho()));
-            }
-            case Evento.StopAcionado e -> {
-                raiz.put("tipo", "STOP_ACIONADO"); ordem(dados, e.ordem(), ordens);
-                dados.put("tipoExecutavel", e.tipoExecutavel().name()); dados.put("sequencia", e.sequencia());
-            }
-            case Evento.OrdemReduzida e -> {
-                raiz.put("tipo", "ORDEM_REDUZIDA"); ordem(dados, e.ordem(), ordens);
-                dados.put("reduzida", e.reduzida()); dados.put("restante", e.restante());
-            }
-            case Evento.OrdemAceita e -> {
-                raiz.put("tipo", "ORDEM_ACEITA"); ordem(dados, e.ordem(), ordens); dados.put("sequencia", e.sequencia());
-            }
-            case Evento.OfertaNoLivro e -> {
-                raiz.put("tipo", "OFERTA_NO_LIVRO"); ordem(dados, e.ordem(), ordens);
-                dados.put("lado", e.lado().name()); dados.put("preco", decimal(e.preco())); dados.put("restante", e.restante());
-            }
-            case Evento.OrdemRejeitada e -> {
-                raiz.put("tipo", "ORDEM_REJEITADA"); ordem(dados, e.ordem(), ordens); dados.put("motivo", e.motivo().name());
-            }
-            case Evento.OrdemEncerrada e -> {
-                raiz.put("tipo", "ORDEM_ENCERRADA"); ordem(dados, e.ordem(), ordens);
-                dados.put("motivo", e.motivo().name()); dados.put("executada", e.executada()); dados.put("cancelada", e.cancelada());
-            }
-            case Evento.Negocio e -> {
-                raiz.put("tipo", "NEGOCIO"); dados.put("negocio", e.id()); dados.put("preco", decimal(e.preco()));
-                dados.put("quantidade", e.quantidade()); dados.put("ordemCompra", e.ordemCompra().toString());
-                dados.put("intencaoCompra", ordens.get(e.ordemCompra()).admissao().intencao().toString()); dados.put("contaCompra", e.contaCompra());
-                dados.put("ordemVenda", e.ordemVenda().toString());
-                dados.put("intencaoVenda", ordens.get(e.ordemVenda()).admissao().intencao().toString()); dados.put("contaVenda", e.contaVenda());
-                dados.put("agressor", e.agressor().name());
-            }
-        }
+        UUID alvo = alvo(evento);
+        exigirContrato(evento, versao, ordens.get(alvo), alvo);
+        UUID correlacao = versao >= 2 ? ordens.get(alvo).id() : comando.id();
+        ObjectNode raiz = cabecalhoEvento(comando, indice, versao, correlacao, evento.ticker());
+        dados(raiz, raiz.putObject("dados"), evento, ordens);
         byte[] bytes = raiz.toString().getBytes(StandardCharsets.UTF_8);
         if (bytes.length > MAX_BYTES) throw new IllegalStateException("Evento ultrapassa orçamento.");
         return bytes;
+    }
+
+    /** Agressor no negócio; nos demais fatos, a única ordem envolvida. */
+    private static UUID alvo(Evento evento) {
+        return switch (evento) {
+            case Evento.Negocio negocio -> negocio.agressor() == Lado.COMPRA ? negocio.ordemCompra() : negocio.ordemVenda();
+            default -> envolvidos(evento).getFirst();
+        };
+    }
+
+    /** Fatos OCO existem somente em v3 e fatos de stop exigem admissão stop: violação indica defeito do núcleo. */
+    private static void exigirContrato(Evento evento, int versao, Comando comandoDoAlvo, UUID alvo) {
+        if (versao != 3 && fatoOco(evento)) throw new IllegalArgumentException("Evento OCO fora do contrato.");
+        if (fatoStop(evento) && !stopPerna(comandoDoAlvo, alvo)) {
+            throw new IllegalArgumentException("Evento stop sem admissão stop.");
+        }
+    }
+
+    private static boolean fatoOco(Evento evento) {
+        return evento instanceof Evento.OrdemReduzida
+                || (evento instanceof Evento.OrdemEncerrada fim && fim.motivo() == MotivoEncerramento.CANCELADA_OCO);
+    }
+
+    private static boolean fatoStop(Evento evento) {
+        return evento instanceof Evento.StopPendente || evento instanceof Evento.StopAcionado;
+    }
+
+    /** Campos comuns na ordem do contrato; causação só a partir da v2. O tipo entra depois de dados. */
+    private static ObjectNode cabecalhoEvento(Comando comando, int indice, int versao, UUID correlacao, String ticker) {
+        ObjectNode raiz = JSON.createObjectNode();
+        raiz.put("id", uuidDeterministico("matching:" + comando.id() + ":" + indice).toString());
+        raiz.put("versao", versao);
+        raiz.put("origem", "matching-engine");
+        raiz.put("correlacao", correlacao.toString());
+        raiz.put("ocorridoEm", comando.ocorridoEm().toString());
+        raiz.put("ticker", ticker);
+        raiz.put("dataSessao", comando.sessao().toString());
+        raiz.put("traceparent", comando.traceparent());
+        if (versao >= 2) raiz.put("causacao", comando.id().toString());
+        return raiz;
+    }
+
+    private static void dados(ObjectNode raiz, ObjectNode dados, Evento evento, Map<UUID, Comando> ordens) {
+        switch (evento) {
+            case Evento.StopPendente pendente -> {
+                raiz.put("tipo", "STOP_PENDENTE");
+                ordem(dados, pendente.ordem(), ordens);
+                dados.put("precoGatilho", decimal(pendente.precoGatilho()));
+            }
+            case Evento.StopAcionado acionado -> {
+                raiz.put("tipo", "STOP_ACIONADO");
+                ordem(dados, acionado.ordem(), ordens);
+                dados.put("tipoExecutavel", acionado.tipoExecutavel().name());
+                dados.put("sequencia", acionado.sequencia());
+            }
+            case Evento.OrdemReduzida reduzida -> {
+                raiz.put("tipo", "ORDEM_REDUZIDA");
+                ordem(dados, reduzida.ordem(), ordens);
+                dados.put("reduzida", reduzida.reduzida());
+                dados.put("restante", reduzida.restante());
+            }
+            case Evento.OrdemAceita aceita -> {
+                raiz.put("tipo", "ORDEM_ACEITA");
+                ordem(dados, aceita.ordem(), ordens);
+                dados.put("sequencia", aceita.sequencia());
+            }
+            case Evento.OfertaNoLivro oferta -> {
+                raiz.put("tipo", "OFERTA_NO_LIVRO");
+                ordem(dados, oferta.ordem(), ordens);
+                dados.put("lado", oferta.lado().name());
+                dados.put("preco", decimal(oferta.preco()));
+                dados.put("restante", oferta.restante());
+            }
+            case Evento.OrdemRejeitada rejeitada -> {
+                raiz.put("tipo", "ORDEM_REJEITADA");
+                ordem(dados, rejeitada.ordem(), ordens);
+                dados.put("motivo", rejeitada.motivo().name());
+            }
+            case Evento.OrdemEncerrada encerrada -> {
+                raiz.put("tipo", "ORDEM_ENCERRADA");
+                ordem(dados, encerrada.ordem(), ordens);
+                dados.put("motivo", encerrada.motivo().name());
+                dados.put("executada", encerrada.executada());
+                dados.put("cancelada", encerrada.cancelada());
+            }
+            case Evento.Negocio negocio -> {
+                raiz.put("tipo", "NEGOCIO");
+                dados.put("negocio", negocio.id());
+                dados.put("preco", decimal(negocio.preco()));
+                dados.put("quantidade", negocio.quantidade());
+                dados.put("ordemCompra", negocio.ordemCompra().toString());
+                dados.put("intencaoCompra", ordens.get(negocio.ordemCompra()).admissao().intencao().toString());
+                dados.put("contaCompra", negocio.contaCompra());
+                dados.put("ordemVenda", negocio.ordemVenda().toString());
+                dados.put("intencaoVenda", ordens.get(negocio.ordemVenda()).admissao().intencao().toString());
+                dados.put("contaVenda", negocio.contaVenda());
+                dados.put("agressor", negocio.agressor().name());
+            }
+        }
     }
 
     /** v4 para o encerramento; senão v3 com OCO envolvido, v2 com stop, v1 no resto (ADR-013). */
@@ -288,22 +353,28 @@ public final class EnvelopeMatching {
         return comando.perna(ordem).tipo().stop();
     }
 
-    private static java.util.List<UUID> envolvidos(Evento evento) {
+    private static List<UUID> envolvidos(Evento evento) {
         return switch (evento) {
-            case Evento.Negocio e -> java.util.List.of(e.ordemCompra(), e.ordemVenda());
-            case Evento.OrdemAceita e -> java.util.List.of(e.ordem());
-            case Evento.OrdemRejeitada e -> java.util.List.of(e.ordem());
-            case Evento.OfertaNoLivro e -> java.util.List.of(e.ordem());
-            case Evento.OrdemEncerrada e -> java.util.List.of(e.ordem());
-            case Evento.StopPendente e -> java.util.List.of(e.ordem());
-            case Evento.StopAcionado e -> java.util.List.of(e.ordem());
-            case Evento.OrdemReduzida e -> java.util.List.of(e.ordem());
+            case Evento.Negocio negocio -> List.of(negocio.ordemCompra(), negocio.ordemVenda());
+            case Evento.OrdemAceita aceita -> List.of(aceita.ordem());
+            case Evento.OrdemRejeitada rejeitada -> List.of(rejeitada.ordem());
+            case Evento.OfertaNoLivro oferta -> List.of(oferta.ordem());
+            case Evento.OrdemEncerrada encerrada -> List.of(encerrada.ordem());
+            case Evento.StopPendente pendente -> List.of(pendente.ordem());
+            case Evento.StopAcionado acionado -> List.of(acionado.ordem());
+            case Evento.OrdemReduzida reduzida -> List.of(reduzida.ordem());
         };
     }
 
     private static void ordem(ObjectNode dados, UUID id, Map<UUID, Comando> ordens) {
-        Admissao a = ordens.get(id).admissao();
-        dados.put("ordem", id.toString()); dados.put("intencao", a.intencao().toString()); dados.put("conta", a.conta());
+        Admissao admissao = ordens.get(id).admissao();
+        dados.put("ordem", id.toString());
+        dados.put("intencao", admissao.intencao().toString());
+        dados.put("conta", admissao.conta());
+    }
+
+    private static UUID uuidDeterministico(String semente) {
+        return UUID.nameUUIDFromBytes(semente.getBytes(StandardCharsets.UTF_8));
     }
 
     private static String decimal(BigDecimal valor) { return valor.setScale(2).toPlainString(); }
