@@ -204,7 +204,17 @@ test('oferta e negócio reais atualizam livro e VWAP sem atualizar manualmente',
   const antes = await consultar();
   const quantidade = antes.lote;
   expect(Number.isSafeInteger(quantidade) && quantidade > 0).toBe(true);
-  const preco = antes.ultimoPreco ?? antes.precoReferencia;
+  // A validação anterior pode deixar compra DIA em OMEGA3: nossa venda precisa repousar acima dela.
+  const centavos = (valor: string) => BigInt(valor.replace('.', ''));
+  const referencia = centavos(antes.ultimoPreco ?? antes.precoReferencia);
+  const tick = centavos(antes.tick);
+  const acimaCompra =
+    antes.melhorCompra === null ? referencia : centavos(antes.melhorCompra) + tick;
+  const precoCentavos = acimaCompra > referencia ? acimaCompra : referencia;
+  expect(precoCentavos * 100n).toBeGreaterThanOrEqual(referencia * 90n);
+  expect(precoCentavos * 100n).toBeLessThanOrEqual(referencia * 110n);
+  expect(precoCentavos % tick).toBe(0n);
+  const preco = `${precoCentavos / 100n}.${(precoCentavos % 100n).toString().padStart(2, '0')}`;
   const venda = await enviar('VENDA', quantidade, 'DIA', preco);
   try {
     await expect
