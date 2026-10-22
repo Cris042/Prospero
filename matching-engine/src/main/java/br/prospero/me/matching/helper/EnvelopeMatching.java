@@ -29,17 +29,32 @@ public final class EnvelopeMatching {
 
     private EnvelopeMatching() { }
 
+    private static final Set<String> RAIZ_ENCERRAMENTO = Set.of("id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "traceparent", "dados");
+    private static final Set<String> DADOS_ENCERRAMENTO = Set.of("ticker", "dataSessao");
     private static final Set<String> DADOS_OCO = Set.of("ticker", "lado", "dataSessao", "precoMaximo", "pernas");
     private static final Set<String> TAKE_PROFIT = Set.of("papel", "ordem", "tipo", "validade", "quantidade", "precoLimite");
     private static final Set<String> STOP_LOSS = Set.of("papel", "ordem", "tipo", "validade", "quantidade", "precoLimite", "precoGatilho");
 
-    /** Admissão simples, ou par OCO (v3) com admissao = Take Profit e stopLoss = Stop Loss. */
-    public record Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao, Admissao stopLoss) {
+    /** Encerramento de um ativo/data (RF05c.4); id = causação determinística dos eventos v4. */
+    public record Encerramento(String ticker, LocalDate sessao) { }
+
+    /**
+     * Admissão simples, par OCO (v3) com admissao = Take Profit e stopLoss = Stop Loss, ou encerramento de sessão
+     * (sem admissão).
+     */
+    public record Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao, Admissao stopLoss,
+                          Encerramento encerramento) {
         public Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao) {
-            this(id, ocorridoEm, traceparent, admissao, null);
+            this(id, ocorridoEm, traceparent, admissao, null, null);
+        }
+
+        public Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao, Admissao stopLoss) {
+            this(id, ocorridoEm, traceparent, admissao, stopLoss, null);
         }
 
         public boolean oco() { return stopLoss != null; }
+
+        public LocalDate sessao() { return encerramento != null ? encerramento.sessao() : admissao.sessao(); }
 
         /** Perna do comando com a ordem informada. */
         public Admissao perna(UUID ordem) {
@@ -53,6 +68,9 @@ public final class EnvelopeMatching {
         try {
             if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES) throw invalido();
             JsonNode raiz = JSON.readTree(bytes);
+            if (raiz != null && raiz.path("tipo").isTextual() && raiz.get("tipo").textValue().equals("ENCERRAR_SESSAO")) {
+                return encerramento(raiz, chave);
+            }
             campos(raiz, RAIZ);
             int versao = raiz.path("versao").isInt() ? raiz.get("versao").intValue() : 0;
             if (!texto(raiz, "tipo").equals("ORDEM_ADMITIDA") || !raiz.get("versao").isInt()
@@ -138,6 +156,48 @@ public final class EnvelopeMatching {
         return new Comando(id, ocorrido, trace, takeProfit, stopLoss);
     }
 
+    /** Comando v1 do MO (RF05c.4): raiz sem conta, id = correlação = causação determinística do ativo/data. */
+    private static Comando encerramento(JsonNode raiz, String chave) {
+        campos(raiz, RAIZ_ENCERRAMENTO);
+        if (!raiz.get("versao").isInt() || raiz.get("versao").intValue() != 1
+                || !texto(raiz, "origem").equals("middle-office")) throw invalido();
+        JsonNode dados = raiz.get("dados");
+        campos(dados, DADOS_ENCERRAMENTO);
+        String ticker = texto(dados, "ticker");
+        String data = texto(dados, "dataSessao");
+        if (!ATIVOS.contains(ticker) || !ticker.equals(chave) || !data.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) throw invalido();
+        LocalDate sessao = LocalDate.parse(data);
+        UUID id = uuid(raiz, "id");
+        UUID esperado = UUID.nameUUIDFromBytes(("encerramento:" + ticker + ":" + sessao).getBytes(StandardCharsets.UTF_8));
+        if (!id.equals(esperado) || !uuid(raiz, "correlacao").equals(esperado)) throw invalido();
+        return new Comando(id, Instant.parse(texto(raiz, "ocorridoEm")), trace(raiz), null, null,
+                new Encerramento(ticker, sessao));
+    }
+
+    private static String trace(JsonNode raiz) {
+        String trace = raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent");
+        if (trace != null && (!trace.matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}")
+                || trace.substring(3, 35).equals("0".repeat(32)) || trace.substring(36, 52).equals("0".repeat(16)))) throw invalido();
+        return trace;
+    }
+
+    /** Marco v4 do encerramento: correlação = causação = id do comando; id do evento derivado da causação. */
+    public static byte[] marco(Comando comando, int indice, long expiradas) {
+        ObjectNode raiz = JSON.createObjectNode();
+        raiz.put("id", UUID.nameUUIDFromBytes(("matching:" + comando.id() + ":" + indice).getBytes(StandardCharsets.UTF_8)).toString());
+        raiz.put("versao", 4);
+        raiz.put("origem", "matching-engine");
+        raiz.put("correlacao", comando.id().toString());
+        raiz.put("ocorridoEm", comando.ocorridoEm().toString());
+        raiz.put("ticker", comando.encerramento().ticker());
+        raiz.put("dataSessao", comando.sessao().toString());
+        raiz.put("traceparent", comando.traceparent());
+        raiz.put("causacao", comando.id().toString());
+        raiz.putObject("dados").put("expiradas", expiradas);
+        raiz.put("tipo", "SESSAO_ENCERRADA");
+        return raiz.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
     private static long quantidade(JsonNode no) {
         JsonNode q = no.get("quantidade");
         if (!q.isIntegralNumber() || !q.canConvertToLong() || q.longValue() <= 0 || q.longValue() > 1_000_000) throw invalido();
@@ -145,8 +205,8 @@ public final class EnvelopeMatching {
     }
 
     public static byte[] evento(Comando comando, Evento evento, int indice, Map<UUID, Comando> ordens) {
-        boolean v3 = comando.oco() || envolvidos(evento).stream().anyMatch(id -> ordens.get(id).oco());
-        boolean v2 = !v3 && (stop(comando) || envolvidos(evento).stream().anyMatch(id -> stop(ordens.get(id))));
+        int versao = versao(comando, evento, ordens);
+        boolean v4 = versao == 4, v3 = versao == 3, v2 = versao == 2;
         UUID alvo = switch (evento) {
             case Evento.Negocio e -> e.agressor() == Lado.COMPRA ? e.ordemCompra() : e.ordemVenda();
             default -> envolvidos(evento).getFirst();
@@ -160,14 +220,14 @@ public final class EnvelopeMatching {
                 && !stopPerna(ordens.get(alvo), alvo)) throw new IllegalArgumentException("Evento stop sem admissão stop.");
         ObjectNode raiz = JSON.createObjectNode();
         raiz.put("id", UUID.nameUUIDFromBytes(("matching:" + comando.id() + ":" + indice).getBytes(StandardCharsets.UTF_8)).toString());
-        raiz.put("versao", v3 ? 3 : v2 ? 2 : 1);
+        raiz.put("versao", versao);
         raiz.put("origem", "matching-engine");
-        raiz.put("correlacao", (v2 || v3 ? ordens.get(alvo).id() : comando.id()).toString());
+        raiz.put("correlacao", (v2 || v3 || v4 ? ordens.get(alvo).id() : comando.id()).toString());
         raiz.put("ocorridoEm", comando.ocorridoEm().toString());
         raiz.put("ticker", evento.ticker());
-        raiz.put("dataSessao", comando.admissao().sessao().toString());
+        raiz.put("dataSessao", comando.sessao().toString());
         raiz.put("traceparent", comando.traceparent());
-        if (v2 || v3) raiz.put("causacao", comando.id().toString());
+        if (v2 || v3 || v4) raiz.put("causacao", comando.id().toString());
         ObjectNode dados = raiz.putObject("dados");
         switch (evento) {
             case Evento.StopPendente e -> {
@@ -210,7 +270,21 @@ public final class EnvelopeMatching {
         return bytes;
     }
 
+    /** v4 para o encerramento; senão v3 com OCO envolvido, v2 com stop, v1 no resto (ADR-013). */
+    private static int versao(Comando comando, Evento evento, Map<UUID, Comando> ordens) {
+        if (comando.encerramento() != null) {
+            if (!(evento instanceof Evento.OrdemEncerrada fim) || fim.motivo() != MotivoEncerramento.EXPIRADA_DIA) {
+                throw new IllegalArgumentException("Encerramento só publica expiração.");
+            }
+            return 4;
+        }
+        var alvos = envolvidos(evento);
+        if (comando.oco() || alvos.stream().anyMatch(id -> ordens.get(id).oco())) return 3;
+        return stop(comando) || alvos.stream().anyMatch(id -> stop(ordens.get(id))) ? 2 : 1;
+    }
+
     private static boolean stop(Comando comando) {
+        if (comando.admissao() == null) return false;
         return stopPerna(comando, comando.admissao().ordem());
     }
 

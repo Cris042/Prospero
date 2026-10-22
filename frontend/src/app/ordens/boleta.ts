@@ -66,6 +66,9 @@ const ROTULOS: Record<string, string> = {
   PRECO_BASE_AUSENTE: 'sem preço de referência',
   LIMITE_STOPS_PENDENTES: 'limite de stops pendentes atingido',
   CANCELADA_OCO: 'encerrada pela outra perna do OCO',
+  EXPIRADA_DIA: 'expirada no fim da sessão',
+  SESSAO_ENCERRADA: 'sessão do ativo encerrada',
+  SESSAO_NAO_ENCERRADA: 'sessão anterior ainda aberta',
 };
 
 @Component({

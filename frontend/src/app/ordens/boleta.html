@@ -177,7 +177,9 @@
             <td>
               {{ rotulo(o.estado) }}{{ o.motivoRejeicao ? ' · ' + rotulo(o.motivoRejeicao) : ''
               }}{{
-                o.motivoEncerramento === 'CANCELADA_OCO' ? ' · ' + rotulo(o.motivoEncerramento) : ''
+                o.motivoEncerramento === 'CANCELADA_OCO' || o.motivoEncerramento === 'EXPIRADA_DIA'
+                  ? ' · ' + rotulo(o.motivoEncerramento)
+                  : ''
               }}
             </td>
           </tr>

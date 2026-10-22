@@ -130,8 +130,7 @@ public class ProcessadorMatching implements HealthCheck {
                             var comando = EnvelopeMatching.comando(registro.value(), registro.key());
                             int destino = Utils.toPositive(Utils.murmur2(registro.key().getBytes(StandardCharsets.UTF_8))) % 3;
                             if (destino != p.partition()) throw new IllegalArgumentException("Partição da chave divergente.");
-                            if (sessaoPersistida != null && !sessaoPersistida.equals(comando.admissao().sessao()))
-                                throw new IllegalArgumentException("Sessão do checkpoint divergente.");
+                            LocalDate sessaoCheckpoint = SessaoMatching.sessaoDoCheckpoint(comando, sessaoPersistida);
                             var resultado = motor.processar(comando);
                             long checkpoint = checkpoints.get(p.partition());
                             if (registro.offset() > checkpoint) {
@@ -148,10 +147,10 @@ public class ProcessadorMatching implements HealthCheck {
                                     eventos.increment();
                                 }, () -> {
                                     posse.validarPosse();
-                                    posse.avancar(p.partition(), checkpoint, registro.offset(), comando.admissao().sessao());
+                                    posse.avancar(p.partition(), checkpoint, registro.offset(), sessaoCheckpoint);
                                 });
                                 checkpoints.put(p.partition(), registro.offset());
-                                sessaoPersistida = comando.admissao().sessao();
+                                sessaoPersistida = sessaoCheckpoint;
                             }
                             comandos.increment();
                             proximos.put(p.partition(), registro.offset() + 1);

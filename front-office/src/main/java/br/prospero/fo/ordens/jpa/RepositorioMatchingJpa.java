@@ -43,10 +43,11 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         if (repetida("matching_evento", e.id(), e.assinatura())) {
             return false;
         }
-        if (e.detalhe() instanceof EventoMatching.SessaoEncerrada) {
+        if (e.detalhe() instanceof EventoMatching.SessaoEncerrada marco) {
             // Marco v4: correlação e causação são o encerramento determinístico do ativo/data.
             UUID esperado = EventoMatching.encerramento(e.ticker(), e.sessao());
-            if (!esperado.equals(e.correlacao()) || !esperado.equals(e.causacao())) {
+            UUID id = UUID.nameUUIDFromBytes(("matching:" + esperado + ":" + marco.expiradas()).getBytes(StandardCharsets.UTF_8));
+            if (!esperado.equals(e.correlacao()) || !esperado.equals(e.causacao()) || !id.equals(e.id())) {
                 throw new MatchingIncoerenteException("MATCHING_ENCERRAMENTO");
             }
             registrar(e);

@@ -75,7 +75,8 @@ class EncerramentoQaPostgresIT {
         String s = """
                 {"id":"%s","versao":4,"origem":"matching-engine","correlacao":"%s","ocorridoEm":"2026-10-18T21:00:00Z",\
                 "ticker":"%s","dataSessao":"%s","traceparent":null,"causacao":"%s","dados":{"expiradas":2},\
-                "tipo":"SESSAO_ENCERRADA"}""".formatted(UUID.randomUUID(), correlacao, ticker, data, causacao);
+                "tipo":"SESSAO_ENCERRADA"}""".formatted(UUID.nameUUIDFromBytes(("matching:" + causacao + ":2")
+                .getBytes(StandardCharsets.UTF_8)), correlacao, ticker, data, causacao);
         return EnvelopeMatching.evento(s.getBytes(StandardCharsets.UTF_8), ticker);
     }
 

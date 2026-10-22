@@ -100,6 +100,10 @@ Regras no [ADR-013](../adrs/ADR-013-matching-execucao.md#decisões-oco-no-núcle
 
 Contrato no [ADR-013](../adrs/ADR-013-matching-execucao.md#contrato-da-integração-oco--rf05c3b-2026-10-21). O adaptador aceita `ORDEM_ADMITIDA` v3 com `pernas[2]` (TP, SL) e as mesmas guardas do núcleo antes de qualquer mutação; `SessaoMatching` registra as duas ordens sob a mesma intenção/admissão e chama `processarOco`. Eventos com raiz ou alvo OCO saem em v3 (inclui `ORDEM_REDUZIDA` e `CANCELADA_OCO`), com IDs raiz/índice e bytes reproduzíveis no replay; v1/v2 inalterados. Desde a RF05c.3b2 o MO emite a admissão v3 do par, depois de repetir as mesmas guardas de coerência, de modo que um par admitido não para o escritor.
 
+## Encerramento integrado — RF05c.4
+
+O adaptador aceita o comando `ENCERRAR_SESSAO` do MO (sem conta nem admissão), chama `encerrarSessao` uma vez por ativo e publica as expirações v4 e o marco `SESSAO_ENCERRADA{expiradas}` (também com livro vazio). Repetição ou data diferente da sessão do log não produz eventos, preservando o escritor. Abrir a data seguinte continua fora (uma sessão por log, decisão do usuário); contrato no [ADR-013](../adrs/ADR-013-matching-execucao.md#encerramento-integrado-de-sessão--rf05c4-2026-10-21).
+
 ## Segurança, observabilidade e testes
 
 Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação e autorização por conta/papel são pendências, sem RBAC presumido. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.

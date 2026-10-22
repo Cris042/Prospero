@@ -149,6 +149,10 @@ public class RepositorioMatchingJpa {
     private void aplicarMarco(JsonNode evento) {
         exigirCausacaoEncerramento(evento);
         exigir(uuid(evento,"correlacao").equals(uuid(evento,"causacao")),"correlacao encerramento");
+        // Id derivado da causação: o marco é o último evento do comando, de índice igual às expiradas.
+        String derivado=UUID.nameUUIDFromBytes(("matching:"+uuid(evento,"causacao")+":"+evento.get("dados").get("expiradas").longValue())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        exigir(uuid(evento,"id").toString().equals(derivado),"id encerramento");
         String hash=assinatura(evento);
         if (!duplicado("matching_evento","id",uuid(evento,"id"),hash)) inserir("matching_evento","id",uuid(evento,"id"),hash);
     }

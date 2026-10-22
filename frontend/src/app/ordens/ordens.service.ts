@@ -49,7 +49,9 @@ export type MotivoRejeicao =
   | 'ATIVO_DESCONHECIDO'
   | 'CONTA_DESCONHECIDA'
   | 'PRECO_BASE_AUSENTE'
-  | 'LIMITE_STOPS_PENDENTES';
+  | 'LIMITE_STOPS_PENDENTES'
+  | 'SESSAO_ENCERRADA'
+  | 'SESSAO_NAO_ENCERRADA';
 
 export interface Ordem {
   readonly id: string;

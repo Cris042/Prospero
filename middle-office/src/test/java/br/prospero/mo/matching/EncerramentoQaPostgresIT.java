@@ -148,7 +148,8 @@ class EncerramentoQaPostgresIT {
 
     private ObjectNode marco(UUID correlacao, UUID causacao, long expiradas) {
         ObjectNode e = JSON.createObjectNode();
-        e.put("id", UUID.randomUUID().toString()); e.put("tipo", "SESSAO_ENCERRADA"); e.put("versao", 4);
+        e.put("id", UUID.nameUUIDFromBytes(("matching:" + causacao + ":" + expiradas).getBytes(StandardCharsets.UTF_8)).toString());
+        e.put("tipo", "SESSAO_ENCERRADA"); e.put("versao", 4);
         e.put("origem", "matching-engine"); e.put("correlacao", correlacao.toString());
         e.put("causacao", causacao.toString());
         e.put("ocorridoEm", "2026-10-18T21:00:00Z"); e.put("ticker", "ALFA3");
