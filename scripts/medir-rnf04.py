@@ -26,20 +26,27 @@ METAS = {"prospero_ordens_boleta_negocio_seconds": 0.050, "prospero_matching_com
 
 
 def buckets(origem, nome):
-    """Contagens cumulativas por limite `le` do histograma Prometheus do serviço."""
+    """Contagens cumulativas por limite `le` do histograma Prometheus do serviço e a soma `_sum` em segundos."""
     with urllib.request.urlopen(origem + "/q/metrics", timeout=10) as resposta:
-        texto = resposta.read().decode()
-    contagens = {}
+        return ler_buckets(resposta.read().decode(), nome)
+
+
+def ler_buckets(texto, nome):
+    """O valor é o primeiro após os rótulos; o exemplar opcional (`# {...} valor timestamp`) é ignorado."""
+    contagens = {"soma": 0.0}
     for linha in texto.splitlines():
-        if linha.startswith(nome + "_bucket{"):
-            le = linha.split('le="', 1)[1].split('"', 1)[0]
-            contagens[float("inf") if le == "+Inf" else float(le)] = float(linha.rsplit(" ", 1)[1])
+        serie, _, resto = linha.partition("}") if "{" in linha else linha.partition(" ")
+        if serie.startswith(nome + "_bucket{"):
+            le = serie.split('le="', 1)[1].split('"', 1)[0]
+            contagens[float("inf") if le == "+Inf" else float(le)] = float(resto.split()[0])
+        elif serie.split("{", 1)[0] == nome + "_sum":
+            contagens["soma"] = float(resto.split()[0])
     return contagens
 
 
 def percentil(antes, depois, q):
     """Menor limite de bucket que cobre a fração q das amostras novas; None sem amostras."""
-    limites = sorted(depois)
+    limites = sorted(le for le in depois if le != "soma")
     total = depois.get(float("inf"), 0) - antes.get(float("inf"), 0)
     if total <= 0:
         return None, 0
@@ -97,7 +104,9 @@ def executar(args):
     for n in nomes:
         p50, amostras = percentil(antes[n], depois[n], 0.50)
         p99, _ = percentil(antes[n], depois[n], 0.99)
+        media = (depois[n]["soma"] - antes[n]["soma"]) / amostras if amostras else None
         resultado["metricas"][n] = {"amostras": amostras, "p50_max_s": p50, "p99_max_s": p99, "meta_s": METAS[n],
+                                    "media_s": media,
                                     "veredito": None if p99 is None else prefixo + ("cumprido" if p99 <= METAS[n] else "não cumprido")}
     cliente.sort()
     resultado["cliente_ate_terminal_observado_s"] = {

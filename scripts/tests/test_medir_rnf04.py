@@ -19,5 +19,21 @@ class PercentilPorBuckets(unittest.TestCase):
         self.assertEqual(medir.percentil({float("inf"): 3}, {float("inf"): 3}, 0.99), (None, 0))
 
 
+class LeituraDosBuckets(unittest.TestCase):
+    def test_exemplar_nao_substitui_a_contagem(self):
+        # Formato observado no /q/metrics do Quarkus com OpenTelemetry: exemplar após a contagem do bucket.
+        texto = "\n".join([
+            '# TYPE x_seconds histogram',
+            'x_seconds_bucket{le="0.05"} 0.0',
+            'x_seconds_bucket{le="0.357913941"} 20.0 # {span_id="4d52",trace_id="1f94"} 0.3 1792683254.640',
+            'x_seconds_bucket{application="fo",le="+Inf"} 20.0',
+            'x_seconds_count 20.0',
+            'x_seconds_sum 6.0',
+            'outro_seconds_bucket{le="0.05"} 7.0',
+        ])
+        self.assertEqual(medir.ler_buckets(texto, "x_seconds"),
+                         {"soma": 6.0, 0.05: 0.0, 0.357913941: 20.0, float("inf"): 20.0})
+
+
 if __name__ == "__main__":
     unittest.main()
