@@ -205,10 +205,8 @@ public final class EnvelopeMatching {
     }
 
     public static byte[] evento(Comando comando, Evento evento, int indice, Map<UUID, Comando> ordens) {
-        // v4: eventos causados pelo encerramento (RF05c.4), qualquer que seja a ordem alvo.
-        boolean v4 = comando.encerramento() != null;
-        boolean v3 = !v4 && (comando.oco() || envolvidos(evento).stream().anyMatch(id -> ordens.get(id).oco()));
-        boolean v2 = !v4 && !v3 && (stop(comando) || envolvidos(evento).stream().anyMatch(id -> stop(ordens.get(id))));
+        int versao = versao(comando, evento, ordens);
+        boolean v4 = versao == 4, v3 = versao == 3, v2 = versao == 2;
         UUID alvo = switch (evento) {
             case Evento.Negocio e -> e.agressor() == Lado.COMPRA ? e.ordemCompra() : e.ordemVenda();
             default -> envolvidos(evento).getFirst();
@@ -222,7 +220,7 @@ public final class EnvelopeMatching {
                 && !stopPerna(ordens.get(alvo), alvo)) throw new IllegalArgumentException("Evento stop sem admissão stop.");
         ObjectNode raiz = JSON.createObjectNode();
         raiz.put("id", UUID.nameUUIDFromBytes(("matching:" + comando.id() + ":" + indice).getBytes(StandardCharsets.UTF_8)).toString());
-        raiz.put("versao", v4 ? 4 : v3 ? 3 : v2 ? 2 : 1);
+        raiz.put("versao", versao);
         raiz.put("origem", "matching-engine");
         raiz.put("correlacao", (v2 || v3 || v4 ? ordens.get(alvo).id() : comando.id()).toString());
         raiz.put("ocorridoEm", comando.ocorridoEm().toString());
@@ -270,6 +268,19 @@ public final class EnvelopeMatching {
         byte[] bytes = raiz.toString().getBytes(StandardCharsets.UTF_8);
         if (bytes.length > MAX_BYTES) throw new IllegalStateException("Evento ultrapassa orçamento.");
         return bytes;
+    }
+
+    /** v4 para o encerramento; senão v3 com OCO envolvido, v2 com stop, v1 no resto (ADR-013). */
+    private static int versao(Comando comando, Evento evento, Map<UUID, Comando> ordens) {
+        if (comando.encerramento() != null) {
+            if (!(evento instanceof Evento.OrdemEncerrada fim) || fim.motivo() != MotivoEncerramento.EXPIRADA_DIA) {
+                throw new IllegalArgumentException("Encerramento só publica expiração.");
+            }
+            return 4;
+        }
+        var alvos = envolvidos(evento);
+        if (comando.oco() || alvos.stream().anyMatch(id -> ordens.get(id).oco())) return 3;
+        return stop(comando) || alvos.stream().anyMatch(id -> stop(ordens.get(id))) ? 2 : 1;
     }
 
     private static boolean stop(Comando comando) {

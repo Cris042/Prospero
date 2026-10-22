@@ -38,6 +38,8 @@ public class EncerramentoSessaoResource {
             content = @Content(schema = @Schema(implementation = EncerramentoResponseDTO.class)))
     @APIResponse(responseCode = "400", description = "Data inválida.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
+    @APIResponse(responseCode = "422", description = "Data diferente da sessão corrente (America/Sao_Paulo).",
+            content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "401", description = "Token ausente ou inválido.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "403", description = "Token sem escopo sessao:encerrar.",

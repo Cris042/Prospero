@@ -31,14 +31,16 @@ class EncerramentoSessaoResourceTest {
         return pedido.when().post("/api/v1/sessoes/" + ticker + "/" + data + "/encerramento");
     }
 
+    private static final String HOJE = java.time.LocalDate.now(java.time.ZoneId.of("America/Sao_Paulo")).toString();
+
     @Test
     void registraUmComandoDeterministicoERepeticaoEInocua() throws Exception {
         String tok = token("sessao:encerrar");
-        UUID id = UUID.nameUUIDFromBytes("encerramento:GAMA3:2026-10-18".getBytes(StandardCharsets.UTF_8));
-        encerrar(tok, "GAMA3", "2026-10-18").then().statusCode(202).header("Cache-Control", "no-store")
-                .body("ticker", equalTo("GAMA3")).body("dataSessao", equalTo("2026-10-18"))
+        UUID id = UUID.nameUUIDFromBytes(("encerramento:GAMA3:" + HOJE).getBytes(StandardCharsets.UTF_8));
+        encerrar(tok, "GAMA3", HOJE).then().statusCode(202).header("Cache-Control", "no-store")
+                .body("ticker", equalTo("GAMA3")).body("dataSessao", equalTo(HOJE))
                 .body("comando", equalTo(id.toString())).body("repetido", equalTo(false));
-        encerrar(tok, "GAMA3", "2026-10-18").then().statusCode(202).body("repetido", equalTo(true));
+        encerrar(tok, "GAMA3", HOJE).then().statusCode(202).body("repetido", equalTo(true));
         var comandos = repositorio.comandos().stream().filter(c -> c.id().equals(id)).toList();
         assertEquals(1, comandos.size());
         var m = comandos.getFirst();
@@ -53,7 +55,7 @@ class EncerramentoSessaoResourceTest {
         assertEquals(1, json.get("versao").intValue());
         assertEquals("middle-office", json.get("origem").textValue());
         assertEquals("GAMA3", json.get("dados").get("ticker").textValue());
-        assertEquals("2026-10-18", json.get("dados").get("dataSessao").textValue());
+        assertEquals(HOJE, json.get("dados").get("dataSessao").textValue());
     }
 
     @Test
@@ -64,6 +66,7 @@ class EncerramentoSessaoResourceTest {
         encerrar(tok, "ZZZZ3", "2026-10-18").then().statusCode(404).body("codigo", equalTo("ATIVO_DESCONHECIDO"));
         encerrar(tok, "GAMA3", "2026-13-40").then().statusCode(400).body("codigo", equalTo("DATA_INVALIDA"));
         encerrar(tok, "GAMA3", "18-10-2026").then().statusCode(400).body("codigo", equalTo("DATA_INVALIDA"));
+        encerrar(tok, "GAMA3", "2020-01-02").then().statusCode(422).body("codigo", equalTo("DATA_FORA_DA_SESSAO"));
     }
 
     private static <T> java.util.List<T> iterable(java.util.Iterator<T> it) {

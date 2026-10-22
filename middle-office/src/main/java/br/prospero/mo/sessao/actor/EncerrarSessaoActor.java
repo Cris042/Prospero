@@ -22,6 +22,7 @@ import java.util.Set;
 @ApplicationScoped
 public class EncerrarSessaoActor {
     private static final Logger LOG = Logger.getLogger(EncerrarSessaoActor.class);
+    private static final java.time.ZoneId SAO_PAULO = java.time.ZoneId.of("America/Sao_Paulo");
     private static final Set<String> ATIVOS = Set.of("ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3");
     private final RepositorioSessao repositorio;
     private final Clock relogio;
@@ -46,6 +47,11 @@ public class EncerrarSessaoActor {
             throw new RegraNegocioException(Categoria.NAO_ENCONTRADO, "ATIVO_DESCONHECIDO", "Ativo desconhecido.");
         }
         LocalDate sessao = sessao(data);
+        // Só a sessão corrente (ADR-010, America/Sao_Paulo): data errada não chega ao log do ME.
+        if (!sessao.equals(LocalDate.now(relogio.withZone(SAO_PAULO)))) {
+            throw new RegraNegocioException(Categoria.REGRA_VIOLADA, "DATA_FORA_DA_SESSAO",
+                    "Somente a sessão corrente pode ser encerrada.");
+        }
         var comando = new MensagemSaida(EnvelopeEncerramento.id(ticker, sessao), EnvelopeEncerramento.TOPICO, ticker,
                 EnvelopeEncerramento.TIPO, EnvelopeEncerramento.serializar(ticker, sessao,
                 relogio.instant().truncatedTo(ChronoUnit.MICROS), traceparent), traceparent,

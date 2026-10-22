@@ -64,6 +64,18 @@ public final class SessaoMatching {
 
     public LocalDate sessao() { return sessao; }
 
+    /**
+     * Sessão a gravar no checkpoint: admissão de outra data para o escritor (uma sessão por log); encerramento nunca
+     * para nem troca a sessão já persistida, e só a fixa quando o log ainda não tem sessão.
+     */
+    public static LocalDate sessaoDoCheckpoint(EnvelopeMatching.Comando comando, LocalDate persistida) {
+        if (comando.encerramento() != null) return persistida != null ? persistida : comando.sessao();
+        if (persistida != null && !persistida.equals(comando.sessao())) {
+            throw new IllegalArgumentException("Sessão do checkpoint divergente.");
+        }
+        return comando.sessao();
+    }
+
     private static Map<String, ParametrosAtivo> parametros() {
         Map<String, ParametrosAtivo> ativos = new HashMap<>();
         String[] tickers = {"ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"};
