@@ -3,12 +3,13 @@
 
 Ideias adaptadas de arch-fitness-review (MIT, commit a07ea4184b431308d6379ec5df2f5245b8590c63):
 complexidade ciclomática, Ca/Ce/instabilidade, abstração/distância da sequência principal, ciclos,
-LCOM4, duplicação, aridade e mudança conjunta. Reimplementação léxica com a stdlib, sem AST nem rede.
-É diagnóstico: valores aproximados orientam revisão humana. `--gate` sai com 1 somente se houver falha.
+LCOM4, duplicação, aridade, mudança conjunta, hotspots (mudança × complexidade) e comparação com
+linha de base. Reimplementação léxica com a stdlib, sem AST nem rede; limiares em verificar-qualidade.json.
+É diagnóstico: valores aproximados orientam revisão humana. `--gate` sai com 1 somente se houver falha
+(com `--baseline`, somente falha nova ou pior que a registrada).
 """
 import argparse
 import bisect
-import copy
 import json
 import re
 import subprocess
@@ -18,22 +19,15 @@ from itertools import combinations
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
-# Limiares estritos: valor > alerta gera alerta; valor > falha gera falha; None desativa o nível.
-PADRAO = {
-    "prefixo": "br.prospero.",
-    "metodo_linhas": {"alerta": 30, "falha": 60},
-    "metodo_complexidade": {"alerta": 10, "falha": 20},
-    "metodo_aninhamento": {"alerta": 3, "falha": 5},
-    "metodo_parametros": {"alerta": 4, "falha": 7},
-    "classe_linhas": {"alerta": 300, "falha": 600},
-    "classe_dependencias": {"alerta": 10, "falha": 20},
-    "coesao": {"min_metodos": 7, "min_componentes": 2},
-    "duplicacao": {"janela": 6, "min_ocorrencias": 3},
-    "mudanca_conjunta": {"min_commits": 3, "historico": 300, "max_arquivos_commit": 30},
-}
+# Limiares versionados; valor > alerta gera alerta, valor > falha gera falha e null desativa o nível.
+CONFIGURACAO = Path(__file__).with_suffix(".json")
 TIPO_RE = re.compile(r"\b(class|interface|enum|record)\s+([A-Za-z_]\w*)")
 DECISAO_RE = re.compile(r"\b(?:if|for|while|case|catch)\b|&&|\|\||\?(?!\s*(?:extends\b|super\b|[>,]))")
 PALAVRAS = {"if", "for", "while", "switch", "catch", "synchronized", "return", "new", "try", "else", "do"}
+IF_RE = re.compile(r"\bif\s*\(")
+SWITCH_RE = re.compile(r"\bswitch\s*\(")
+ANONIMA_RE = re.compile(r"\bnew\s+([\w.]+)\s*(?:<[^(]*>)?\s*\([^()]*\)\s*\{")
+CONSTANTE_RE = re.compile(r"[!=]=\s*(?:[A-Z]\w*\.)*[A-Z][A-Z0-9_]+\b|\b[A-Z][A-Z0-9_]+\s*[!=]=|\.equals\(\s*\"|\"\s*\.equals\(")
 IDENT_FIM_RE = re.compile(r"([A-Za-z_]\w*)\s*(?:\[\s*\]\s*)*$")
 USO_RE = re.compile(r"(?:(?<![\w.])|(?<=this\.))([A-Za-z_]\w*)\b(?!\s*\()")
 CHAMADA_RE = re.compile(r"(?:(?<![\w.])|(?<=this\.))([A-Za-z_]\w*)\s*\(")
@@ -200,11 +194,100 @@ def aninhamento(corpo):
     return maximo
 
 
+def partes_no_nivel(limpo, inicio, fim):
+    """Intervalos separados por vírgula fora de parênteses/chaves/colchetes (posições do texto limpo)."""
+    partes, profundidade, atual = [], 0, inicio
+    for i in range(inicio, fim):
+        c = limpo[i]
+        profundidade += 1 if c in "([{" else -1 if c in ")]}" else 0
+        if c == "," and profundidade == 0:
+            partes.append((atual, i))
+            atual = i + 1
+    partes.append((atual, fim))
+    return partes
+
+
+def normalizar_rotulo(texto):
+    """`Lado.COMPRA` e `COMPRA` viram `COMPRA`; padrão `Tipo t when ...` vira `Tipo`; literal fica literal."""
+    texto = re.split(r"\bwhen\b", texto)[0].strip()
+    if texto[:1] in "\"'":
+        return texto
+    m = re.match(r"[A-Za-z_][\w.]*", texto)
+    return m.group(0).split(".")[-1] if m else " ".join(texto.split())
+
+
+def fim_rotulo(limpo, i, fim):
+    profundidade = 0
+    while i < fim:
+        c = limpo[i]
+        profundidade += {"(": 1, ")": -1}.get(c, 0)
+        if profundidade == 0 and (limpo.startswith("->", i) or (c == ":" and limpo[i + 1:i + 2] != ":"
+                                                                 and limpo[i - 1:i] != ":")):
+            return i
+        i += 1
+    return fim
+
+
+def switches(limpo, bruto):
+    """(seletor, rótulos ordenados) de cada switch; rótulos de switches aninhados ficam no switch interno."""
+    resultado, chaves, parenteses = [], pares(limpo), pares(limpo, "(", ")")
+    for m in SWITCH_RE.finditer(limpo):
+        abre_p = m.end() - 1
+        fecha_p = parenteses.get(abre_p)
+        abre = limpo.find("{", fecha_p) if fecha_p is not None else -1
+        if abre < 0 or abre not in chaves or limpo[fecha_p + 1:abre].strip():
+            continue
+        rotulos, profundidade, i, fecha = set(), 0, abre + 1, chaves[abre]
+        while i < fecha:
+            c = limpo[i]
+            if c in "{(":
+                profundidade += 1
+            elif c in "})":
+                profundidade -= 1
+            elif profundidade == 0 and re.match(r"\bcase\b", limpo[i:i + 5]) and not re.match(r"\w", limpo[i - 1]):
+                fim = fim_rotulo(limpo, i + 4, fecha)
+                rotulos |= {normalizar_rotulo(bruto[a:b]) for a, b in partes_no_nivel(limpo, i + 4, fim)}
+                i = fim
+                continue
+            i += 1
+        rotulos -= {"", "default", "null"}
+        resultado.append((" ".join(bruto[abre_p + 1:fecha_p].split()), tuple(sorted(rotulos))))
+    return resultado
+
+
+def condicoes_discriminantes(limpo, bruto):
+    """Condições de `if` que discriminam tipo/código (instanceof, constante, equals de literal), normalizadas."""
+    resultado, parenteses = [], pares(limpo, "(", ")")
+    for m in IF_RE.finditer(limpo):
+        fecha = parenteses.get(m.end() - 1)
+        if fecha is None:
+            continue
+        condicao = " ".join(bruto[m.end():fecha].split())
+        condicao = re.sub(r"(\binstanceof\s+[\w.]+(?:<[^>]*>)?)\s+[a-z_]\w*", r"\1", condicao)
+        if re.search(r"\binstanceof\b", condicao) or CONSTANTE_RE.search(condicao):
+            resultado.append(condicao)
+    return resultado
+
+
+def camada(pacote, camadas):
+    return next((p for p in pacote.split(".") if p in camadas), None)
+
+
+def implementados(depois_do_nome):
+    """Nomes simples após `implements` (sem genéricos nem qualificação)."""
+    m = re.search(r"\bimplements\b(.*)", depois_do_nome, re.S)
+    if not m:
+        return []
+    lista = re.sub(r"\bpermits\b.*", "", m.group(1), flags=re.S)
+    return sorted({re.sub(r"<.*", "", parte).split(".")[-1].strip() for parte in dividir(lista)} - {""})
+
+
 class Arquivo:
     def __init__(self, raiz, caminho):
         self.caminho = caminho.relative_to(raiz).as_posix()
         self.servico = self.caminho.split("/")[0]
-        self.texto = limpar(caminho.read_text(encoding="utf-8"))
+        self.bruto = caminho.read_text(encoding="utf-8")
+        self.texto = limpar(self.bruto)  # mesmas posições do bruto: literais e rótulos são lidos dele
         self.quebras = [i for i, c in enumerate(self.texto) if c == "\n"]
         self.chaves = pares(self.texto)
         m = re.search(r"^\s*package\s+([\w.]+)\s*;", self.texto, re.M)
@@ -231,6 +314,9 @@ class Arquivo:
             "linhas": self.linha(fecha) - self.linha(cab + m.start()) + 1,
             "metodos": [],
             "campos": [],
+            "anotacao": bool(re.search(r"@\s*interface\b", cabecalho)),
+            "anotado": bool(re.search(r"@(?!interface\b)[A-Za-z_]", self.texto[cab:abre])),
+            "implementa": implementados(cabecalho[m.end():]),
         }
         self.tipos.append(tipo)
         if palavra == "record":
@@ -253,7 +339,7 @@ class Arquivo:
             dados = assinatura(cab2, nome)
             if dados and especie == "bloco":
                 nome_m, parametros, posicao, construtor = dados
-                corpo = self.texto[a2 + 1:f2]
+                corpo, bruto = self.texto[a2 + 1:f2], self.bruto[a2 + 1:f2]
                 inicio_linha = self.linha(c2 + posicao)
                 tipo["metodos"].append({
                     "nome": nome_m,
@@ -262,9 +348,12 @@ class Arquivo:
                     "complexidade": 1 + len(DECISAO_RE.findall(corpo)),
                     "aninhamento": aninhamento(corpo),
                     "parametros": parametros,
+                    "else": len(re.findall(r"\belse\b", corpo)),
                     "estatico": bool(re.search(r"\bstatic\b", cab2[:posicao])),
                     "construtor": construtor,
                     "corpo": corpo,
+                    "_switches": switches(corpo, bruto),
+                    "_condicoes": condicoes_discriminantes(corpo, bruto),
                 })
             elif especie == "instrucao" and not dados and cab2.strip():
                 estatico = bool(re.search(r"\bstatic\b", cab2))
@@ -438,20 +527,47 @@ def duplicacoes(arquivos, cfg):
                                         d["locais"][0]["arquivo"], d["locais"][0]["inicio"]))
 
 
-def mudanca_conjunta(raiz, feature_de_arquivo, cfg):
-    """Pares de arquivos de features diferentes alterados juntos no histórico local do Git."""
+def historico_git(raiz, conhecidos, cfg):
+    """Arquivos analisados por commit (sem merges, últimos N); commits maiores que o limite ficam fora.
+
+    Só caminhos analisados entram, o que exclui por construção `.claude/worktrees` e outros checkouts.
+    """
     try:
         saida = subprocess.run(
             ["git", "-C", str(raiz), "log", "--no-merges", "--relative", f"-n{cfg['historico']}",
-             "--format=tformat:@@", "--name-only", "--", "*/src/main/java/*.java"],
+             "--format=tformat:@@", "--name-only", "--", "*/src/main/java/*.java", ":(exclude,glob).*/**"],
             capture_output=True, text=True, check=True, timeout=60).stdout
     except (OSError, subprocess.SubprocessError):
         return None
-    contagem = defaultdict(int)
+    commits = []
     for commit in saida.split("@@"):
-        arquivos = sorted({a.strip() for a in commit.splitlines() if a.strip() in feature_de_arquivo})
-        if len(arquivos) > cfg["max_arquivos_commit"]:
-            continue
+        arquivos = sorted({a.strip() for a in commit.splitlines() if a.strip() in conhecidos})
+        if arquivos and len(arquivos) <= cfg["max_arquivos_commit"]:
+            commits.append(arquivos)
+    return commits
+
+
+def hotspots(commits, metodos, cfg):
+    """Arquivos complexos que mudam com frequência: pontuação = commits × maior CC do arquivo."""
+    if commits is None:
+        return None
+    mudancas, cc = defaultdict(int), defaultdict(int)
+    for arquivos in commits:
+        for arquivo in arquivos:
+            mudancas[arquivo] += 1
+    for m in metodos:
+        cc[m["arquivo"]] = max(cc[m["arquivo"]], m["complexidade"])
+    lista = [{"arquivo": a, "commits": n, "cc_max": cc[a], "pontuacao": n * cc[a]}
+             for a, n in mudancas.items() if n >= cfg["min_commits"] and cc[a] > 1]
+    return sorted(lista, key=lambda h: (-h["pontuacao"], -h["commits"], h["arquivo"]))
+
+
+def mudanca_conjunta(commits, feature_de_arquivo, cfg):
+    """Pares de arquivos de features diferentes alterados juntos no histórico local do Git."""
+    if commits is None:
+        return None
+    contagem = defaultdict(int)
+    for arquivos in commits:
         for a, b in combinations(arquivos, 2):
             if feature_de_arquivo[a] != feature_de_arquivo[b]:
                 contagem[(a, b)] += 1
@@ -460,7 +576,8 @@ def mudanca_conjunta(raiz, feature_de_arquivo, cfg):
 
 
 def carregar_configuracao(caminho):
-    cfg = copy.deepcopy(PADRAO)
+    """Lê os limiares versionados em verificar-qualidade.json e aplica as sobrescritas de `caminho`."""
+    cfg = json.loads(CONFIGURACAO.read_text(encoding="utf-8"))
     if caminho:
         for chave, valor in json.loads(Path(caminho).read_text(encoding="utf-8")).items():
             if chave not in cfg:
@@ -472,11 +589,24 @@ def carregar_configuracao(caminho):
     return cfg
 
 
-def analisar(raiz, cfg, usar_git=True):
+def fontes(raiz, conjunto, servicos=None):
+    """Arquivos .java reais de */src/<conjunto>/java, opcionalmente só dos serviços dados.
+
+    Symlinks e diretórios ocultos (ex.: `.claude/worktrees`, cópias de outros agentes) ficam fora.
+    """
+    return [p for p in sorted(raiz.glob(f"*/src/{conjunto}/java/**/*.java"))
+            if not p.is_symlink() and p.resolve().is_relative_to(raiz.resolve())
+            and not any(parte.startswith(".") for parte in p.relative_to(raiz).parts)
+            and (not servicos or p.relative_to(raiz).parts[0] in servicos)]
+
+
+def servicos_disponiveis(raiz):
+    return sorted(p.parent.parent.parent.name for p in Path(raiz).glob("*/src/main/java") if p.is_dir())
+
+
+def analisar(raiz, cfg, usar_git=True, servicos=None, baseline=None):
     raiz = Path(raiz)
-    # Symlinks ficam fora: o diagnóstico lê só arquivos reais dentro da raiz.
-    arquivos = [Arquivo(raiz, p) for p in sorted(raiz.glob("*/src/main/java/**/*.java"))
-                if not p.is_symlink() and p.resolve().is_relative_to(raiz.resolve())]
+    arquivos = [Arquivo(raiz, p) for p in fontes(raiz, "main", servicos)]
     conhecidos, por_pacote = {}, defaultdict(dict)
     for arquivo in arquivos:
         for tipo in arquivo.tipos:
@@ -521,16 +651,29 @@ def analisar(raiz, cfg, usar_git=True):
             limite = limites[encontrado]
             achados.append({"nivel": encontrado, "regra": regra, "alvo": alvo, "valor": valor, "limite": limite})
 
+    isencao = cfg["classe_campos"]
+    pacotes_isentos = set(isencao.get("pacotes_isentos", []))
     for arquivo in arquivos:
         topo = next((t for t in arquivo.tipos if t["nome"] == arquivo.principal), None)
         linhas_classe = topo["linhas"] if topo else 0
         dependencias = len(ce_classe[arquivo.caminho])
+        lcom_topo = lcom4(topo) if topo else None
         classes.append({"arquivo": arquivo.caminho, "classe": arquivo.principal, "linhas": linhas_classe,
                         "metodos": sum(len(t["metodos"]) for t in arquivo.tipos),
+                        "campos": campos_instancia(topo) if topo else 0,
+                        "lcom4": len(lcom_topo) if lcom_topo is not None else None,
                         "dependencias": dependencias, "dependentes": len(ca_classe[arquivo.caminho])})
         registrar("classe_linhas", arquivo.caminho, linhas_classe, cfg["classe_linhas"])
         registrar("classe_dependencias", arquivo.caminho, dependencias, cfg["classe_dependencias"])
         for tipo in arquivo.tipos:
+            alvo_tipo = f"{arquivo.caminho}#{tipo['nome']}"
+            registrar("classe_metodos", alvo_tipo, len(tipo["metodos"]), cfg["classe_metodos"])
+            # ADR-002: DTOs (records) e entidades JPA ficam isentos do limite de variáveis de instância.
+            isento = (tipo["especie"] == "interface"
+                      or (isencao.get("isentar_records") and tipo["especie"] == "record")
+                      or camada(arquivo.pacote, pacotes_isentos) is not None)
+            if not isento:
+                registrar("classe_campos", alvo_tipo, campos_instancia(tipo), isencao)
             componentes = lcom4(tipo)
             elegiveis = sum(1 for m in tipo["metodos"] if not m["estatico"] and not m["construtor"])
             if (componentes is not None and len(componentes) >= cfg["coesao"]["min_componentes"]
@@ -541,26 +684,35 @@ def analisar(raiz, cfg, usar_git=True):
             for m in tipo["metodos"]:
                 alvo = f"{arquivo.caminho}:{m['linha']} {tipo['nome']}.{m['nome']}"
                 metodos.append({"arquivo": arquivo.caminho, "classe": tipo["nome"],
-                                **{k: v for k, v in m.items() if k != "corpo"},
+                                **{k: v for k, v in m.items() if k != "corpo" and not k.startswith("_")},
                                 "lcom4": len(componentes) if componentes is not None else None})
                 for regra, chave in (("metodo_linhas", "linhas"), ("metodo_complexidade", "complexidade"),
-                                     ("metodo_aninhamento", "aninhamento"), ("metodo_parametros", "parametros")):
+                                     ("metodo_aninhamento", "aninhamento"), ("metodo_parametros", "parametros"),
+                                     ("metodo_else", "else")):
                     registrar(regra, alvo, m[chave], cfg[regra])
+    achados += condicionais_repetidas(arquivos, cfg["condicional_repetida"])
+    achados += interfaces_unicas(raiz, arquivos, servicos, cfg["interface_unica"])
     ciclos_pacotes = ciclos(arestas, pacote_de)
     ciclos_features = ciclos(arestas, feature_de)
     for ciclo in ciclos_pacotes:
         achados.append({"nivel": "alerta", "regra": "ciclo_pacotes", "alvo": " <-> ".join(ciclo),
                         "valor": len(ciclo), "limite": 1})
     dups = duplicacoes(arquivos, cfg["duplicacao"])
-    conjuntas = mudanca_conjunta(raiz, feature_de, cfg["mudanca_conjunta"]) if usar_git else None
-    achados.sort(key=lambda a: (a["nivel"] != "falha", a["regra"], -a["valor"], a["alvo"]))
+    commits = historico_git(raiz, feature_de, cfg["mudanca_conjunta"]) if usar_git else None
+    conjuntas = mudanca_conjunta(commits, feature_de, cfg["mudanca_conjunta"])
+    for achado in achados:
+        achado["chave"] = chave_estavel(achado["alvo"])
+    marcar_baseline(achados, baseline)
+    achados.sort(key=lambda a: (a["nivel"] != "falha", not a.get("novo", True), a["regra"], -a["valor"], a["alvo"]))
     metodos.sort(key=lambda m: (m["arquivo"], m["linha"], m["nome"]))
     classes.sort(key=lambda c: c["arquivo"])
     return {
         "configuracao": cfg,
         "resumo": {"arquivos": len(arquivos), "tipos": sum(len(a.tipos) for a in arquivos), "metodos": len(metodos),
                    "falhas": sum(a["nivel"] == "falha" for a in achados),
-                   "alertas": sum(a["nivel"] == "alerta" for a in achados)},
+                   "alertas": sum(a["nivel"] == "alerta" for a in achados),
+                   "falhas_novas": sum(a["nivel"] == "falha" and a.get("novo", True) for a in achados),
+                   "servicos": sorted({a.servico for a in arquivos}), "baseline": baseline is not None},
         "achados": achados,
         "metodos": metodos,
         "classes": classes,
@@ -569,8 +721,97 @@ def analisar(raiz, cfg, usar_git=True):
         "ciclos": {"pacotes": ciclos_pacotes, "features": ciclos_features},
         "duplicacoes": dups,
         "mudanca_conjunta": conjuntas,
+        "hotspots": hotspots(commits, metodos, cfg["hotspots"]),
         "quando_abstrair": quando_abstrair(achados, dups, conjuntas, cfg),
     }
+
+
+def campos_instancia(tipo):
+    return sum(1 for _, estatico in tipo["campos"] if not estatico) if tipo["especie"] != "interface" else 0
+
+
+def chave_estavel(alvo):
+    """Alvo sem número de linha, para comparar com a baseline mesmo após deslocamentos no arquivo."""
+    return re.sub(r":\d+ ", "#", alvo, count=1)
+
+
+def marcar_baseline(achados, baseline):
+    """Com baseline, `novo` indica achado ausente nela ou com valor pior; só falhas novas reprovam o gate."""
+    if baseline is None:
+        return
+    anteriores = {}
+    for achado in baseline.get("achados", []) if isinstance(baseline, dict) else baseline:
+        chave = (achado["regra"], achado.get("chave") or chave_estavel(achado["alvo"]))
+        anteriores[chave] = max(achado["valor"], anteriores.get(chave, achado["valor"]))
+    for achado in achados:
+        anterior = anteriores.get((achado["regra"], achado["chave"]))
+        achado["novo"] = anterior is None or achado["valor"] > anterior
+
+
+def condicionais_repetidas(arquivos, cfg):
+    """Mesmo conjunto de rótulos de switch, ou mesma condição discriminante, em métodos distintos do serviço."""
+    por_switch, por_condicao = defaultdict(set), defaultdict(set)
+    for arquivo in arquivos:
+        for tipo in arquivo.tipos:
+            for m in tipo["metodos"]:
+                local = f"{arquivo.caminho}:{m['linha']} {tipo['nome']}.{m['nome']}"
+                for seletor, rotulos in m["_switches"]:
+                    if len(rotulos) >= cfg["min_rotulos"]:
+                        por_switch[(arquivo.servico, rotulos)].add((local, seletor))
+                for condicao in set(m["_condicoes"]):
+                    por_condicao[(arquivo.servico, condicao)].add(local)
+    achados = []
+    for (servico, rotulos), usos in sorted(por_switch.items()):
+        locais = sorted({local for local, _ in usos})
+        if len(locais) >= cfg["min_locais_switch"]:
+            achados.append({"nivel": "alerta", "regra": "switch_repetido", "valor": len(locais),
+                            "limite": cfg["min_locais_switch"] - 1, "locais": locais,
+                            "seletores": sorted({s for _, s in usos}),
+                            "alvo": f"{servico}: case {', '.join(rotulos)}"})
+    for (servico, condicao), usos in sorted(por_condicao.items()):
+        if len(usos) >= cfg["min_locais_condicao"]:
+            achados.append({"nivel": "alerta", "regra": "condicao_repetida", "valor": len(usos),
+                            "limite": cfg["min_locais_condicao"] - 1, "locais": sorted(usos),
+                            "alvo": f"{servico}: if ({condicao})"})
+    return achados
+
+
+def interfaces_unicas(raiz, arquivos, servicos, cfg):
+    """Interface com uma única implementação e sem eixo de mudança visível.
+
+    Eixos aceitos: segunda implementação (inclusive classe anônima), dublê em src/test, porta em camada pura
+    implementada em camada de infraestrutura (ADR-001), interface anotada (contrato de framework) ou nenhuma
+    implementação declarada (lambda/proxy). Lambdas não são detectadas como implementação.
+    """
+    implementacoes, em_teste = defaultdict(set), set()
+    for arquivo in arquivos:
+        for tipo in arquivo.tipos:
+            for nome in tipo["implementa"]:
+                implementacoes[(arquivo.servico, nome)].add((arquivo.caminho, arquivo.pacote, tipo["nome"]))
+        for m in ANONIMA_RE.finditer(arquivo.texto):
+            implementacoes[(arquivo.servico, m.group(1).split(".")[-1])].add(
+                (arquivo.caminho, arquivo.pacote, f"anônima:{arquivo.linha(m.start())}"))
+    for caminho in fontes(raiz, "test", servicos):
+        texto, servico = limpar(caminho.read_text(encoding="utf-8")), caminho.relative_to(raiz).parts[0]
+        for lista in re.findall(r"\bimplements\b([^{]*)\{", texto):
+            em_teste |= {(servico, nome) for nome in implementados("implements" + lista)}
+        em_teste |= {(servico, m.group(1).split(".")[-1]) for m in ANONIMA_RE.finditer(texto)}
+    puras, infra = set(cfg["camadas_puras"]), set(cfg["camadas_infra"])
+    achados = []
+    for arquivo in arquivos:
+        for tipo in arquivo.tipos:
+            if tipo["especie"] != "interface" or tipo["anotacao"] or tipo["anotado"]:
+                continue
+            chave = (arquivo.servico, tipo["nome"].split(".")[-1])
+            impls = sorted(implementacoes.get(chave, ()))
+            if len(impls) != 1 or chave in em_teste:
+                continue
+            caminho_impl, pacote_impl, nome_impl = impls[0]
+            if camada(arquivo.pacote, puras) and camada(pacote_impl, infra):
+                continue
+            achados.append({"nivel": "alerta", "regra": "interface_unica_implementacao", "valor": 1, "limite": 1,
+                            "alvo": f"{arquivo.caminho}#{tipo['nome']}", "locais": [f"{caminho_impl}#{nome_impl}"]})
+    return achados
 
 
 def quando_abstrair(achados, dups, conjuntas, cfg):
@@ -581,6 +822,21 @@ def quando_abstrair(achados, dups, conjuntas, cfg):
         if achado["regra"] in ("metodo_complexidade", "metodo_linhas", "metodo_aninhamento") and achado["nivel"] == "falha":
             sugestoes.append({"evidencia": f"{achado['regra']}={achado['valor']} > {achado['limite']}",
                               "alvo": achado["alvo"], "acao": "extrair método privado ou Helper puro no mesmo contexto"})
+        elif achado["regra"] == "switch_repetido":
+            sugestoes.append({"evidencia": f"mesmos rótulos de switch em {achado['valor']} métodos",
+                              "alvo": achado["alvo"],
+                              "acao": "se as decisões mudam juntas, levar o comportamento ao tipo (método no enum "
+                                      "ou na sealed interface); switch exaustivo sobre sealed/enum que só traduz "
+                                      "dados (parser, mapeamento) pode ficar; Strategy só com dependências próprias"})
+        elif achado["regra"] == "condicao_repetida":
+            sugestoes.append({"evidencia": f"mesma condição discriminante em {achado['valor']} métodos",
+                              "alvo": achado["alvo"],
+                              "acao": "encapsular a pergunta no enum/objeto de valor (ex.: `lado.compra()`) "
+                                      "antes de considerar polimorfismo"})
+        elif achado["regra"] == "interface_unica_implementacao":
+            sugestoes.append({"evidencia": "1 implementação, sem dublê de teste nem porta pura->infra",
+                              "alvo": achado["alvo"],
+                              "acao": "não abstrair: usar a classe concreta até surgir o segundo eixo de mudança"})
         elif achado["regra"] == "coesao_lcom4":
             sugestoes.append({"evidencia": f"LCOM4={achado['valor']} componentes", "alvo": achado["alvo"],
                               "acao": "avaliar separar responsabilidades; confirmar com mudança conjunta antes de dividir"})
@@ -602,8 +858,17 @@ def quando_abstrair(achados, dups, conjuntas, cfg):
 def formatar(relatorio, limite):
     r, linhas = relatorio["resumo"], []
     linhas.append("Diagnóstico de qualidade (aproximação léxica; ver docs/playbook-desenvolvimento.md)")
+    linhas.append(f"Serviços {', '.join(r['servicos']) or '(nenhum)'}")
     linhas.append(f"Arquivos {r['arquivos']} | tipos {r['tipos']} | métodos {r['metodos']} | "
-                  f"falhas {r['falhas']} | alertas {r['alertas']}")
+                  f"falhas {r['falhas']} | alertas {r['alertas']}"
+                  + (f" | falhas novas vs. baseline {r['falhas_novas']}" if r["baseline"] else ""))
+
+    def achado(a):
+        marca = "[novo] " if r["baseline"] and a.get("novo") else ""
+        texto = f"{marca}{a['regra']} {a['valor']} > {a['limite']}: {a['alvo']}"
+        if a.get("locais"):
+            texto += "\n      em " + "\n         ".join(a["locais"])
+        return texto
 
     def secao(titulo, itens, fmt):
         linhas.append("")
@@ -615,18 +880,21 @@ def formatar(relatorio, limite):
         if len(itens) > limite:
             linhas.append(f"  ... +{len(itens) - limite} (use --json ou --limite)")
 
-    secao("Falhas", [a for a in relatorio["achados"] if a["nivel"] == "falha"],
-          lambda a: f"{a['regra']} {a['valor']} > {a['limite']}: {a['alvo']}")
-    secao("Alertas", [a for a in relatorio["achados"] if a["nivel"] == "alerta"],
-          lambda a: f"{a['regra']} {a['valor']} > {a['limite']}: {a['alvo']}")
+    secao("Falhas", [a for a in relatorio["achados"] if a["nivel"] == "falha"], achado)
+    secao("Alertas", [a for a in relatorio["achados"] if a["nivel"] == "alerta"], achado)
     top = sorted(relatorio["metodos"], key=lambda m: (-m["complexidade"], -m["linhas"], m["arquivo"], m["linha"]))
-    secao("Métodos mais complexos (CC, linhas, aninhamento, parâmetros)", top,
+    secao("Métodos mais complexos (CC, linhas, aninhamento, parâmetros, else)", top,
           lambda m: f"CC {m['complexidade']:>3} L {m['linhas']:>3} N {m['aninhamento']} P {m['parametros']} "
-                    f"{m['arquivo']}:{m['linha']} {m['classe']}.{m['nome']}")
+                    f"E {m['else']} {m['arquivo']}:{m['linha']} {m['classe']}.{m['nome']}")
     maiores = sorted(relatorio["classes"], key=lambda c: (-c["linhas"], c["arquivo"]))
-    secao("Classes maiores (linhas, métodos, Ce classe, Ca classe)", maiores,
-          lambda c: f"L {c['linhas']:>4} M {c['metodos']:>3} Ce {c['dependencias']:>2} Ca {c['dependentes']:>2} "
-                    f"{c['arquivo']}")
+    secao("Classes maiores (linhas, métodos, campos de instância, LCOM4, Ce classe, Ca classe)", maiores,
+          lambda c: f"L {c['linhas']:>4} M {c['metodos']:>3} C {c['campos']:>2} LCOM4 {c['lcom4'] or '-'} "
+                    f"Ce {c['dependencias']:>2} Ca {c['dependentes']:>2} {c['arquivo']}")
+    if relatorio["hotspots"] is None:
+        linhas += ["", "## Hotspots (commits × maior CC)", "  (histórico Git indisponível ou desativado)"]
+    else:
+        secao("Hotspots (commits × maior CC)", relatorio["hotspots"],
+              lambda h: f"{h['pontuacao']:>4} = {h['commits']} commits × CC {h['cc_max']} {h['arquivo']}")
     secao("Acoplamento por feature (Ca, Ce, I, A, D)", relatorio["features"],
           lambda f: f"Ca {f['ca']:>3} Ce {f['ce']:>3} I {f['instabilidade']} A {f['abstracao']} D {f['distancia']} "
                     f"{f['unidade']}")
@@ -653,16 +921,32 @@ def formatar(relatorio, limite):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--raiz", default=str(RAIZ), help="diretório com */src/main/java (padrão: repositório)")
-    parser.add_argument("--config", help="JSON que sobrescreve limiares de PADRAO")
+    parser.add_argument("--config", help="JSON que sobrescreve limiares de scripts/verificar-qualidade.json")
     parser.add_argument("--json", action="store_true", help="emite JSON ordenado")
-    parser.add_argument("--gate", action="store_true", help="código de saída 1 somente se houver falhas")
-    parser.add_argument("--sem-git", action="store_true", help="não lê o histórico para mudança conjunta")
+    parser.add_argument("--gate", action="store_true",
+                        help="código de saída 1 somente se houver falhas (com --baseline, só falhas novas ou piores)")
+    parser.add_argument("--baseline", help="JSON de achados aceitos (gerado por --gerar-baseline ou --json)")
+    parser.add_argument("--gerar-baseline", metavar="ARQUIVO", help="grava os achados atuais como baseline compacta")
+    parser.add_argument("--servico", action="append", help="analisa só este serviço (repetível)")
+    parser.add_argument("--sem-git", action="store_true", help="não lê o histórico (mudança conjunta e hotspots)")
     parser.add_argument("--limite", type=int, default=10, help="itens por seção no texto")
     args = parser.parse_args(argv)
     if not Path(args.raiz).is_dir():
         print(f"Raiz inexistente: {args.raiz}", file=sys.stderr)
         return 2
-    relatorio = analisar(args.raiz, carregar_configuracao(args.config), usar_git=not args.sem_git)
+    desconhecidos = sorted(set(args.servico or []) - set(servicos_disponiveis(args.raiz)))
+    if desconhecidos:
+        print(f"Serviço desconhecido: {', '.join(desconhecidos)} (disponíveis: "
+              f"{', '.join(servicos_disponiveis(args.raiz))})", file=sys.stderr)
+        return 2
+    baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
+    relatorio = analisar(args.raiz, carregar_configuracao(args.config), usar_git=not args.sem_git,
+                         servicos=args.servico, baseline=baseline)
+    if args.gerar_baseline:
+        compacta = {"achados": sorted(({k: a[k] for k in ("regra", "chave", "nivel", "valor")}
+                                       for a in relatorio["achados"]), key=lambda a: (a["regra"], a["chave"]))}
+        Path(args.gerar_baseline).write_text(json.dumps(compacta, ensure_ascii=False, indent=1, sort_keys=True)
+                                             + "\n", encoding="utf-8")
     try:
         if args.json:
             print(json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True))
@@ -671,7 +955,7 @@ def main(argv=None):
     except BrokenPipeError:
         # Saída cortada (ex.: `| head`): sem traceback.
         sys.stderr.close()
-    return 1 if args.gate and relatorio["resumo"]["falhas"] else 0
+    return 1 if args.gate and relatorio["resumo"]["falhas_novas"] else 0
 
 
 if __name__ == "__main__":

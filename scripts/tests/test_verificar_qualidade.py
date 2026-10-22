@@ -263,5 +263,194 @@ class CasosLimiteQa(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(qualidade.main(["--raiz", "/nao/existe/prospero", "--sem-git"]), 2)
 
+CAMPOS = """
+package br.prospero.fo.ordens.dominio;
+
+public class Carteira {
+    private static final int LIMITE = 3;
+    private final long saldo;
+    private final long reservado;
+    private int versao;
+
+    long livre(boolean bloqueada) {
+        if (bloqueada) {
+            return 0;
+        } else {
+            return saldo - reservado + versao;
+        }
+    }
+}
+"""
+
+SWITCHES = """
+package br.prospero.mo.risco.helper;
+
+final class Regras {
+    static int peso(Tipo tipo) {
+        return switch (tipo) {
+            case Tipo.LIMIT -> 1;
+            case MARKET, STOP -> switch (tipo) { case X -> 9; case Y -> 8; default -> 0; };
+            default -> 0;
+        };
+    }
+    static String nome(String texto) {
+        switch (texto) {
+            case "compra": return "C";
+            case "venda": return "V";
+            default: return "";
+        }
+    }
+    boolean compra(Ordem o) { if (o.lado() == Lado.COMPRA) return true; return o instanceof Compra c; }
+    boolean b(Ordem o) { if (o.lado() == Lado.COMPRA && o.ativa()) return true; if (o == null) return false; return false; }
+}
+"""
+
+SWITCHES_2 = """
+package br.prospero.mo.risco.actor;
+
+class Usa {
+    int preco(Tipo t) { return switch (t) { case MARKET -> 0; case LIMIT -> 1; case STOP -> 2; }; }
+    String nome(String texto) { return switch (texto) { case "venda", "compra" -> "x"; default -> ""; }; }
+    boolean compra(Ordem o) { if (o.lado()  ==  Lado.COMPRA) return true; if (o == null) return false; return false; }
+    boolean tipo(Ordem o) { if (o.lado() == Lado.COMPRA) { return o instanceof Compra outra; } return o == null; }
+}
+"""
+
+
+class EvolucaoFitnessTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.raiz = self.tmp.name
+        self.cfg = qualidade.carregar_configuracao(None)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def analisar(self, **kwargs):
+        return qualidade.analisar(self.raiz, self.cfg, usar_git=False, **kwargs)
+
+    def regras(self, relatorio, regra):
+        return [a for a in relatorio["achados"] if a["regra"] == regra]
+
+    def executar(self, *args):
+        with contextlib.redirect_stdout(io.StringIO()) as saida, contextlib.redirect_stderr(io.StringIO()):
+            codigo = qualidade.main(["--raiz", self.raiz, "--sem-git", *args])
+        return codigo, saida.getvalue()
+
+    def test_configuracao_versionada_e_carregada_por_padrao(self):
+        self.assertEqual(self.cfg["metodo_else"], {"alerta": 0, "falha": None})
+        self.assertEqual(self.cfg["classe_campos"]["alerta"], 2)
+
+    def test_else_e_campos_de_instancia_com_isencoes_do_adr_002(self):
+        escrever(self.raiz, "front-office", "br.prospero.fo.ordens.dominio", "Carteira", CAMPOS)
+        escrever(self.raiz, "front-office", "br.prospero.fo.ordens.dominio", "Dados",
+                 "package br.prospero.fo.ordens.dominio;\nrecord Dados(int a, int b, int c, int d) {}\n")
+        escrever(self.raiz, "front-office", "br.prospero.fo.ordens.jpa", "OrdemEntity",
+                 "package br.prospero.fo.ordens.jpa;\nclass OrdemEntity { int a; int b; int c; int d; }\n")
+        relatorio = self.analisar()
+        self.assertEqual(self.metodo(relatorio, "livre")["else"], 1)
+        self.assertEqual([(a["valor"], a["chave"]) for a in self.regras(relatorio, "metodo_else")],
+                         [(1, "front-office/src/main/java/br/prospero/fo/ordens/dominio/Carteira.java#Carteira.livre")])
+        campos = self.regras(relatorio, "classe_campos")
+        self.assertEqual([(a["alvo"].split("#")[1], a["valor"]) for a in campos], [("Carteira", 3)])
+        classe = next(c for c in relatorio["classes"] if c["classe"] == "Carteira")
+        self.assertEqual((classe["campos"], classe["lcom4"]), (3, None))
+
+    def metodo(self, relatorio, nome):
+        return next(m for m in relatorio["metodos"] if m["nome"] == nome)
+
+    def test_switch_e_condicao_repetidos_no_mesmo_servico(self):
+        escrever(self.raiz, "middle-office", "br.prospero.mo.risco.helper", "Regras", SWITCHES)
+        escrever(self.raiz, "middle-office", "br.prospero.mo.risco.actor", "Usa", SWITCHES_2)
+        escrever(self.raiz, "front-office", "br.prospero.fo.ordens.helper", "Outro",
+                 "package br.prospero.fo.ordens.helper;\nclass Outro { int f(Tipo t) { return switch (t) "
+                 "{ case LIMIT -> 1; case MARKET -> 2; case STOP -> 3; }; } }\n")
+        relatorio = self.analisar()
+        switches = {a["alvo"]: a for a in self.regras(relatorio, "switch_repetido")}
+        # Rótulo qualificado (Tipo.LIMIT) normaliza; switch aninhado não vaza; outro serviço não soma.
+        self.assertEqual(sorted(switches), ['middle-office: case "compra", "venda"', "middle-office: case LIMIT, MARKET, STOP"])
+        self.assertEqual(switches["middle-office: case LIMIT, MARKET, STOP"]["valor"], 2)
+        condicoes = self.regras(relatorio, "condicao_repetida")
+        # `o.lado() == Lado.COMPRA` aparece em 3 métodos; `o == null` não é discriminante; instanceof só em 2.
+        self.assertEqual([(a["alvo"], a["valor"]) for a in condicoes], [("middle-office: if (o.lado() == Lado.COMPRA)", 3)])
+        acoes = [s["acao"] for s in relatorio["quando_abstrair"]]
+        self.assertTrue(any("levar o comportamento ao tipo" in a for a in acoes))
+        self.assertTrue(any("encapsular a pergunta" in a for a in acoes))
+
+    def test_interface_com_unica_implementacao_sem_eixo_de_mudanca(self):
+        def interface(pacote, nome, extra=""):
+            escrever(self.raiz, "back-office", pacote, nome, f"package {pacote};\n{extra}public interface {nome} {{ void f(); }}\n")
+
+        def impl(pacote, nome, alvo, servico="back-office", raiz_src="main"):
+            destino = Path(self.raiz, servico, f"src/{raiz_src}/java", *pacote.split("."), f"{nome}.java")
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            destino.write_text(f"package {pacote};\nclass {nome} implements {alvo}, Comparable<{nome}> {{}}\n")
+
+        interface("br.prospero.bo.a.helper", "Sozinha")
+        impl("br.prospero.bo.a.actor", "SozinhaImpl", "br.prospero.bo.a.helper.Sozinha")
+        interface("br.prospero.bo.a.dominio", "Porta")
+        impl("br.prospero.bo.a.jpa", "PortaJpa", "Porta")
+        interface("br.prospero.bo.a.helper", "ComDuble")
+        impl("br.prospero.bo.a.actor", "ComDubleImpl", "ComDuble")
+        impl("br.prospero.bo.a.actor", "DubleTeste", "ComDuble", raiz_src="test")
+        interface("br.prospero.bo.a.helper", "Duas")
+        impl("br.prospero.bo.a.actor", "Uma", "Duas")
+        impl("br.prospero.bo.a.actor", "Outra", "Duas")
+        interface("br.prospero.bo.a.rest", "Cliente", "@RegisterRestClient\n")
+        impl("br.prospero.bo.a.actor", "ClienteFalso", "Cliente")
+        achados = self.regras(self.analisar(), "interface_unica_implementacao")
+        self.assertEqual([(a["alvo"].rsplit("/", 1)[1], a["locais"][0].rsplit("#", 1)[1]) for a in achados],
+                         [("Sozinha.java#Sozinha", "SozinhaImpl")])
+
+    def test_servico_filtra_e_desconhecido_retorna_2(self):
+        escrever(self.raiz, "front-office", "br.prospero.fo.ordens.dominio", "Carteira", CAMPOS)
+        escrever(self.raiz, "middle-office", "br.prospero.mo.risco.helper", "Regras", SWITCHES)
+        self.assertEqual(self.analisar(servicos=["middle-office"])["resumo"]["servicos"], ["middle-office"])
+        codigo, saida = self.executar("--servico", "front-office")
+        self.assertEqual(codigo, 0)
+        self.assertIn("Serviços front-office", saida)
+        self.assertNotIn("middle-office", saida)
+        self.assertEqual(self.executar("--servico", "nao-existe")[0], 2)
+
+    def test_diretorios_ocultos_como_worktrees_ficam_fora(self):
+        escrever(self.raiz, "front-office", "br.prospero.fo.ordens.dominio", "Carteira", CAMPOS)
+        escrever(Path(self.raiz, ".claude"), "worktrees", "br.prospero.fo.x", "Copia", CAMPOS)
+        escrever(self.raiz, ".claude", "br.prospero.fo.x", "Copia", CAMPOS)
+        self.assertEqual(self.analisar()["resumo"]["arquivos"], 1)
+
+    def test_baseline_reprova_so_falha_nova_ou_pior(self):
+        def gate(n_ifs, extra=""):
+            corpo = "".join(f"        if (x == {i}) return {i};\n" for i in range(n_ifs))
+            escrever(self.raiz, "front-office", "br.prospero.fo.ordens.helper", "Gate",
+                     f"package br.prospero.fo.ordens.helper;\nclass Gate {{\n\n    int f(int x) {{\n{corpo}"
+                     f"        return 0;\n    }}\n{extra}}}\n")
+        gate(25)
+        baseline = str(Path(self.raiz, "baseline.json"))
+        self.assertEqual(self.executar("--gate")[0], 1)
+        self.assertEqual(self.executar("--gerar-baseline", baseline)[0], 0)
+        self.assertEqual(json.loads(Path(baseline).read_text())["achados"][0]["chave"],
+                         "front-office/src/main/java/br/prospero/fo/ordens/helper/Gate.java#Gate.f")
+        gate(25, "\n")  # mesma falha deslocada: chave sem linha continua igual
+        codigo, saida = self.executar("--gate", "--baseline", baseline)
+        self.assertEqual(codigo, 0)
+        self.assertIn("falhas novas vs. baseline 0", saida)
+        gate(26)  # piorou
+        self.assertEqual(self.executar("--gate", "--baseline", baseline)[0], 1)
+        gate(25, "    int g(int x) {\n" + "".join(f"        if (x == {i}) return {i};\n" for i in range(25))
+             + "        return 0;\n    }\n")  # nova falha
+        codigo, saida = self.executar("--gate", "--baseline", baseline)
+        self.assertEqual(codigo, 1)
+        self.assertIn("[novo] metodo_complexidade 26 > 20", saida)
+
+    def test_hotspots_combinam_commits_e_complexidade(self):
+        commits = [["a.java", "b.java"], ["a.java"], ["b.java"], ["a.java"]]
+        metodos = [{"arquivo": "a.java", "complexidade": 4}, {"arquivo": "a.java", "complexidade": 9},
+                   {"arquivo": "b.java", "complexidade": 20}]
+        self.assertEqual(qualidade.hotspots(commits, metodos, {"min_commits": 2}), [
+            {"arquivo": "b.java", "commits": 2, "cc_max": 20, "pontuacao": 40},
+            {"arquivo": "a.java", "commits": 3, "cc_max": 9, "pontuacao": 27}])
+        self.assertIsNone(qualidade.hotspots(None, metodos, {"min_commits": 2}))
+
+
 if __name__ == "__main__":
     unittest.main()

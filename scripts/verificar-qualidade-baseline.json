@@ -1,0 +1,796 @@
+{
+ "achados": [
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/comum/dominio/RegraNegocioException.java#RegraNegocioException",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/comum/kafka/ConsumoKafka.java#ConsumoKafka",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 10
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/comum/kafka/RelayOutbox.java#RelayOutbox",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 9
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/mercado/actor/PrepararMercadoActor.java#PrepararMercadoActor",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java#EnviarOrdemActor",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/kafka/ConsumidorMatching.java#ConsumidorMatching",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 11
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/kafka/ConsumidorResultadosRisco.java#ConsumidorResultadosRisco",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 9
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/rest/OrdensOcoResource.java#OrdensOcoResource",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/rest/OrdensResource.java#OrdensResource",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/Livro.java#Livro",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.ContextoComando",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 4
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.EstadoAtivo",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 9
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/OfertaViva.java#OfertaViva",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 7
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/ParesOco.java#ParesOco.Par",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/SessaoMatching.java#SessaoMatching",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 5
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/kafka/ProcessadorMatching.java#ProcessadorMatching",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 11
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/comum/dominio/RegraNegocioException.java#RegraNegocioException",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/kafka/ConsumidorMatching.java#ConsumidorMatching",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 7
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/ConsumoKafka.java#ConsumoKafka",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 12
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/RelayOutbox.java#RelayOutbox",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 9
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/actor/AvaliarRiscoActor.java#AvaliarRiscoActor",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 4
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/kafka/ConsumidorComandosRisco.java#ConsumidorComandosRisco",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 9
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/sessao/actor/EncerrarSessaoActor.java#EncerrarSessaoActor",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/mercado/actor/ConsultarMercadoActor.java",
+   "nivel": "alerta",
+   "regra": "classe_dependencias",
+   "valor": 14
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java",
+   "nivel": "falha",
+   "regra": "classe_dependencias",
+   "valor": 22
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/jpa/RepositorioOrdensJpa.java",
+   "nivel": "alerta",
+   "regra": "classe_dependencias",
+   "valor": 16
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java",
+   "nivel": "alerta",
+   "regra": "classe_linhas",
+   "valor": 474
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java",
+   "nivel": "alerta",
+   "regra": "classe_linhas",
+   "valor": 324
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java",
+   "nivel": "alerta",
+   "regra": "classe_linhas",
+   "valor": 325
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching",
+   "nivel": "alerta",
+   "regra": "classe_metodos",
+   "valor": 24
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/comum/kafka/ConsumoKafka.java#ConsumoKafka.ciclo",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 4
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/kafka/ConsumidorMatching.java#ConsumidorMatching.consumir",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 5
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/jpa/CheckpointMatching.java#CheckpointMatching.inicializar",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 4
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/kafka/ProcessadorMatching.java#ProcessadorMatching.executar",
+   "nivel": "falha",
+   "regra": "metodo_aninhamento",
+   "valor": 8
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/helper/EnvelopeMatching.java#EnvelopeMatching.ler",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 4
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicar",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 4
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicarPerna",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 4
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/ConsumoKafka.java#ConsumoKafka.ciclo",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 4
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/helper/EnvelopeRisco.java#EnvelopeRisco.comando",
+   "nivel": "alerta",
+   "regra": "metodo_aninhamento",
+   "valor": 4
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeMatching.java#EnvelopeMatching.evento",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 52
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeRisco.java#EnvelopeRisco.exigirReservaCoerente",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 12
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeRisco.java#EnvelopeRisco.resultado",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 17
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/PoliticaOrdem.java#PoliticaOrdem.validar",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 12
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.aplicar",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 35
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.encerrar",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 31
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.negocio",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 18
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.oferta",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 13
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicar",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 47
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.encerrarSessao",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 13
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.processarOco",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 11
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.recusa",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 29
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.recusaPar",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 20
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/ParametrosAtivo.java#ParametrosAtivo.ParametrosAtivo",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 11
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.comando",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 48
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.evento",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 25
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.par",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 28
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/SessaoMatching.java#SessaoMatching.processar",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 18
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/kafka/ProcessadorMatching.java#ProcessadorMatching.executar",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 16
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/helper/EnvelopeMatching.java#EnvelopeMatching.ler",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 34
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicar",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 60
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicarPerna",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 39
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/dominio/ComandoRisco.java#ComandoRisco.admissivel",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 11
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/dominio/ComandoRisco.java#ComandoRisco.oco",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 16
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/helper/EnvelopeAdmissao.java#EnvelopeAdmissao.serializar",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 11
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/helper/EnvelopeRisco.java#EnvelopeRisco.comando",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 35
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeMatching.java#EnvelopeMatching.evento",
+   "nivel": "alerta",
+   "regra": "metodo_else",
+   "valor": 1
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.processar",
+   "nivel": "alerta",
+   "regra": "metodo_else",
+   "valor": 1
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.processarOco",
+   "nivel": "alerta",
+   "regra": "metodo_else",
+   "valor": 1
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicar",
+   "nivel": "alerta",
+   "regra": "metodo_else",
+   "valor": 1
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.encerrar",
+   "nivel": "alerta",
+   "regra": "metodo_else",
+   "valor": 1
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/helper/EnvelopeRisco.java#EnvelopeRisco.resultado",
+   "nivel": "alerta",
+   "regra": "metodo_else",
+   "valor": 1
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/comum/kafka/RelayOutbox.java#RelayOutbox.publicarLote",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 37
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java#EnviarOrdemActor.registrarOco",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 41
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java#EnviarOrdemActor.registrarSimples",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 34
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeMatching.java#EnvelopeMatching.evento",
+   "nivel": "falha",
+   "regra": "metodo_linhas",
+   "valor": 114
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeRisco.java#EnvelopeRisco.resultado",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 52
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.aplicar",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 35
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicar",
+   "nivel": "falha",
+   "regra": "metodo_linhas",
+   "valor": 116
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/jpa/RepositorioOrdensJpa.java#RepositorioOrdensJpa.registrar",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 51
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/kafka/ConsumidorMatching.java#ConsumidorMatching.consumir",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 43
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.encerrarSessao",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 31
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.executar",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 31
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.processarOco",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 50
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.recusa",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 42
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.comando",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 51
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.evento",
+   "nivel": "falha",
+   "regra": "metodo_linhas",
+   "valor": 65
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.par",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 38
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/jpa/CheckpointMatching.java#CheckpointMatching.inicializar",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 33
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/kafka/ProcessadorMatching.java#ProcessadorMatching.executar",
+   "nivel": "falha",
+   "regra": "metodo_linhas",
+   "valor": 73
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/helper/EnvelopeMatching.java#EnvelopeMatching.ler",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 44
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicar",
+   "nivel": "falha",
+   "regra": "metodo_linhas",
+   "valor": 106
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/jpa/RepositorioMatchingJpa.java#RepositorioMatchingJpa.aplicarPerna",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 56
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/RelayOutbox.java#RelayOutbox.publicarLote",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 37
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/helper/EnvelopeAdmissao.java#EnvelopeAdmissao.serializar",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 50
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/helper/EnvelopeRisco.java#EnvelopeRisco.comando",
+   "nivel": "falha",
+   "regra": "metodo_linhas",
+   "valor": 70
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/comum/kafka/ConsumoKafka.java#ConsumoKafka.ConsumoKafka",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/comum/rest/Problemas.java#Problemas.resposta",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/mercado/jpa/RepositorioMercadoJpa.java#RepositorioMercadoJpa.substituir",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 6
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java#EnviarOrdemActor.EnviarOrdemActor",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java#EnviarOrdemActor.registrar",
+   "nivel": "falha",
+   "regra": "metodo_parametros",
+   "valor": 8
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java#EnviarOrdemActor.repeticao",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 6
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/EventoMatching.java#EventoMatching.EventoMatching",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 7
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/EventoMatching.java#EventoMatching.EventoMatching",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 6
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/Ordem.java#Ordem.Ordem",
+   "nivel": "falha",
+   "regra": "metodo_parametros",
+   "valor": 20
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/Ordem.java#Ordem.Ordem",
+   "nivel": "falha",
+   "regra": "metodo_parametros",
+   "valor": 17
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/Ordem.java#Ordem.Ordem",
+   "nivel": "falha",
+   "regra": "metodo_parametros",
+   "valor": 16
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeRisco.java#EnvelopeRisco.comando",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.aplicar",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.atualizar",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 6
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/ProjetarMatching.java#ProjetarMatching.negocio",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/jpa/RepositorioOrdensJpa.java#RepositorioOrdensJpa.registrar",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 6
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/kafka/ConsumidorMatching.java#ConsumidorMatching.ConsumidorMatching",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 7
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/ordens/kafka/ConsumidorResultadosRisco.java#ConsumidorResultadosRisco.ConsumidorResultadosRisco",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 7
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/Admissao.java#Admissao.Admissao",
+   "nivel": "falha",
+   "regra": "metodo_parametros",
+   "valor": 11
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.encerrar",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.encerrarOuRepousar",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 6
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/MotorMatching.java#MotorMatching.negociar",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/livro/dominio/OfertaViva.java#OfertaViva.OfertaViva",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 7
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.Comando.Comando",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "matching-engine/src/main/java/br/prospero/me/matching/helper/EnvelopeMatching.java#EnvelopeMatching.par",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 7
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/comum/rest/Problemas.java#Problemas.resposta",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/matching/helper/CalculoConsumo.java#CalculoConsumo.compra",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/ConsumoKafka.java#ConsumoKafka.ConsumoKafka",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 6
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/ConsumoKafka.java#ConsumoKafka.ConsumoKafka",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/dominio/ComandoRisco.java#ComandoRisco.ComandoRisco",
+   "nivel": "falha",
+   "regra": "metodo_parametros",
+   "valor": 8
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/dominio/Perna.java#Perna.Perna",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 5
+  },
+  {
+   "chave": "middle-office/src/main/java/br/prospero/mo/risco/kafka/ConsumidorComandosRisco.java#ConsumidorComandosRisco.ConsumidorComandosRisco",
+   "nivel": "alerta",
+   "regra": "metodo_parametros",
+   "valor": 7
+  },
+  {
+   "chave": "front-office: case Aceita, Encerrada, Negocio, Oferta, Reduzida, Rejeitada, SessaoEncerrada, StopAcionado, StopPendente",
+   "nivel": "alerta",
+   "regra": "switch_repetido",
+   "valor": 2
+  },
+  {
+   "chave": "matching-engine: case Negocio, OfertaNoLivro, OrdemAceita, OrdemEncerrada, OrdemReduzida, OrdemRejeitada, StopAcionado, StopPendente",
+   "nivel": "alerta",
+   "regra": "switch_repetido",
+   "valor": 2
+  },
+  {
+   "chave": "middle-office: case Caixa, Custodia, Recusa",
+   "nivel": "alerta",
+   "regra": "switch_repetido",
+   "valor": 2
+  },
+  {
+   "chave": "middle-office: case LIMIT, MARKET, STOP, STOP_LIMIT",
+   "nivel": "alerta",
+   "regra": "switch_repetido",
+   "valor": 2
+  }
+ ]
+}

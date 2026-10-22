@@ -148,18 +148,37 @@ Logs, métricas e traces devem explicar o mesmo evento/janela. Dados ausentes n�
 
 ## Diagnóstico de qualidade
 
-`python3 scripts/verificar-qualidade.py` mede o Java de `*/src/main/java` de forma léxica e determinística (stdlib, sem rede): por método, linhas, complexidade ciclomática aproximada (1 + `if`/`for`/`while`/`case`/`catch`/`&&`/`||`/`?:`), aninhamento de blocos e parâmetros; por classe, linhas e dependências/dependentes por imports do próprio projeto; LCOM4 (métodos de instância ligados por campo comum ou chamada interna, sem construtores/estáticos); por pacote e feature, Ca/Ce em classes, `I = Ce/(Ca+Ce)`, abstração `A` e `D = |A+I−1|`; ciclos entre pacotes; duplicação textual normalizada (janela de 6 linhas) e mudança conjunta entre features no histórico Git local. `--json` emite JSON ordenado, `--config arquivo.json` sobrescreve limiares, `--sem-git` dispensa o histórico e `--gate` retorna 1 somente com falhas. É diagnóstico para revisão: não está na CI, e ativá-lo como gate depende de decisão do usuário. Violações de camada continuam no ArchUnit e em `verificar-estrutura.py`.
+`python3 scripts/verificar-qualidade.py` mede o Java de `*/src/main/java` de forma léxica e determinística (stdlib, sem rede; diretórios ocultos como `.claude/worktrees` ficam fora): por método, linhas, complexidade ciclomática aproximada (1 + `if`/`for`/`while`/`case`/`catch`/`&&`/`||`/`?:`), aninhamento, parâmetros e `else`; por classe, linhas, métodos, campos de instância, LCOM4 (métodos de instância ligados por campo comum ou chamada interna, sem construtores/estáticos) e dependências/dependentes por imports do próprio projeto; por pacote e feature, Ca/Ce em classes, `I = Ce/(Ca+Ce)`, abstração `A` e `D = |A+I−1|`; ciclos entre pacotes; duplicação textual normalizada (janela de 6 linhas); `switch` com os mesmos rótulos e condição discriminante repetida (`instanceof`, constante, `equals` de literal) no mesmo serviço; interface com uma única implementação; e, pelo histórico Git local, mudança conjunta entre features e hotspots (commits × maior CC do arquivo).
+
+Limiares versionados em [`scripts/verificar-qualidade.json`](../scripts/verificar-qualidade.json); `--config arquivo.json` sobrescreve chaves. `--json` emite JSON ordenado, `--servico nome` (repetível) restringe a análise, `--sem-git` dispensa o histórico e `--gate` retorna 1 somente com falhas. `--gerar-baseline arquivo.json` grava os achados aceitos por chave sem número de linha; com `--baseline arquivo.json`, `--gate` reprova apenas falha nova ou com valor pior, e o texto marca `[novo]`. A [baseline atual](../scripts/verificar-qualidade-baseline.json) registra as falhas já existentes para permitir adoção sem quebrar o fluxo; regenerá-la exige justificativa no PR. É diagnóstico para revisão: não está na CI, e ativá-lo como gate depende de decisão do usuário. Violações de camada continuam no ArchUnit e em `verificar-estrutura.py`.
 
 | Regra (valor > limite) | Alerta | Falha |
 | --- | --- | --- |
 | Linhas / complexidade por método | 30 / 10 | 60 / 20 |
 | Aninhamento / parâmetros por método | 3 / 4 | 5 / 7 |
-| Linhas por classe / dependências do projeto por classe | 300 / 10 | 600 / 20 |
+| `else` por método (ADR-002, item 2) | 0 | — |
+| Linhas / métodos por classe | 300 / 20 | 600 / — |
+| Campos de instância por classe (ADR-002, item 8; records, `dto` e `jpa` isentos) | 2 | — |
+| Dependências do projeto por classe | 10 | 20 |
 | LCOM4 ≥ 2 com ≥ 7 métodos de instância; ciclo entre pacotes | sempre alerta | — |
+| `switch` com mesmos rótulos em ≥ 2 métodos; condição discriminante em ≥ 3 métodos | sempre alerta | — |
+| Interface com uma implementação sem eixo de mudança | sempre alerta | — |
 
-`D` é informativo: domínio concreto e estável (records, enums) fica naturalmente longe da sequência principal. **Quando abstrair**: somente com evidência — método acima do limite de **falha** (alerta só sinaliza para a revisão) (extrair método privado ou Helper puro no mesmo contexto), duplicação com 3 ou mais ocorrências **no mesmo serviço** (regra de três), LCOM4 acima do gate confirmado por mudança conjunta, ou 3 ou mais commits alterando juntas duas features (revisar fronteira/contrato antes de criar interface). Abaixo dos gates não se abstrai; duplicação entre serviços é esperada, porque serviços não dependem da implementação uns dos outros nem de biblioteca compartilhada antecipada ([ADR-001](adrs/ADR-001-arquitetura-backend.md), [rules](rules.md#arquitetura-e-código)). As métricas são aproximações sem AST: comentários e literais são ignorados, referências no mesmo pacote não entram em Ce e variáveis locais homônimas de campos podem unir componentes do LCOM4. `case 1, 2 ->` conta uma decisão, `when` de padrões não conta, a complexidade inclui lambdas/classes anônimas internas e campos declarados juntos com inicializador registram só o primeiro. Symlinks são ignorados e raiz inexistente retorna 2.
+`D` e hotspots são informativos: domínio concreto e estável (records, enums) fica naturalmente longe da sequência principal, e hotspot só ordena onde revisar primeiro. Campos acima do limite em Actors e adaptadores Kafka costumam ser dependências injetadas: o ADR-002 exige justificativa no PR, não contêiner artificial para esconder campos.
 
-Ideias adaptadas, sem cópia de código, de [arch-fitness-review](https://github.com/jonatasfernandespimenta/arch-fitness-review/tree/a07ea4184b431308d6379ec5df2f5245b8590c63) (Jonatas Fernandes Pimenta, licença MIT), fixado nesse commit. Não adotados: delta por PR, relatório Mermaid/LLM, análise TypeScript e regras de camadas próprias.
+**Quando abstrair** — somente com evidência:
+
+- Método acima do limite de **falha** (alerta só sinaliza para a revisão): extrair método privado ou Helper puro no mesmo contexto.
+- Duplicação com 3 ou mais ocorrências **no mesmo serviço** (regra de três): extrair Helper/método no próprio serviço.
+- LCOM4 acima do gate, confirmado por mudança conjunta: avaliar separar responsabilidades.
+- Mesmo `switch` em 2 ou mais métodos: se as decisões mudam juntas, levar o comportamento ao tipo (método no enum ou na sealed interface); `switch` exaustivo sobre sealed/enum que só traduz dados (parser, mapeamento) pode ficar. Strategy só quando as variações têm dependências próprias.
+- Mesma condição discriminante em 3 ou mais métodos: encapsular a pergunta no enum/objeto de valor (`lado.compra()`) antes de considerar polimorfismo.
+- 3 ou mais commits alterando juntas duas features: revisar fronteira/contrato antes de criar interface.
+- **Não** criar interface com uma única implementação. Eixos aceitos: segunda implementação, dublê em `src/test`, porta em `dominio`/`helper` implementada em `jpa`/`kafka`/`rest` ([ADR-001](adrs/ADR-001-arquitetura-backend.md)) ou contrato de framework anotado.
+
+Abaixo dos gates não se abstrai; duplicação entre serviços é esperada, porque serviços não dependem da implementação uns dos outros nem de biblioteca compartilhada antecipada ([ADR-001](adrs/ADR-001-arquitetura-backend.md), [rules](rules.md#arquitetura-e-código)). As métricas são aproximações sem AST: comentários e literais são ignorados, referências no mesmo pacote não entram em Ce e variáveis locais homônimas de campos podem unir componentes do LCOM4. `case 1, 2 ->` conta uma decisão, `when` de padrões não conta, a complexidade inclui lambdas/classes anônimas internas e campos declarados juntos com inicializador registram só o primeiro. Implementação por lambda não é detectada, e nomes simples iguais no mesmo serviço se confundem. Symlinks são ignorados e raiz ou serviço inexistente retornam 2.
+
+Ideias adaptadas, sem cópia de código, de [arch-fitness-review](https://github.com/jonatasfernandespimenta/arch-fitness-review/tree/a07ea4184b431308d6379ec5df2f5245b8590c63) (Jonatas Fernandes Pimenta, licença MIT), fixado nesse commit. A linha de base adapta a ideia de delta (chave estável e piora de valor) sem worktrees base/head. Não adotados: delta automático por PR, relatório Mermaid/LLM, análise TypeScript e regras de camadas próprias.
 
 ## Simplicidade e fechamento
 
