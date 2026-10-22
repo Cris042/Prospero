@@ -706,19 +706,19 @@
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/EventoMatching.java#EventoMatching.EventoMatching",
    "nivel": "alerta",
    "regra": "metodo_parametros",
-   "valor": 7
+   "valor": 6
   },
   {
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/EventoMatching.java#EventoMatching.EventoMatching",
    "nivel": "alerta",
    "regra": "metodo_parametros",
-   "valor": 6
+   "valor": 7
   },
   {
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/Ordem.java#Ordem.Ordem",
    "nivel": "falha",
    "regra": "metodo_parametros",
-   "valor": 20
+   "valor": 16
   },
   {
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/Ordem.java#Ordem.Ordem",
@@ -730,7 +730,7 @@
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/dominio/Ordem.java#Ordem.Ordem",
    "nivel": "falha",
    "regra": "metodo_parametros",
-   "valor": 16
+   "valor": 20
   },
   {
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeRisco.java#EnvelopeRisco.comando",
@@ -832,13 +832,13 @@
    "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/ConsumoKafka.java#ConsumoKafka.ConsumoKafka",
    "nivel": "alerta",
    "regra": "metodo_parametros",
-   "valor": 6
+   "valor": 5
   },
   {
    "chave": "middle-office/src/main/java/br/prospero/mo/mensageria/kafka/ConsumoKafka.java#ConsumoKafka.ConsumoKafka",
    "nivel": "alerta",
    "regra": "metodo_parametros",
-   "valor": 5
+   "valor": 6
   },
   {
    "chave": "middle-office/src/main/java/br/prospero/mo/risco/dominio/ComandoRisco.java#ComandoRisco.ComandoRisco",

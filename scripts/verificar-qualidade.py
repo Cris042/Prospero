@@ -702,7 +702,7 @@ def analisar(raiz, cfg, usar_git=True, servicos=None, baseline=None):
     conjuntas = mudanca_conjunta(commits, feature_de, cfg["mudanca_conjunta"])
     for achado in achados:
         achado["chave"] = chave_estavel(achado["alvo"])
-    marcar_baseline(achados, baseline)
+    baseline_obsoletas = marcar_baseline(achados, baseline)
     achados.sort(key=lambda a: (a["nivel"] != "falha", not a.get("novo", True), a["regra"], -a["valor"], a["alvo"]))
     metodos.sort(key=lambda m: (m["arquivo"], m["linha"], m["nome"]))
     classes.sort(key=lambda c: c["arquivo"])
@@ -712,7 +712,8 @@ def analisar(raiz, cfg, usar_git=True, servicos=None, baseline=None):
                    "falhas": sum(a["nivel"] == "falha" for a in achados),
                    "alertas": sum(a["nivel"] == "alerta" for a in achados),
                    "falhas_novas": sum(a["nivel"] == "falha" and a.get("novo", True) for a in achados),
-                   "servicos": sorted({a.servico for a in arquivos}), "baseline": baseline is not None},
+                   "servicos": sorted({a.servico for a in arquivos}), "baseline": baseline is not None,
+                   "baseline_obsoletas": baseline_obsoletas},
         "achados": achados,
         "metodos": metodos,
         "classes": classes,
@@ -736,16 +737,28 @@ def chave_estavel(alvo):
 
 
 def marcar_baseline(achados, baseline):
-    """Com baseline, `novo` indica achado ausente nela ou com valor pior; só falhas novas reprovam o gate."""
+    """Com baseline, `novo` indica achado ausente nela ou com valor pior; só falhas novas reprovam o gate.
+
+    Chaves repetidas (sobrecargas) comparam-se como multiconjunto: valores em ordem decrescente, par a par, de modo
+    que uma ocorrência a mais também é nova. Retorna quantas entradas da baseline sumiram ou melhoraram.
+    """
     if baseline is None:
-        return
-    anteriores = {}
+        return 0
+    anteriores = defaultdict(list)
     for achado in baseline.get("achados", []) if isinstance(baseline, dict) else baseline:
-        chave = (achado["regra"], achado.get("chave") or chave_estavel(achado["alvo"]))
-        anteriores[chave] = max(achado["valor"], anteriores.get(chave, achado["valor"]))
+        anteriores[(achado["regra"], achado.get("chave") or chave_estavel(achado["alvo"]))].append(achado["valor"])
+    atuais = defaultdict(list)
     for achado in achados:
-        anterior = anteriores.get((achado["regra"], achado["chave"]))
-        achado["novo"] = anterior is None or achado["valor"] > anterior
+        atuais[(achado["regra"], achado["chave"])].append(achado)
+    obsoletas = 0
+    for chave in set(anteriores) | set(atuais):
+        valores = sorted(anteriores.get(chave, []), reverse=True)
+        grupo = sorted(atuais.get(chave, []), key=lambda a: (-a["valor"], a["alvo"]))
+        for indice, achado in enumerate(grupo):
+            achado["novo"] = indice >= len(valores) or achado["valor"] > valores[indice]
+        obsoletas += sum(1 for indice, valor in enumerate(valores)
+                         if indice >= len(grupo) or grupo[indice]["valor"] < valor)
+    return obsoletas
 
 
 def condicionais_repetidas(arquivos, cfg):
@@ -862,6 +875,9 @@ def formatar(relatorio, limite):
     linhas.append(f"Arquivos {r['arquivos']} | tipos {r['tipos']} | métodos {r['metodos']} | "
                   f"falhas {r['falhas']} | alertas {r['alertas']}"
                   + (f" | falhas novas vs. baseline {r['falhas_novas']}" if r["baseline"] else ""))
+    if r["baseline"] and r["baseline_obsoletas"]:
+        linhas.append(f"Baseline desatualizada: {r['baseline_obsoletas']} entrada(s) sumiram ou melhoraram; "
+                      "regenere-a com justificativa no PR para travar a melhora.")
 
     def achado(a):
         marca = "[novo] " if r["baseline"] and a.get("novo") else ""
@@ -939,12 +955,17 @@ def main(argv=None):
         print(f"Serviço desconhecido: {', '.join(desconhecidos)} (disponíveis: "
               f"{', '.join(servicos_disponiveis(args.raiz))})", file=sys.stderr)
         return 2
+    if args.gerar_baseline and args.servico:
+        print("--gerar-baseline com --servico gravaria baseline parcial; gere-a para todos os serviços.",
+              file=sys.stderr)
+        return 2
     baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
     relatorio = analisar(args.raiz, carregar_configuracao(args.config), usar_git=not args.sem_git,
                          servicos=args.servico, baseline=baseline)
     if args.gerar_baseline:
         compacta = {"achados": sorted(({k: a[k] for k in ("regra", "chave", "nivel", "valor")}
-                                       for a in relatorio["achados"]), key=lambda a: (a["regra"], a["chave"]))}
+                                       for a in relatorio["achados"]),
+                                      key=lambda a: (a["regra"], a["chave"], a["valor"]))}
         Path(args.gerar_baseline).write_text(json.dumps(compacta, ensure_ascii=False, indent=1, sort_keys=True)
                                              + "\n", encoding="utf-8")
     try:

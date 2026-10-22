@@ -442,6 +442,26 @@ class EvolucaoFitnessTest(unittest.TestCase):
         self.assertEqual(codigo, 1)
         self.assertIn("[novo] metodo_complexidade 26 > 20", saida)
 
+    def test_baseline_trata_sobrecarga_e_aponta_melhora(self):
+        def gate(*complexidades):
+            metodos = "".join(f"    int f({tipo} x) {{\n" + "".join(f"        if (y == {i}) return {i};\n"
+                                                                        for i in range(n))
+                              + "        return 0;\n    }\n" for tipo, n in zip(("int", "long", "char"), complexidades))
+            escrever(self.raiz, "front-office", "br.prospero.fo.ordens.helper", "Gate",
+                     f"package br.prospero.fo.ordens.helper;\nclass Gate {{\n    int y;\n{metodos}}}\n")
+        baseline = str(Path(self.raiz, "baseline.json"))
+        gate(26, 22)
+        self.assertEqual(self.executar("--gerar-baseline", baseline)[0], 0)
+        gate(26, 22, 21)  # sobrecarga nova com mesma chave
+        codigo, saida = self.executar("--gate", "--baseline", baseline)
+        self.assertEqual(codigo, 1)
+        self.assertIn("[novo] metodo_complexidade 22 > 20", saida)
+        gate(26, 5)  # uma sobrecarga melhorou
+        codigo, saida = self.executar("--gate", "--baseline", baseline)
+        self.assertEqual(codigo, 0)
+        self.assertIn("Baseline desatualizada: 1 entrada(s)", saida)
+        self.assertEqual(self.executar("--gerar-baseline", baseline, "--servico", "front-office")[0], 2)
+
     def test_hotspots_combinam_commits_e_complexidade(self):
         commits = [["a.java", "b.java"], ["a.java"], ["b.java"], ["a.java"]]
         metodos = [{"arquivo": "a.java", "complexidade": 4}, {"arquivo": "a.java", "complexidade": 9},
