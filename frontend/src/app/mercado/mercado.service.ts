@@ -17,6 +17,9 @@ export interface AtivoResumo {
   readonly spread: string | null;
   readonly volumeQuantidade: number | null;
   readonly volumeFinanceiro: string | null;
+  readonly vwap: string | null;
+  readonly sessao: string | null;
+  readonly revisao: number | null;
   readonly estadoLivro: EstadoLivro;
   readonly preparadoEm: string | null;
   readonly defasado: boolean;

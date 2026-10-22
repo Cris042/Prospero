@@ -49,6 +49,7 @@ for ferramenta in carga robo; do
     golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 go test -race -count=1 ./...
 done
 npm --prefix frontend ci --no-fund --no-audit
+npm --prefix frontend run test:proxy
 npm --prefix frontend run test:runner
 npm --prefix frontend test -- --watch=false
 npm --prefix frontend run build

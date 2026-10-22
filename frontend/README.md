@@ -1,6 +1,6 @@
 # Próspero — Angular
 
-Interface local do simulador. Apresenta os quatro contextos, mercado sintético e boleta com acompanhamento de ordens. A RF05 conecta a execução ao risco e acrescenta a espera pelo gatilho de Stop/Stop Limit, em validação; OCO, posições e liquidação continuam pendentes. Estado e evidências no roadmap global.
+Interface local do simulador. Apresenta os quatro contextos, mercado real do matching e boleta com acompanhamento de ordens. A RF05 integra execução, risco, Stop/Stop Limit e OCO; posições e liquidação continuam pendentes. Estado e evidências no roadmap global.
 
 ## Executar e verificar
 
@@ -15,6 +15,16 @@ npm start
 Node 24.16.0; Angular 22.2.3 e TypeScript 6.0. O dev server usa `proxy.conf.mjs` para as APIs em localhost:8081–8084 e injeta o token de leitura da RF01 (`FO_TOKEN_LEITURA`) e o de ordens da conta demo (`FO_TOKEN_ORDENS`, só GET/POST em `/api/v1/ordens*`, POST com Origin local), lidos do ambiente ou do `.env`; a preparação de mercado é bloqueada pelo proxy. O Nginx do container aplica as mesmas regras, além de recusar Host não local (421) e limitar a taxa de envio. No container, o build estático é servido por Nginx em 8080 e publicado em localhost:4200, com proxy por DNS Docker e mesma origem.
 
 Consulte o [roadmap Angular](ROADMAP.md), o [README geral](../README.md) e os [contratos de API](../docs/adrs/ADR-003-contratos-api.md). O runner de planilhas da P03 é uma CLI em container, descrita abaixo.
+
+## Atualização do mercado — RF06b
+
+Ativos e livro selecionado têm ciclos GET independentes, com nova consulta um segundo após terminar a anterior e timeout de oito segundos. Erros, inclusive 429, recuam por 1/2/4/8 segundos (máximo oito); o sucesso restaura o ritmo normal. Ocultar a aba cancela as consultas e timers; voltar à aba consulta imediatamente. Destruir o componente encerra os ciclos. Atualização manual não interrompe chamada pendente nem antecipa o recuo após erro.
+
+O último snapshot permanece visível durante atualização ou falha temporária, acompanhado de aviso. Trocar ativo remove imediatamente o livro anterior. Origem, sessão, revisão e defasagem vêm da respectiva resposta; resumo e livro podem representar revisões diferentes. Silêncio de negócios não significa defasagem. VWAP chega como texto com quatro casas, sem cálculo ou arredondamento no navegador; “—” significa ausência. A interface distingue mercado real de fixture sintética.
+
+No Nginx, resumo e livro compartilham limite de cinco requisições/s por IP, burst dez e resposta 429 com `Cache-Control: no-store`. Abas no mesmo IP compartilham a cota; ela não alcança POST de ordens. O proxy de desenvolvimento restringe leitura a GET/HEAD e Host local, com token apenas no servidor; não replica a cota do Nginx. Esses parâmetros limitam abuso no laboratório e não comprovam capacidade ou RNF04. Retornar à imagem frontend anterior preserva bancos e projeção.
+
+A RF06b altera apresentação e ritmo de consulta; não muda contrato ou cálculo financeiro. Conforme ADR-004, dispensa nova planilha: `cotacao.xlsx` preserva a prova financeira por APIs, complementada pelos testes de tempo controlado e E2E de atualização visual sem clique. A CI disponibiliza somente capturas PNG de `test-results` como artefato por sete dias, sem traces, configuração ou credenciais.
 
 ## Runner XLSX — contrato P03
 

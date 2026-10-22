@@ -14,7 +14,7 @@ A fundação P02 foi integrada pelo PR #1. RF01–RF04 acrescentaram mercado, or
 | FO01 | RF01 | Consultar ativos/cotações e expor o livro projetado. | Concluída — PR #17 integrado |
 | FO02 | RF02 | Enviar ordens, DTOs, idempotência de submissão e consulta de estado. | Concluída — PRs #18/#19 integrados |
 | FO03 | RF03, RF04 | Encaminhar validação/risco e persistir transições e compensações da SAGA. | Concluída — PRs #20–#22 |
-| FO04 | RF05, RF06 | Consumir execuções e atualizar a visão das ordens/cotações via eventos. | Progresso RF05b/c e cotação real RF06a em validação; apresentação contínua RF06b pendente |
+| FO04 | RF05, RF06 | Consumir execuções e atualizar a visão das ordens/cotações via eventos. | RF05 integrada até PR #36; cotação real RF06a integrada no PR #37; apresentação contínua RF06b em validação |
 | FO05 | RF09 | Disponibilizar linha do tempo e atualizações WebSocket. | Planejada |
 | FO06 | RF10 | Receber cancelamento e acompanhar confirmação/liberação. | Planejada |
 | FO99 | V01 | Resiliência, métricas, rastreio e critérios não funcionais aplicáveis | Planejada |
