@@ -21,7 +21,7 @@ services:
       - no-new-privileges:true
     mem_limit: 64m
     cpus: 0.25
-    pids_limit: 16
+    pids_limit: 32
     # Sem porta publicada: Docker não publica porta de rede interna. Estado só leitura via
     # docker compose ... exec robo-formador /robo-formador --estado
     networks:
