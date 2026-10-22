@@ -102,4 +102,18 @@ class MatchingProjecaoTest {
         assertThrows(MensagemInvalidaException.class,
                 () -> EnvelopeMatching.evento(valido.getBytes(StandardCharsets.UTF_8), "BETA3"));
     }
+
+    @Test
+    void contaDoRoboFormadorEntraNaAllowlistEContaInexistenteContinuaRecusada() {
+        Ordem o = recebida();
+        String evento = """
+                {"id":"%s","tipo":"ORDEM_ACEITA","versao":1,"origem":"matching-engine",
+                "correlacao":"%s","ocorridoEm":"2026-10-18T12:00:00Z","ticker":"ALFA3",
+                "dataSessao":"2026-10-18","traceparent":null,"dados":{"ordem":"%s",
+                "intencao":"%s","conta":"CONTA-004","sequencia":1}}
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), o.id(), o.grupoEnvio());
+        assertInstanceOf(EventoMatching.Aceita.class, EnvelopeMatching.evento(evento.getBytes(StandardCharsets.UTF_8), "ALFA3").detalhe());
+        assertThrows(MensagemInvalidaException.class, () -> EnvelopeMatching.evento(
+                evento.replace("CONTA-004", "CONTA-005").getBytes(StandardCharsets.UTF_8), "ALFA3"));
+    }
 }

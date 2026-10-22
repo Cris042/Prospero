@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import secrets
+import stat
 import time
 
 root = Path(__file__).resolve().parents[1]
@@ -51,6 +52,26 @@ def ler(arquivo):
     return valores
 
 
+def exportar_token_robo(token):
+    """Bind individual do secret do robô (ADR-013): diretório privado 0700 e arquivo 0444 legível pelo UID 65532."""
+    privado = path.parent / ".robo-local"
+    # Mesmo cuidado da carga: symlink ou diretório alheio no lugar do privado falha fechado.
+    if privado.is_symlink() or (privado.exists() and (not privado.is_dir() or privado.stat().st_uid != os.getuid())):
+        raise SystemExit(".robo-local precisa ser diretório próprio, sem symlink; remova-o e execute novamente.")
+    privado.mkdir(mode=0o700, exist_ok=True)
+    privado.chmod(0o700)
+    arquivo = privado / "token"
+    if arquivo.exists() and arquivo.read_text() == token and stat.S_IMODE(arquivo.stat().st_mode) == 0o444:
+        return
+    temporario = privado / "token.tmp"
+    temporario.unlink(missing_ok=True)
+    descriptor = os.open(temporario, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as stream:
+        stream.write(token)
+    temporario.chmod(0o444)
+    os.replace(temporario, arquivo)
+
+
 def main():
     novo = not path.exists()
     if novo:
@@ -73,6 +94,11 @@ def main():
         novos["FO_TOKEN_ORDENS"] = jwt({"iss": "prospero-local", "aud": "prospero-front-office", "sub": "CONTA-001",
                                         "iat": agora, "exp": agora + VALIDADE_ORDENS,
                                         "groups": ["ordens:enviar", "ordens:leitura"]}, chave)
+    # RF05d (ADR-013): token próprio do robô formador (CONTA-004), entregue só ao container opt-in, nunca ao Nginx.
+    if "FO_JWT_CHAVE" in novos or expira_em(existentes.get("FO_TOKEN_ROBO", "")) < agora + RENOVAR_ANTES:
+        novos["FO_TOKEN_ROBO"] = jwt({"iss": "prospero-local", "aud": "prospero-front-office", "sub": "CONTA-004",
+                                      "iat": agora, "exp": agora + VALIDADE_ORDENS,
+                                      "groups": ["ordens:enviar", "ordens:leitura"]}, chave)
     if novos:
         # Reescreve atomicamente preservando valores existentes; nunca exibe segredos.
         linhas = [l for l in path.read_text().splitlines() if not any(l.startswith(k + "=") for k in novos)]
@@ -83,6 +109,7 @@ def main():
             stream.write("\n".join(linhas) + "\n")
         os.replace(temporario, path)
     path.chmod(0o600)
+    exportar_token_robo(ler(path)["FO_TOKEN_ROBO"])
     if novo:
         print(".env criado com credenciais locais aleatórias; valores não exibidos.")
     elif novos:

@@ -48,6 +48,9 @@ class CarteiraResourceTest {
         preparar(token(null, "risco:leitura"), "CONTA-003", Map.of("saldo", "1.00")).then().statusCode(403);
         preparar(token(null, "risco:preparacao"), "CONTA-001", Map.of("saldo", "1.00")).then().statusCode(403)
                 .body("codigo", equalTo("CONTA_NAO_PREPARAVEL"));
+        // RF05d: a carteira grande do robô formador não é preparável (ADR-013).
+        preparar(token(null, "risco:preparacao"), "CONTA-004", Map.of("saldo", "1.00")).then().statusCode(403)
+                .body("codigo", equalTo("CONTA_NAO_PREPARAVEL"));
         String audienciaErrada = Jwt.issuer("prospero-local").audience("prospero-front-office").subject("CONTA-003")
                 .groups(Set.of("risco:leitura")).expiresIn(300).signWithSecret(CHAVE);
         given().auth().oauth2(audienciaErrada).when().get("/api/v1/risco/carteira").then().statusCode(401);

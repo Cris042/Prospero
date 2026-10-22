@@ -110,6 +110,10 @@ Protocolo decidido no [ADR-013](../adrs/ADR-013-matching-execucao.md#robô-forma
 
 Primeira execução: no runner hospedado da CI (passo informativo do gate de testes, saída em `.ci-evidencias/rnf04.json` e no log), porque o host local de desenvolvimento não tinha orçamento de memória para a stack completa sem parar outro projeto. Runner compartilhado é ruidoso: o resultado é "medido", com veredito só indicativo (`--contexto ci-hospedado`), e não substitui medição em ambiente dedicado nem a V01. Causa esperada para boleta → negócio acima de 50 ms: relay das outboxes do FO e do MO a cada 200 ms fixos (otimização posterior, decisão do usuário). Resultados por execução ficam no PR e no roadmap.
 
+## Robô formador de mercado (RF05d.2)
+
+Ferramenta Go stdlib em `ferramentas/robo`, fora dos quatro serviços, ligada só pelo perfil opt-in `robo` (`docker-compose.robo.yml`): usuário 65532, filesystem somente leitura, sem capabilities, 64 MiB/0,25 CPU, rede interna `robo` compartilhada apenas com o FO. A cada ciclo (padrão 2 s) lista as ordens da CONTA-004 na sessão, planeja de forma determinística e envia Limit DIA pelo `POST /api/v1/ordens`, passando por validação, risco (reserva no MO) e admissão como qualquer conta; o matching não distingue o robô. Estado só por `exec` (`/robo-formador --estado`), sem porta publicada. Regras de grade, reposição, chaves, estados e credencial no [ADR-013](../adrs/ADR-013-matching-execucao.md#detalhamento-técnico-do-robô--rf05d2-2026-10-22). A CI verifica em DELTA3: cotação inicial, reposição única do nível consumido por uma agressão e reinício sem duplicar ofertas.
+
 ## Segurança, observabilidade e testes
 
 Seguir ADR-003 para DTOs, versão, Swagger, status e erros; contratos de negócio ainda precisam de definição. Autenticação e autorização por conta/papel são pendências, sem RBAC presumido. Não registrar credenciais ou payloads sensíveis. Entradas exigem limites e invariantes; o endpoint técnico não comprova proteção do fluxo financeiro.

@@ -79,5 +79,43 @@ class TokenOrdensTest(PrepararAmbienteTest):
         self.assertEqual(renovados["FO_TOKEN_LEITURA"], valores["FO_TOKEN_LEITURA"])
 
 
+class TokenRoboTest(PrepararAmbienteTest):
+    def test_token_do_robo_formador_restrito_a_conta_004_e_renovado(self):
+        ambiente.main()
+        valores = ambiente.ler(self.env)
+        claims = json.loads(decodificar(valores["FO_TOKEN_ROBO"].split(".")[1]))
+        self.assertEqual(claims["sub"], "CONTA-004")
+        self.assertEqual(sorted(claims["groups"]), ["ordens:enviar", "ordens:leitura"])
+        self.assertEqual(claims["aud"], "prospero-front-office")
+        self.assertLessEqual(claims["exp"] - claims["iat"], 7 * 24 * 3600)
+        prestes = ambiente.jwt({"exp": 1}, valores["FO_JWT_CHAVE"])
+        self.env.write_text(self.env.read_text().replace(valores["FO_TOKEN_ROBO"], prestes))
+        ambiente.main()
+        renovados = ambiente.ler(self.env)
+        self.assertNotEqual(renovados["FO_TOKEN_ROBO"], prestes)
+        self.assertEqual(renovados["FO_TOKEN_ORDENS"], valores["FO_TOKEN_ORDENS"])
+        self.assertEqual((self.env.parent / ".robo-local" / "token").read_text(), renovados["FO_TOKEN_ROBO"])
+
+    def test_token_do_robo_exportado_para_bind_do_uid_do_container(self):
+        ambiente.main()
+        privado = self.env.parent / ".robo-local"
+        arquivo = privado / "token"
+        self.assertEqual(stat.S_IMODE(os.stat(privado).st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(os.stat(arquivo).st_mode), 0o444)
+        self.assertEqual(arquivo.read_text(), ambiente.ler(self.env)["FO_TOKEN_ROBO"])
+        arquivo.chmod(0o600)
+        arquivo.write_text("adulterado")
+        ambiente.main()
+        self.assertEqual(arquivo.read_text(), ambiente.ler(self.env)["FO_TOKEN_ROBO"])
+
+    def test_symlink_no_lugar_do_diretorio_privado_falha_fechado(self):
+        alvo = Path(self.dir.name) / "alheio"
+        alvo.mkdir()
+        (self.env.parent / ".robo-local").symlink_to(alvo)
+        with self.assertRaises(SystemExit):
+            ambiente.main()
+        self.assertEqual(list(alvo.iterdir()), [])
+
+
 if __name__ == "__main__":
     unittest.main()

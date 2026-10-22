@@ -259,4 +259,10 @@ class MatchingPostgresIT {
         repositorio.aplicar(eventoOco(sl,grupo,"ORDEM_ENCERRADA","\"motivo\":\"CANCELADA_OCO\",\"executada\":0,\"cancelada\":6"));
         assertEquals("CANCELADA",estado(sl)[0]);
     }
+
+    @Test
+    void migracaoCriaContaDoRoboFormador() {
+        assertEquals("Robô formador de mercado", QuarkusTransaction.requiringNew().call(() ->
+                em.createNativeQuery("SELECT nome FROM conta WHERE id = 'CONTA-004'").getSingleResult()));
+    }
 }

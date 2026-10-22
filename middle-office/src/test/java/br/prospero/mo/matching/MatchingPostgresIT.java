@@ -338,4 +338,35 @@ class MatchingPostgresIT {
         QuarkusTransaction.requiringNew().run(()->actor.avaliar(c,null));
     }
 
+
+    @Test
+    void migracaoCriaCarteiraGrandeDoRoboFormador() throws Exception {
+        // Schema próprio migrado do zero: os demais testes redefinem conta_risco de todas as contas.
+        String proprio = "robo_formador_" + UUID.randomUUID().toString().replace("-", "");
+        try {
+            org.flywaydb.core.Flyway.configure().dataSource(System.getenv("MATCHING_TEST_DB_URL"),
+                    System.getenv("MATCHING_TEST_DB_USER"), System.getenv("MATCHING_TEST_DB_PASSWORD"))
+                    .schemas(proprio).defaultSchema(proprio).locations("classpath:db/migration").load().migrate();
+            try (var c = conexao(); var s = c.createStatement()) {
+                c.setSchema(proprio);
+                try (var r = s.executeQuery("SELECT total, disponivel, reservado FROM conta_risco WHERE conta = 'CONTA-004'")) {
+                    assertTrue(r.next());
+                    assertEquals(0, new BigDecimal("100000000.00").compareTo(r.getBigDecimal(1)));
+                    assertEquals(0, new BigDecimal("100000000.00").compareTo(r.getBigDecimal(2)));
+                    assertEquals(0, BigDecimal.ZERO.compareTo(r.getBigDecimal(3)));
+                }
+                try (var r = s.executeQuery("SELECT count(*) FROM custodia_risco WHERE conta = 'CONTA-004' "
+                        + "AND total = 100000 AND disponivel = 100000 AND reservado = 0")) {
+                    assertTrue(r.next());
+                    assertEquals(5, r.getInt(1));
+                }
+                try (var r = s.executeQuery("SELECT count(*) FROM conta_risco WHERE conta <> 'CONTA-004' AND total = 1000000.00")) {
+                    assertTrue(r.next());
+                    assertEquals(3, r.getInt(1), "contas existentes intactas");
+                }
+            }
+        } finally {
+            try (var c = conexao(); var s = c.createStatement()) { s.execute("DROP SCHEMA IF EXISTS " + proprio + " CASCADE"); }
+        }
+    }
 }

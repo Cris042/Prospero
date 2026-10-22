@@ -32,7 +32,7 @@ AUDIENCIAS = {"risco": "prospero-middle-office", "risco-preparacao": "prospero-m
               "sessao": "prospero-middle-office"}
 POR_CONTA = {"ordens", "risco"}
 ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
-CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003"}
+CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"}
 VALIDADE_MAXIMA = 3600
 
 
@@ -40,7 +40,7 @@ def token(escopo, validade, conta=None):
     if escopo not in ESCOPOS or not 1 <= validade <= VALIDADE_MAXIMA:
         raise SystemExit("Escopo ou validade inválidos.")
     if (escopo in POR_CONTA) != (conta is not None) or (conta is not None and conta not in CONTAS):
-        raise SystemExit("Escopos ordens e risco exigem --conta CONTA-001..003; demais escopos não aceitam conta.")
+        raise SystemExit("Escopos ordens e risco exigem --conta CONTA-001..004; demais escopos não aceitam conta.")
     chave = ambiente.ler(ambiente.path).get("FO_JWT_CHAVE")
     if not chave or len(chave) < 32:
         raise SystemExit("FO_JWT_CHAVE ausente; execute python3 scripts/preparar-ambiente.py.")
@@ -205,7 +205,8 @@ def verificar_risco(origem, origem_mo):
     oco = enviar({"ticker": "DELTA3", "lado": "VENDA", "quantidade": 5, "validade": "DIA",
                    "takeProfit": {"precoLimite": "42.00"}, "stopLoss": {"tipo": "STOP", "precoGatilho": "38.00"}},
                   "/api/v1/ordens-oco")
-    # RF05c.3b: o par é admitido inteiro; TP repousa e SL aguarda o gatilho (DELTA3 sem negócio que o acione).
+    # RF05c.3b: o par é admitido inteiro; TP repousa e SL aguarda o gatilho. O verificar-robo negocia DELTA3 só a 40,05,
+    # dentro de 38,00–42,00: nenhum negócio aciona o gatilho nem cruza o TP.
     limite = time.monotonic() + 20.0
     while True:
         par = aguardar_decisao(origem, tok, f"/api/v1/ordens-oco/{oco['grupoOco']}")
@@ -229,7 +230,8 @@ def compose(projeto):
     # --project-directory: o alvo é sempre este repositório, qualquer que seja o diretório de chamada.
     base = ["docker", "compose", "--project-directory", str(RAIZ), "-f", str(RAIZ / "docker-compose.yml")]
     if projeto:
-        return base + ["-p", projeto, "-f", str(RAIZ / "docker-compose.ci.yml")]
+        # Mesma lista de arquivos do ci-testes.sh (inclui o robô opt-in, sem ligar o perfil).
+        return base + ["-p", projeto, "-f", str(RAIZ / "docker-compose.ci.yml"), "-f", str(RAIZ / "docker-compose.robo.yml")]
     return base
 
 
@@ -494,6 +496,68 @@ def verificar_matching(origem, origem_mo, projeto):
     print("Matching: execução parcial, reinício/replay com oferta viva, reentrega, ausência de débito duplicado e livro vazio verificados.")
 
 
+def verificar_robo(origem, projeto):
+    """RF05d.2: robô formador (CONTA-004) cota DELTA3, repõe só o nível consumido e não duplica após reinício.
+
+    Verificação pelo FO (ordens da CONTA-004); /estado (via exec, sem porta publicada) só confirma o estado e os ciclos.
+    DELTA3: OCOs vivas do risco.xlsx (TP 42,00/38,00, gatilhos 38,00/42,00) ficam fora da grade 39,94–40,06 e da
+    agressão a 40,05, sem cruzar nem acionar. O robô para ao fim; as ofertas DIA ficam vivas (encerramento só de GAMA3)."""
+    base = compose(projeto) + ([] if projeto else ["-f", str(RAIZ / "docker-compose.robo.yml")]) + ["--profile", "robo"]
+    ambiente_robo = {**os.environ, "ROBO_ATIVOS": "DELTA3:40.00:0.01:10", "ROBO_NIVEIS": "2", "ROBO_INTERVALO_MS": "500"}
+    robo_tok = token("ordens", 300, "CONTA-004")
+
+    def ordens_robo():
+        return [o for o in http("GET", origem + "/api/v1/ordens?limite=100", robo_tok)["ordens"] if o["ticker"] == "DELTA3"]
+
+    def estado(ciclos_minimos, prazo=60.0):
+        limite = time.monotonic() + prazo
+        while time.monotonic() < limite:
+            saida = subprocess.run(base + ["exec", "-T", "robo-formador", "/robo-formador", "--estado"],
+                                   capture_output=True, text=True, env=ambiente_robo)
+            try:
+                corpo = json.loads(saida.stdout) if saida.returncode == 0 else {}
+            except ValueError:
+                corpo = {}
+            if corpo.get("estado") == "ATIVO" and corpo.get("ciclos", 0) >= ciclos_minimos:
+                return corpo
+            time.sleep(0.5)
+        raise SystemExit(f"Robô: /estado não ficou ATIVO com {ciclos_minimos} ciclos em {prazo:.0f} s.")
+
+    def vivas(esperadas, total, prazo=30.0):
+        limite = time.monotonic() + prazo
+        ordens = []
+        while time.monotonic() < limite:
+            ordens = ordens_robo()
+            if (sorted((o["lado"], o["precoLimite"]) for o in ordens if o["estado"] == "ABERTA") == esperadas
+                    and len(ordens) == total):
+                return ordens
+            time.sleep(0.5)
+        raise SystemExit(f"Robô: esperadas {total} ordens com abertas {esperadas}; obtidas {len(ordens)} em {prazo:.0f} s.")
+
+    niveis = [("COMPRA", "39.94"), ("COMPRA", "39.95"), ("VENDA", "40.05"), ("VENDA", "40.06")]
+    try:
+        # Sem --no-deps: localmente o FO pode ser recriado para entrar na rede interna do robô.
+        subprocess.run(base + ["up", "-d", "--wait", "--wait-timeout", "120", "robo-formador"], check=True,
+                       env=ambiente_robo)
+        estado(1)
+        vivas(niveis, 4)
+        demo = token("ordens", 120, "CONTA-001")
+        compra = http("POST", origem + "/api/v1/ordens", demo, {"ticker": "DELTA3", "lado": "COMPRA", "tipo": "LIMIT",
+                      "validade": "IOC", "quantidade": 10, "precoLimite": "40.05"}, {"X-Idempotency-Key": "robo-" + uuid.uuid4().hex})
+        aguardar_campos(origem, demo, f"/api/v1/ordens/{compra['id']}", {"estado": "EXECUTADA", "quantidadeExecutada": 10})
+        depois = vivas(niveis, 5)
+        if sum(o["estado"] == "EXECUTADA" for o in depois) != 1:
+            raise SystemExit("Robô: reposição deveria criar exatamente uma oferta nova no nível consumido.")
+        subprocess.run(base + ["restart", "robo-formador"], check=True, env=ambiente_robo)
+        # Ciclos completos após o reinício sem ordem nova provam que as chaves determinísticas não duplicaram.
+        estado(3)
+        if len(ordens_robo()) != 5:
+            raise SystemExit("Robô: reinício duplicou ofertas.")
+    finally:
+        subprocess.run(base + ["stop", "robo-formador"], env=ambiente_robo)
+    print("Robô formador: cotação, reposição do nível consumido e reinício sem duplicação verificados.")
+
+
 def escrever_config(destino, conteudo):
     # 0644 para o UID do container ler via bind individual: o destino deve estar em diretório privado (0700).
     fd = os.open(destino, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
@@ -531,11 +595,14 @@ def main():
     m.add_argument("--origem", default="http://127.0.0.1:8081")
     m.add_argument("--origem-mo", default="http://127.0.0.1:8082")
     m.add_argument("--projeto", help="Projeto Compose de CI (usa docker-compose.ci.yml).")
+    b = sub.add_parser("verificar-robo", help="Sobe o robô formador (CONTA-004) em DELTA3 e verifica reposição e reinício.")
+    b.add_argument("--origem", default="http://127.0.0.1:8081")
+    b.add_argument("--projeto", help="Projeto Compose de CI (usa docker-compose.ci.yml).")
     d = sub.add_parser("preparar-demo", help="Prepara o namespace principal com dados sintéticos.")
     d.add_argument("--origem", default="http://127.0.0.1:8081")
     args = parser.parse_args()
     if args.comando in {"preparar-demo", "verificar-ordens", "verificar-risco", "verificar-concorrencia",
-                        "verificar-recuperacao", "verificar-matching"}:
+                        "verificar-recuperacao", "verificar-matching", "verificar-robo"}:
         for origem in (getattr(args, "origem", None), getattr(args, "origem_mo", None)):
             partes = urlsplit(origem) if origem else None
             if partes and (partes.scheme != "http" or partes.hostname not in {"127.0.0.1", "localhost"}
@@ -557,6 +624,8 @@ def main():
                 verificar_matching(args.origem, args.origem_mo, args.projeto)
             case "verificar-recuperacao":
                 verificar_recuperacao(args.origem, args.origem_mo, args.projeto)
+            case "verificar-robo":
+                verificar_robo(args.origem, args.projeto)
         return
     if args.comando == "token":
         print(token(args.escopo, args.validade, args.conta))

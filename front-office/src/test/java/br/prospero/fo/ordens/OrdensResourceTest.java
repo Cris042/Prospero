@@ -219,6 +219,10 @@ class OrdensResourceTest {
         enviar(token("CONTA-002", "mercado:leitura"), "auth-00002", limit("10.00")).then().statusCode(403);
         enviar(conta("CONTA-999"), "auth-00003", limit("10.00")).then().statusCode(403)
                 .body("codigo", equalTo("CONTA_DESCONHECIDA"));
+        // RF05d: o robô formador envia e lê pela própria conta, com o mesmo contrato das demais.
+        enviar(conta("CONTA-004"), "auth-00006", limit("10.00")).then().statusCode(202).body("estado", equalTo("RECEBIDA"));
+        given().auth().oauth2(conta("CONTA-004")).when().get("/api/v1/ordens").then().statusCode(200)
+                .body("ordens.size()", equalTo(1));
         given().header("X-Idempotency-Key", "auth-00004").contentType(ContentType.JSON).body(limit("10.00"))
                 .when().post("/api/v1/ordens").then().statusCode(401);
         given().auth().oauth2(token("CONTA-002", "ordens:enviar")).when().get("/api/v1/ordens").then().statusCode(403);

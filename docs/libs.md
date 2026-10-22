@@ -52,6 +52,8 @@ Docker Engine 29.1.3, Compose 2.40.3. Java do host é 25; builds Java 26 usam co
 
 Go 1.27.3 substitui 1.27.2 no módulo/builder/CI para corrigir [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809), detectada pelo govulncheck em 2026-10-21. O digest do índice OCI foi conferido no registry oficial `library/golang`; o histórico do experimento em 1.27.2 permanece inalterado. A atualização mantém código e contratos da ferramenta de carga; resultados do scanner e regressões ficam no PR #27.
 
+O robô formador (RF05d.2, `ferramentas/robo`) reutiliza o mesmo builder Go 1.27.3 fixado por digest, imagem final `scratch` e verificações da CI (`gofmt`, `go vet`, `go test -race`, govulncheck 1.8.0); somente biblioteca padrão, incluindo `time/tzdata` embutido para a sessão em America/Sao_Paulo. Nenhuma dependência nova.
+
 LZ4 1.11.4 substitui 1.11.1 gerida transitivamente pelo baseline. A auditoria Trivy identificou CVE-2026-106451; o [advisory do mantenedor](https://github.com/yawkat/lz4-java/security/advisories/GHSA-mcr4-qmvw-px4g) indica correção em 1.11.4. Reavaliar e remover o override quando o BOM passar a incorporar uma versão corrigida. O scanner classificou HIGH; o mantenedor classifica LOW e condiciona a exploração ao ambiente de diretório temporário compartilhado.
 
 ## Leitura XLSX
