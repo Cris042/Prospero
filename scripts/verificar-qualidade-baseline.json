@@ -19,6 +19,30 @@
    "valor": 9
   },
   {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/actor/ConsultarCotacaoActor.java#ConsultarCotacaoActor",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/kafka/CicloCotacao.java#CicloCotacao",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 6
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/kafka/ConsumidorCotacao.java#ConsumidorCotacao",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 8
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/mercado/actor/ConsultarMercadoActor.java#ConsultarMercadoActor",
+   "nivel": "alerta",
+   "regra": "classe_campos",
+   "valor": 3
+  },
+  {
    "chave": "front-office/src/main/java/br/prospero/fo/mercado/actor/PrepararMercadoActor.java#PrepararMercadoActor",
    "nivel": "alerta",
    "regra": "classe_campos",
@@ -145,6 +169,18 @@
    "valor": 3
   },
   {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/actor/ConsultarCotacaoActor.java",
+   "nivel": "alerta",
+   "regra": "classe_dependencias",
+   "valor": 12
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/jpa/RepositorioCotacaoJpa.java",
+   "nivel": "alerta",
+   "regra": "classe_dependencias",
+   "valor": 11
+  },
+  {
    "chave": "front-office/src/main/java/br/prospero/fo/mercado/actor/ConsultarMercadoActor.java",
    "nivel": "alerta",
    "regra": "classe_dependencias",
@@ -239,6 +275,36 @@
    "nivel": "alerta",
    "regra": "metodo_aninhamento",
    "valor": 4
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/helper/ProjetarCotacao.java#ProjetarCotacao.mutacoes",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 11
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/jpa/RepositorioCotacaoJpa.java#RepositorioCotacaoJpa.aplicar",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 12
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/jpa/RepositorioCotacaoJpa.java#RepositorioCotacaoJpa.aplicarMutacao",
+   "nivel": "falha",
+   "regra": "metodo_complexidade",
+   "valor": 25
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/jpa/RepositorioCotacaoJpa.java#RepositorioCotacaoJpa.validarAtivo",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 13
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/jpa/RepositorioCotacaoJpa.java#RepositorioCotacaoJpa.validarCorrelacao",
+   "nivel": "alerta",
+   "regra": "metodo_complexidade",
+   "valor": 20
   },
   {
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/helper/EnvelopeMatching.java#EnvelopeMatching.evento",
@@ -439,6 +505,24 @@
    "valor": 37
   },
   {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/jpa/RepositorioCotacaoJpa.java#RepositorioCotacaoJpa.aplicar",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 39
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/jpa/RepositorioCotacaoJpa.java#RepositorioCotacaoJpa.aplicarMutacao",
+   "nivel": "falha",
+   "regra": "metodo_linhas",
+   "valor": 71
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/cotacao/kafka/ConsumidorCotacao.java#ConsumidorCotacao.consumir",
+   "nivel": "alerta",
+   "regra": "metodo_linhas",
+   "valor": 35
+  },
+  {
    "chave": "front-office/src/main/java/br/prospero/fo/ordens/actor/EnviarOrdemActor.java#EnviarOrdemActor.registrarOco",
    "nivel": "alerta",
    "regra": "metodo_linhas",
@@ -587,6 +671,12 @@
    "nivel": "alerta",
    "regra": "metodo_parametros",
    "valor": 5
+  },
+  {
+   "chave": "front-office/src/main/java/br/prospero/fo/mercado/dto/AtivoResponseDTO.java#AtivoResponseDTO.AtivoResponseDTO",
+   "nivel": "falha",
+   "regra": "metodo_parametros",
+   "valor": 19
   },
   {
    "chave": "front-office/src/main/java/br/prospero/fo/mercado/jpa/RepositorioMercadoJpa.java#RepositorioMercadoJpa.substituir",
@@ -772,7 +862,7 @@
    "chave": "front-office: case Aceita, Encerrada, Negocio, Oferta, Reduzida, Rejeitada, SessaoEncerrada, StopAcionado, StopPendente",
    "nivel": "alerta",
    "regra": "switch_repetido",
-   "valor": 2
+   "valor": 4
   },
   {
    "chave": "matching-engine: case Negocio, OfertaNoLivro, OrdemAceita, OrdemEncerrada, OrdemReduzida, OrdemRejeitada, StopAcionado, StopPendente",
