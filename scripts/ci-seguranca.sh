@@ -42,9 +42,11 @@ done
   --severity HIGH,CRITICAL --exit-code 1 /scan/frontend
 # Scanner oficial fixado; a base de advisories é consultada na execução.
 # Falha de instalação/rede/scan falha o gate. Nenhuma dependência entra no módulo runtime.
-docker run --rm --user "$(id -u):$(id -g)" --memory=1g --cpus=2 --pids-limit=128 \
-  --read-only --tmpfs /tmp:rw,exec,size=805306368 \
-  -e GOCACHE=/tmp/go-build -e GOPATH=/tmp/go -e GOBIN=/tmp/bin -e GOTOOLCHAIN=local \
-  -v "$PWD/ferramentas/carga:/src:ro" -w /src \
-  golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 sh -ec 'go install golang.org/x/vuln/cmd/govulncheck@v1.8.0; /tmp/bin/govulncheck ./...'
+for ferramenta in carga robo; do
+  docker run --rm --user "$(id -u):$(id -g)" --memory=1g --cpus=2 --pids-limit=128 \
+    --read-only --tmpfs /tmp:rw,exec,size=805306368 \
+    -e GOCACHE=/tmp/go-build -e GOPATH=/tmp/go -e GOBIN=/tmp/bin -e GOTOOLCHAIN=local \
+    -v "$PWD/ferramentas/$ferramenta:/src:ro" -w /src \
+    golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 sh -ec 'go install golang.org/x/vuln/cmd/govulncheck@v1.8.0; /tmp/bin/govulncheck ./...'
+done
 printf '%s\n' 'Segurança: inventário, fronteiras, dependências e segredos verificados.'

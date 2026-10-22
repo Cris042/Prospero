@@ -9,7 +9,10 @@ df -h / "${RUNNER_TEMP:-/tmp}" || true
 docker system df || true
 export PROSPERO_CI_TAG="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 project="prospero-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml)
+# RF05d: o arquivo do robô entra desde o início (FO já na rede dele); o perfil opt-in só liga no fim, com tag/porta da execução.
+compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.robo.yml)
+export PROSPERO_ROBO_TAG="$PROSPERO_CI_TAG" PROSPERO_ROBO_PORTA=0
+compose_robo=("${compose[@]}" --profile robo)
 mkdir -p .ci-evidencias
 cleanup() {
   code=$?
@@ -19,7 +22,7 @@ cleanup() {
   fi
   "${compose[@]}" down --volumes --remove-orphans || true
   rm -rf -- "${runner_cfg:-}"
-  for service in front-office middle-office matching-engine back-office frontend runner-planilhas; do
+  for service in front-office middle-office matching-engine back-office frontend runner-planilhas robo-formador; do
     docker image rm "prospero/$service:$PROSPERO_CI_TAG" >/dev/null 2>&1 || true
   done
   exit "$code"
@@ -38,11 +41,13 @@ for service in front-office middle-office matching-engine back-office; do
     eclipse-temurin:26.0.2.1_1-jdk-noble sh ./mvnw -B -ntp verify
  done
 # Race usa o toolchain com GCC; os alvos dos testes são servidores descartáveis.
-docker run --rm --user "$(id -u):$(id -g)" --memory=1g --cpus=2 --pids-limit=128 \
-  --network=none --read-only --tmpfs /tmp:rw,exec,size=536870912 \
-  -e GOCACHE=/tmp/go-build -e GOTMPDIR=/tmp -e GOTOOLCHAIN=local -e CGO_ENABLED=1 \
-  -v "$PWD/ferramentas/carga:/src:ro" -w /src \
-  golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 go test -race -count=1 ./...
+for ferramenta in carga robo; do
+  docker run --rm --user "$(id -u):$(id -g)" --memory=1g --cpus=2 --pids-limit=128 \
+    --network=none --read-only --tmpfs /tmp:rw,exec,size=536870912 \
+    -e GOCACHE=/tmp/go-build -e GOTMPDIR=/tmp -e GOTOOLCHAIN=local -e CGO_ENABLED=1 \
+    -v "$PWD/ferramentas/$ferramenta:/src:ro" -w /src \
+    golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 go test -race -count=1 ./...
+done
 npm --prefix frontend ci --no-fund --no-audit
 npm --prefix frontend run test:runner
 npm --prefix frontend test -- --watch=false
@@ -93,6 +98,9 @@ export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 playwright_deps=()
 [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
 (cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium && npm run test:e2e)
+# RF05d.2: robô em DELTA3, que nenhuma prova seguinte usa; para ao fim e as ofertas DIA expiram no encerramento.
+"${compose_robo[@]}" build robo-formador
+python3 scripts/mercado.py verificar-robo --origem "$fo_origem" --projeto "$project"
 # RF05c.4: encerramento por último; o ativo passa a recusar ordens na data (uma sessão por log), não repetível.
 rodar_workbook sessao sessao
 printf '%s\n' 'Testes independentes, aplicação empacotada e observabilidade validados.'

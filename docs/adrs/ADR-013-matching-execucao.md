@@ -129,3 +129,13 @@ Refinamento com cinco pareceres medium independentes, todos **SEGUIR COM RESSALV
 | Relay 200 ms (usuário) | **Medir e otimizar depois**: a RF05d registra "medido, não cumprido" com causa raiz; a otimização do relay vira tarefa própria com ADR. |
 
 Boleta → negócio mede, para o agressor, do `recebidaEm` no FO até a projeção do negócio no FO, contra oferta já em repouso, separando espera por contraparte (V01). Resultados com ambiente (CPU, RAM, WSL, limites dos containers, versões, SHA, plano, aquecimento, amostras, repetições) ficam numa seção "Medições" do HLD-004; números do runner hospedado da CI são indicativos (ambiente compartilhado) e não substituem medição em ambiente dedicado nem a V01.
+
+### Detalhamento técnico do robô — RF05d.2 (2026-10-22)
+
+Dentro das decisões acima, sem nova decisão de produto. Rodada complementar dispensada conforme `refinar-task` (tarefa RF05d já refinada com a fatia 5d2 no escopo; sem mudança material).
+
+- **Grade determinística:** por ativo configurado (`TICKER:REFERENCIA:TICK:QUANTIDADE`), `N` níveis por lado em `referência ∓ (distância + k·passo)·tick`, Limit DIA, preços em centavos inteiros. O núcleo `Planejar` é puro (sem relógio nem I/O): o mesmo conjunto de ordens observado no FO gera o mesmo plano.
+- **Reposição só do consumido:** nível com ordem viva (`RECEBIDA`/`RESERVADA`/`ABERTA`/`PARCIALMENTE_EXECUTADA`) não é tocado; nível cuja última ordem foi `EXECUTADA` volta; `CANCELADA` (inclusive expiração DIA) ou `REJEITADA` retira o nível na sessão. Sem RF10, o robô nunca cancela.
+- **Idempotência:** chave `robo-AAAAMMDD-TICKER-{C|V}k-g`, com `g` = execuções do nível na sessão. Reinício ou falha entre o POST e a leitura reproduz a chave, e o FO devolve a ordem existente.
+- **ESGOTADO terminal:** `429 LIMITE_ORDENS`, orçamento de 1000 ordens da sessão ou rejeição `SALDO_INSUFICIENTE`/`CUSTODIA_INSUFICIENTE`/`LIMITE_ORDENS_ATIVAS` param os envios até reiniciar o processo; `FO_INDISPONIVEL` é transitório. `GET /estado` (loopback `127.0.0.1:8091`, só leitura) expõe estado, sessão e contadores, nunca o token.
+- **Credencial:** `FO_TOKEN_ROBO` (CONTA-004, `ordens:enviar`/`ordens:leitura`, 7 dias, renovado por `preparar-ambiente.py`) entregue por secret em arquivo `.robo-local/token` (diretório 0700, arquivo 0444 para o UID 65532), porque serviço `read_only` não aceita secret por variável. O robô não tem `mercado:leitura` nem a chave de assinatura; fala com o FO por uma rede interna própria, sem Nginx.

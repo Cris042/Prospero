@@ -372,6 +372,18 @@ O teste futuro combinará rampas abertas/fechadas, saturação e queda/retorno d
 
 O controle da ferramenta usa JWT com **HS256 fixado pelo servidor**: rejeita `none`, algoritmo divergente e assinatura/claims inválidas antes de admitir execução. O token não escolhe a política. Exemplo de biblioteca mal configurada pertence apenas à demonstração isolada/teste negativo, sem opção de bypass na API. [Contrato de segurança](docs/hlds/HLD-006-api-carga.md#segurança-implantação-e-orçamento), [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html).
 
+### Robô formador de mercado — RF05d.2
+
+`ferramentas/robo` (Go 1.27.3, só biblioteca padrão) cota níveis fixos de compra e venda pela CONTA-004, com carteira sintética grande e não preparável, e repõe apenas o nível executado. Ele é opt-in e fala só com o FO, com token próprio que nunca passa pelo Nginx:
+
+```bash
+python3 scripts/preparar-ambiente.py   # gera FO_TOKEN_ROBO e .robo-local/token
+docker compose -f docker-compose.yml -f docker-compose.robo.yml --profile robo up -d --wait robo-formador
+curl -s 127.0.0.1:8091/estado          # ATIVO, ESGOTADO ou FO_INDISPONIVEL e contadores
+```
+
+`ROBO_ATIVOS` (`TICKER:REFERENCIA:TICK:QUANTIDADE`, padrão `ALFA3:10.00:0.01:100`), `ROBO_NIVEIS`, `ROBO_DISTANCIA_TICKS`, `ROBO_PASSO_TICKS` e `ROBO_INTERVALO_MS` ajustam a grade. O FO entra na rede interna do robô; ao incluir o arquivo pela primeira vez, ele é recriado. Ao atingir o teto de 1000 ordens da sessão ou falta de saldo/custódia, o robô para em `ESGOTADO`, sem recarga até a RF08. As ofertas DIA expiram no encerramento manual da sessão. [Regras e limites](docs/adrs/ADR-013-matching-execucao.md#detalhamento-técnico-do-robô--rf05d2-2026-10-22).
+
 ### Destaque: durabilidade custa I/O — medir fsync antes de dimensionar
 
 > **Commit síncrono com `fsync=on` aguarda o WAL durável pelo método configurado.** Num exemplo simplificado de flush de 0,55 ms, uma conexão sequencial teria teto aproximado de **1.818 commits/s**, antes dos demais custos. Isso não é benchmark do Próspero nem valor universal de SSD SATA. [WAL PostgreSQL 16](https://www.postgresql.org/docs/16/runtime-config-wal.html).

@@ -31,7 +31,7 @@ import java.util.UUID;
 @Priority(1)
 @ApplicationScoped
 public class RepositorioOrdensMemoria implements RepositorioOrdens {
-    static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003");
+    static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004");
     private final List<Ordem> ordens = new ArrayList<>();
     private final List<MensagemSaida> outbox = new ArrayList<>();
     private final Map<String, Object[]> chaves = new HashMap<>();

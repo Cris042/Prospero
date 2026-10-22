@@ -17,3 +17,4 @@ __pycache__/
 .ci-evidencias/
 
 .carga-local/
+.robo-local/

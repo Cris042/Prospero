@@ -338,4 +338,17 @@ class MatchingPostgresIT {
         QuarkusTransaction.requiringNew().run(()->actor.avaliar(c,null));
     }
 
+
+    @Test
+    void migracaoCriaCarteiraGrandeDoRoboFormador() {
+        QuarkusTransaction.requiringNew().run(() -> {
+            Object[] conta = (Object[]) em.createNativeQuery(
+                    "SELECT total, disponivel, reservado FROM conta_risco WHERE conta = 'CONTA-004'").getSingleResult();
+            assertEquals(0, new BigDecimal("100000000.00").compareTo((BigDecimal) conta[0]));
+            assertEquals(0, new BigDecimal("100000000.00").compareTo((BigDecimal) conta[1]));
+            assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) conta[2]));
+            assertEquals(5L, ((Number) em.createNativeQuery("SELECT count(*) FROM custodia_risco WHERE conta = 'CONTA-004' "
+                    + "AND total = 100000 AND disponivel = 100000 AND reservado = 0").getSingleResult()).longValue());
+        });
+    }
 }

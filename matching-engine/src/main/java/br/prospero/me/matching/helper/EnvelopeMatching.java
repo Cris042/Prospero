@@ -78,7 +78,7 @@ public final class EnvelopeMatching {
             UUID id = uuid(raiz, "id"), intencao = uuid(raiz, "correlacao");
             if (!id.equals(UUID.nameUUIDFromBytes(("admissao:" + intencao).getBytes(StandardCharsets.UTF_8)))) throw invalido();
             String conta = texto(raiz, "conta");
-            if (!Set.of("CONTA-001", "CONTA-002", "CONTA-003").contains(conta)) throw invalido();
+            if (!Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004").contains(conta)) throw invalido();
             String trace = raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent");
             if (trace != null && (!trace.matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}")
                     || trace.substring(3, 35).equals("0".repeat(32)) || trace.substring(36, 52).equals("0".repeat(16)))) throw invalido();

@@ -101,4 +101,12 @@ class EnvelopeMatchingTest {
         assertThrows(IllegalArgumentException.class, () -> motor.processar(EnvelopeMatching.comando(
                 comando(UUID.randomUUID(), UUID.randomUUID(), "COMPRA", "10.00", "2026-10-19"), "ALFA3")));
     }
+
+    @Test
+    void contaDoRoboFormadorEntraNaAllowlistEContaInexistenteContinuaRecusada() {
+        String original = new String(comando(UUID.randomUUID(), UUID.randomUUID(), "VENDA", "10.00", "2026-10-18"), StandardCharsets.UTF_8);
+        assertDoesNotThrow(() -> EnvelopeMatching.comando(original.replace("CONTA-001", "CONTA-004").getBytes(StandardCharsets.UTF_8), "ALFA3"));
+        assertThrows(IllegalArgumentException.class,
+                () -> EnvelopeMatching.comando(original.replace("CONTA-001", "CONTA-005").getBytes(StandardCharsets.UTF_8), "ALFA3"));
+    }
 }

@@ -1,0 +1,55 @@
+# Opt-in (RF05d, ADR-013): docker compose -f docker-compose.yml -f docker-compose.robo.yml --profile robo up -d robo-formador
+# Fala só com o FO por HTTP, com o token próprio da CONTA-004 (FO_TOKEN_ROBO); nunca passa pelo Nginx.
+services:
+  front-office:
+    networks:
+      - robo
+  robo-formador:
+    image: prospero/robo-formador:${PROSPERO_ROBO_TAG:-0.1.0}
+    build:
+      context: ./ferramentas/robo
+    profiles:
+      - robo
+    depends_on:
+      front-office:
+        condition: service_healthy
+    user: '65532:65532'
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 16
+    # Estado observável (GET /estado) somente em loopback; não aceita comandos.
+    ports:
+      - '127.0.0.1:${PROSPERO_ROBO_PORTA:-8091}:8080'
+    networks:
+      - robo
+    environment:
+      ROBO_FO_URL: http://front-office:8080
+      ROBO_TOKEN_FILE: /run/secrets/robo_token
+      ROBO_ATIVOS: ${ROBO_ATIVOS:-ALFA3:10.00:0.01:100}
+      ROBO_NIVEIS: ${ROBO_NIVEIS:-3}
+      ROBO_DISTANCIA_TICKS: ${ROBO_DISTANCIA_TICKS:-5}
+      ROBO_PASSO_TICKS: ${ROBO_PASSO_TICKS:-1}
+      ROBO_INTERVALO_MS: ${ROBO_INTERVALO_MS:-2000}
+      GOMEMLIMIT: 48MiB
+      GOMAXPROCS: '1'
+    secrets:
+      - robo_token
+    restart: 'no'
+    stop_grace_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+networks:
+  robo:
+    internal: true
+# Arquivo gerado por scripts/preparar-ambiente.py (.robo-local/ 0700, token 0444); serviço read_only exige secret em arquivo.
+secrets:
+  robo_token:
+    file: ${PROSPERO_ROBO_SECRETS_DIR:-./.robo-local}/token
