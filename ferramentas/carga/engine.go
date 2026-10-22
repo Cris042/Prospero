@@ -186,12 +186,14 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 	category := "transporte"
 	httpError := false
 	var bytesRead int64
+	var doErr error
 	req, e := http.NewRequestWithContext(ctx, http.MethodGet, target+"/api/v1/sistema", nil)
 	if e == nil {
 		req.Header.Set("Accept", "application/json")
 		// A non-idempotent marker is deliberately absent: Transport may retry a GET on a reused
 		// broken connection before response. These are logical HTTP calls, not wire attempt counts.
 		resp, err := client.Do(req)
+		doErr = err
 		if err == nil {
 			if resp.Header.Get("Content-Encoding") != "" && resp.Header.Get("Content-Encoding") != "identity" {
 				category = "limite"
@@ -212,7 +214,8 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 	if category == "transporte" {
 		if parent.Err() != nil {
 			category = "cancelada"
-		} else if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		} else if errors.Is(ctx.Err(), context.DeadlineExceeded) || expirou(doErr) {
+			// ResponseHeaderTimeout usa o mesmo prazo e pode disparar antes do contexto: também é timeout.
 			category = "timeout"
 		}
 	}
@@ -255,4 +258,9 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 	bucket[len(latencyBuckets)]++
 	bucket[len(latencyBuckets)+1] += elapsed
 	s.hist[r.Plano.Servico] = bucket
+}
+
+func expirou(err error) bool {
+	var rede net.Error
+	return errors.As(err, &rede) && rede.Timeout()
 }
