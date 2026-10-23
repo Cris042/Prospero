@@ -104,7 +104,9 @@ public class RepositorioMatchingJpa {
             case ACIONAR_STOP -> em().createNativeQuery("UPDATE reserva SET stop_acionado=TRUE WHERE intencao=:i")
                     .setParameter("i",r.intencao()).executeUpdate();
             case ENCERRAR -> encerrar(r);
-            case NENHUMA, REDUZIR -> { }
+            case NENHUMA -> { }
+            // Redução só existe no Stop Loss de grupo OCO (tratado em aplicarPerna).
+            case REDUZIR -> throw new IllegalStateException("reducao fora de OCO");
         }
     }
 
@@ -118,24 +120,6 @@ public class RepositorioMatchingJpa {
             case ENCERRAR -> encerrarPerna(r,p,p.restante());
             case NENHUMA -> { }
         }
-    }
-
-    /** Campos do fato conforme o tipo, já validados com os mesmos limites por EnvelopeMatching.ler. */
-    private static FatoMatching fato(JsonNode evento, JsonNode d) {
-        String tipo=texto(evento,"tipo");
-        UUID correlacao=uuid(evento,"correlacao");
-        return switch (tipo) {
-            case "STOP_PENDENTE" -> new FatoMatching(tipo,correlacao,null,0,0,0,0,null,null,preco(d,"precoGatilho"),null);
-            case "STOP_ACIONADO" -> new FatoMatching(tipo,correlacao,null,0,0,0,0,null,null,null,texto(d,"tipoExecutavel"));
-            case "ORDEM_REJEITADA" -> new FatoMatching(tipo,correlacao,texto(d,"motivo"),0,0,0,0,null,null,null,null);
-            case "ORDEM_ENCERRADA" -> new FatoMatching(tipo,correlacao,texto(d,"motivo"),inteiro(d,"executada",0,1000000),
-                    inteiro(d,"cancelada",0,1000000),0,0,null,null,null,null);
-            case "OFERTA_NO_LIVRO" -> new FatoMatching(tipo,correlacao,null,0,0,inteiro(d,"restante",1,1000000),0,
-                    preco(d,"preco"),texto(d,"lado"),null,null);
-            case "ORDEM_REDUZIDA" -> new FatoMatching(tipo,correlacao,null,0,0,inteiro(d,"restante",1,1000000),
-                    inteiro(d,"reduzida",1,1000000),null,null,null,null);
-            default -> new FatoMatching(tipo,correlacao,null,0,0,0,0,null,null,null,null);
-        };
     }
 
     /** Marco do encerramento (v4): sem conta nem reserva; só o fato deduplicado (RF05c.4). */

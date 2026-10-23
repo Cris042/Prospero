@@ -45,11 +45,11 @@ class TransicaoMatchingTest {
     }
 
     private static FatoMatching fato(String tipo) {
-        return new FatoMatching(tipo, ADMISSAO, null, 0, 0, 0, 0, null, null, null, null);
+        return FatoMatching.semCampos(tipo, ADMISSAO);
     }
 
     private static FatoMatching encerrada(String motivo, long executada, long cancelada) {
-        return new FatoMatching("ORDEM_ENCERRADA", ADMISSAO, motivo, executada, cancelada, 0, 0, null, null, null, null);
+        return FatoMatching.ordemEncerrada(ADMISSAO, motivo, executada, cancelada);
     }
 
     private static void recusa(String campo, Executable acao) {
@@ -59,16 +59,16 @@ class TransicaoMatchingTest {
     @Test
     void reservaSimplesDecideEfeitoPorFato() {
         ReservaMatching stop = reserva("STOP", "DIA", 10, 10, "ATIVA", DEZ, false);
-        assertEquals(Transicao.NENHUMA, stop.transicao(new FatoMatching("STOP_PENDENTE", ADMISSAO, null, 0, 0, 0, 0,
-                null, null, new BigDecimal("10.0"), null), true, ADMISSAO));
-        assertEquals(Transicao.ACIONAR_STOP, stop.transicao(new FatoMatching("STOP_ACIONADO", ADMISSAO, null, 0, 0, 0,
-                0, null, null, null, "MARKET"), true, ADMISSAO));
-        assertEquals(Transicao.ENCERRAR, stop.transicao(new FatoMatching("ORDEM_REJEITADA", ADMISSAO,
-                "LIMITE_STOPS_PENDENTES", 0, 0, 0, 0, null, null, null, null), true, ADMISSAO));
+        assertEquals(Transicao.NENHUMA, stop.transicao(FatoMatching.stopPendente(ADMISSAO, new BigDecimal("10.0")),
+                true, ADMISSAO));
+        assertEquals(Transicao.ACIONAR_STOP, stop.transicao(FatoMatching.stopAcionado(ADMISSAO, "MARKET"), true,
+                ADMISSAO));
+        assertEquals(Transicao.ENCERRAR, stop.transicao(FatoMatching.ordemRejeitada(ADMISSAO,
+                "LIMITE_STOPS_PENDENTES"), true, ADMISSAO));
         ReservaMatching limit = reserva("LIMIT", "DIA", 10, 4, "PARCIAL", null, false);
         assertEquals(Transicao.ENCERRAR, limit.transicao(encerrada("EXPIRADA_DIA", 6, 4), false, ADMISSAO));
-        assertEquals(Transicao.NENHUMA, limit.transicao(new FatoMatching("OFERTA_NO_LIVRO", ADMISSAO, null, 0, 0, 4, 0,
-                DEZ, "COMPRA", null, null), false, ADMISSAO));
+        assertEquals(Transicao.NENHUMA, limit.transicao(FatoMatching.ofertaNoLivro(ADMISSAO, 4, DEZ, "COMPRA"), false,
+                ADMISSAO));
         assertEquals(Transicao.NENHUMA, limit.transicao(fato("ORDEM_ACEITA"), false, ADMISSAO));
     }
 
@@ -77,8 +77,7 @@ class TransicaoMatchingTest {
         ReservaMatching stop = reserva("STOP", "DIA", 10, 10, "ATIVA", DEZ, false);
         recusa("versao stop", () -> stop.transicao(fato("ORDEM_ACEITA"), false, OUTRA));
         recusa("alvo correlacao", () -> stop.transicao(fato("ORDEM_ACEITA"), true, OUTRA));
-        recusa("tipo executavel", () -> stop.transicao(new FatoMatching("STOP_ACIONADO", ADMISSAO, null, 0, 0, 0, 0,
-                null, null, null, "LIMIT"), true, ADMISSAO));
+        recusa("tipo executavel", () -> stop.transicao(FatoMatching.stopAcionado(ADMISSAO, "LIMIT"), true, ADMISSAO));
         recusa("terminal stop nao acionado", () -> stop.transicao(encerrada("SEM_LIQUIDEZ", 0, 10), true, ADMISSAO));
         recusa("cascata", () -> reserva("STOP", "DIA", 10, 10, "ATIVA", DEZ, true)
                 .transicao(encerrada("LIMITE_CASCATA", 0, 10), true, ADMISSAO));
@@ -89,10 +88,31 @@ class TransicaoMatchingTest {
         recusa("expiracao validade", () -> limit.transicao(encerrada("EXPIRADA_DIA", 6, 4), false, ADMISSAO));
         recusa("terminal FOK", () -> limit.transicao(encerrada("FOK_SEM_LIQUIDEZ", 6, 4), false, ADMISSAO));
         recusa("execucao terminal", () -> limit.transicao(encerrada("EXECUTADA", 6, 4), false, ADMISSAO));
-        recusa("oferta tipo", () -> limit.transicao(new FatoMatching("OFERTA_NO_LIVRO", ADMISSAO, null, 0, 0, 4, 0, DEZ,
-                "COMPRA", null, null), false, ADMISSAO));
+        recusa("oferta tipo", () -> limit.transicao(FatoMatching.ofertaNoLivro(ADMISSAO, 4, DEZ, "COMPRA"), false,
+                ADMISSAO));
         recusa("reserva encerrada", () -> reserva("LIMIT", "DIA", 10, 0, "ENCERRADA", null, false)
                 .transicao(fato("ORDEM_ACEITA"), false, ADMISSAO));
+    }
+
+    @Test
+    void reservaSimplesRecusaStopPendenteRejeicaoETerminalIocDivergentes() {
+        ReservaMatching stop = reserva("STOP", "DIA", 10, 10, "ATIVA", DEZ, false);
+        recusa("gatilho", () -> stop.transicao(FatoMatching.stopPendente(ADMISSAO, ONZE), true, ADMISSAO));
+        ReservaMatching acionado = reserva("STOP", "DIA", 10, 10, "ATIVA", DEZ, true);
+        recusa("stop pendente", () -> acionado.transicao(FatoMatching.stopPendente(ADMISSAO, DEZ), true, ADMISSAO));
+        recusa("stop pendente", () -> reserva("LIMIT", "DIA", 10, 10, "ATIVA", null, false)
+                .transicao(FatoMatching.stopPendente(ADMISSAO, DEZ), true, ADMISSAO));
+        recusa("rejeicao apos acionamento", () -> acionado.transicao(FatoMatching.ordemRejeitada(ADMISSAO,
+                "LIMITE_ORDENS_ATIVAS"), true, ADMISSAO));
+        recusa("rejeicao stop", () -> reserva("LIMIT", "DIA", 10, 10, "ATIVA", null, false)
+                .transicao(FatoMatching.ordemRejeitada(ADMISSAO, "LIMITE_STOPS_PENDENTES"), true, ADMISSAO));
+        // IOC só fora de validade IOC quando é Stop (Market) acionado; Limit DIA e Stop Limit acionado não.
+        recusa("terminal IOC", () -> reserva("LIMIT", "DIA", 10, 4, "PARCIAL", null, false)
+                .transicao(encerrada("SALDO_CANCELADO_IOC", 6, 4), false, ADMISSAO));
+        recusa("terminal IOC", () -> reserva("STOP_LIMIT", "DIA", 10, 4, "PARCIAL", DEZ, true)
+                .transicao(encerrada("SALDO_CANCELADO_IOC", 6, 4), true, ADMISSAO));
+        assertEquals(Transicao.ENCERRAR, reserva("STOP", "DIA", 10, 4, "PARCIAL", DEZ, true)
+                .transicao(encerrada("SALDO_CANCELADO_IOC", 6, 4), true, ADMISSAO));
     }
 
     @Test
@@ -104,25 +124,55 @@ class TransicaoMatchingTest {
             return takeProfit;
         };
         // TP não é stop: a guarda falha antes de carregar a irmã (mesma ordem de locks do repositório anterior).
-        recusa("stop acionamento", () -> takeProfit.transicao(new FatoMatching("STOP_ACIONADO", ADMISSAO, null, 0, 0, 0,
-                0, null, null, null, "MARKET"), grupo(), ADMISSAO, irma));
+        recusa("stop acionamento", () -> takeProfit.transicao(FatoMatching.stopAcionado(ADMISSAO, "MARKET"), grupo(),
+                ADMISSAO, irma));
         assertEquals(0, consultas.get());
         PernaOco stopLoss = perna("STOP_LOSS", "STOP", 0, 0, false, "ATIVA");
-        recusa("stop acionamento", () -> stopLoss.transicao(new FatoMatching("STOP_ACIONADO", ADMISSAO, null, 0, 0, 0,
-                0, null, null, null, "MARKET"), grupo(), ADMISSAO, irma));
+        recusa("stop acionamento", () -> stopLoss.transicao(FatoMatching.stopAcionado(ADMISSAO, "MARKET"), grupo(),
+                ADMISSAO, irma));
         assertEquals(1, consultas.get(), "TP ainda vivo impede acionar o SL");
-        assertEquals(Transicao.REDUZIR, stopLoss.transicao(new FatoMatching("ORDEM_REDUZIDA", ADMISSAO, null, 0, 0, 7,
-                3, null, null, null, null), grupo(), ADMISSAO, () -> perna("TAKE_PROFIT", "LIMIT", 3, 0, false,
-                "PARCIAL")));
+        assertEquals(Transicao.REDUZIR, stopLoss.transicao(FatoMatching.ordemReduzida(ADMISSAO, 3, 7), grupo(),
+                ADMISSAO, () -> perna("TAKE_PROFIT", "LIMIT", 3, 0, false, "PARCIAL")));
         assertEquals(Transicao.ENCERRAR, stopLoss.transicao(encerrada("CANCELADA_OCO", 0, 10), grupo(), ADMISSAO,
                 () -> perna("TAKE_PROFIT", "LIMIT", 10, 0, false, "ENCERRADA")));
-        assertEquals(Transicao.NENHUMA, takeProfit.transicao(new FatoMatching("OFERTA_NO_LIVRO", ADMISSAO, null, 0, 0,
-                10, 0, ONZE, "VENDA", null, null), grupo(), ADMISSAO, irma));
+        assertEquals(Transicao.NENHUMA, takeProfit.transicao(FatoMatching.ofertaNoLivro(ADMISSAO, 10, ONZE, "VENDA"),
+                grupo(), ADMISSAO, irma));
         recusa("alvo correlacao", () -> takeProfit.transicao(fato("ORDEM_ACEITA"), grupo(), OUTRA, irma));
-        recusa("oferta lado", () -> takeProfit.transicao(new FatoMatching("OFERTA_NO_LIVRO", ADMISSAO, null, 0, 0, 10,
-                0, ONZE, "COMPRA", null, null), grupo(), ADMISSAO, irma));
+        recusa("oferta lado", () -> takeProfit.transicao(FatoMatching.ofertaNoLivro(ADMISSAO, 10, ONZE, "COMPRA"),
+                grupo(), ADMISSAO, irma));
         recusa("terminal perna", () -> takeProfit.transicao(encerrada("SEM_LIQUIDEZ", 0, 10), grupo(), ADMISSAO, irma));
         assertThrows(IllegalStateException.class, () -> takeProfit.transicao(fato("NEGOCIO"), grupo(), ADMISSAO, irma));
+    }
+
+    @Test
+    void pernaRecusaPendenteReducaoRejeicaoECascataDivergentes() {
+        PernaOco takeProfitVivo = perna("TAKE_PROFIT", "LIMIT", 0, 0, false, "ATIVA");
+        PernaOco takeProfitEncerrado = perna("TAKE_PROFIT", "LIMIT", 10, 0, false, "ENCERRADA");
+        PernaOco stopLoss = perna("STOP_LOSS", "STOP", 0, 0, false, "ATIVA");
+        recusa("gatilho", () -> stopLoss.transicao(FatoMatching.stopPendente(ADMISSAO, ONZE), grupo(), ADMISSAO,
+                () -> takeProfitVivo));
+        recusa("stop pendente", () -> takeProfitVivo.transicao(FatoMatching.stopPendente(ADMISSAO, DEZ), grupo(),
+                ADMISSAO, () -> stopLoss));
+        recusa("stop pendente", () -> perna("STOP_LOSS", "STOP", 0, 0, true, "ATIVA")
+                .transicao(FatoMatching.stopPendente(ADMISSAO, DEZ), grupo(), ADMISSAO, () -> takeProfitVivo));
+        // Restante após a redução (8) diverge de 10 - 3 e do saldo do TP (10 - 3).
+        recusa("reducao restante", () -> stopLoss.transicao(FatoMatching.ordemReduzida(ADMISSAO, 3, 8), grupo(),
+                ADMISSAO, () -> perna("TAKE_PROFIT", "LIMIT", 3, 0, false, "PARCIAL")));
+        recusa("reducao restante", () -> stopLoss.transicao(FatoMatching.ordemReduzida(ADMISSAO, 10, 1), grupo(),
+                ADMISSAO, () -> perna("TAKE_PROFIT", "LIMIT", 9, 0, false, "PARCIAL")));
+        recusa("rejeicao stop", () -> takeProfitVivo.transicao(FatoMatching.ordemRejeitada(ADMISSAO,
+                "LIMITE_STOPS_PENDENTES"), grupo(), ADMISSAO, () -> perna("STOP_LOSS", "STOP", 0, 0, false,
+                "ENCERRADA")));
+        recusa("cascata", () -> perna("STOP_LOSS", "STOP", 0, 0, true, "ATIVA")
+                .transicao(encerrada("LIMITE_CASCATA", 0, 10), grupo(), ADMISSAO, () -> takeProfitEncerrado));
+        recusa("cascata", () -> stopLoss.transicao(encerrada("LIMITE_CASCATA", 0, 10), grupo(), ADMISSAO,
+                () -> takeProfitVivo));
+        recusa("cancelamento oco", () -> takeProfitVivo.transicao(encerrada("CANCELADA_OCO", 0, 10), grupo(),
+                ADMISSAO, () -> perna("STOP_LOSS", "STOP", 0, 0, false, "ENCERRADA")));
+        recusa("cancelamento oco", () -> stopLoss.transicao(encerrada("CANCELADA_OCO", 0, 10), grupo(), ADMISSAO,
+                () -> takeProfitVivo));
+        recusa("terminal IOC", () -> perna("STOP_LOSS", "STOP_LIMIT", 0, 0, true, "ATIVA")
+                .transicao(encerrada("SALDO_CANCELADO_IOC", 0, 10), grupo(), ADMISSAO, () -> takeProfitEncerrado));
     }
 
     @Test
@@ -139,8 +189,15 @@ class TransicaoMatchingTest {
                 .exigirExecutavel(true));
         recusa("limite compra", () -> new NegocioMatching(compra, acionada, null, null, 1, ONZE).exigirExecutavel(true));
         new NegocioMatching(compra, acionada, null, null, 10, DEZ).exigirExecutavel(true);
+        ReservaMatching vendaLimitada = new ReservaMatching(OUTRA, UUID.randomUUID(), "CONTA-002", "ALFA3", "CUSTODIA",
+                "LIMIT", "DIA", LocalDate.of(2026, 10, 18), 10, 10, ONZE, null, null, "ATIVA", null, false, false);
+        recusa("limite venda", () -> new NegocioMatching(compra, vendaLimitada, null, null, 1, DEZ)
+                .exigirExecutavel(false));
         PernaOco takeProfit = perna("TAKE_PROFIT", "LIMIT", 8, 0, false, "PARCIAL");
         recusa("restante perna", () -> new NegocioMatching(compra, grupo(), null, takeProfit, 3, ONZE)
+                .exigirExecutavel(true));
+        PernaOco takeProfitAcima = perna("TAKE_PROFIT", "LIMIT", 0, 0, false, "ATIVA");
+        recusa("limite venda", () -> new NegocioMatching(compra, grupo(), null, takeProfitAcima, 1, DEZ)
                 .exigirExecutavel(true));
     }
 }

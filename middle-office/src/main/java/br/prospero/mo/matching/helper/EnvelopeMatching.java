@@ -1,5 +1,6 @@
 package br.prospero.mo.matching.helper;
 
+import br.prospero.mo.matching.dominio.FatoMatching;
 import br.prospero.mo.mensageria.dominio.MensagemInvalidaException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -67,6 +68,24 @@ public final class EnvelopeMatching {
             }
             default -> throw invalida("tipo");
         }
+    }
+
+    /** Campos do fato de ordem conforme o tipo, já validados com os mesmos limites por {@link #ler}. */
+    public static FatoMatching fato(JsonNode evento, JsonNode d) {
+        String tipo=texto(evento,"tipo");
+        UUID correlacao=uuid(evento,"correlacao");
+        return switch (tipo) {
+            case "STOP_PENDENTE" -> FatoMatching.stopPendente(correlacao,preco(d,"precoGatilho"));
+            case "STOP_ACIONADO" -> FatoMatching.stopAcionado(correlacao,texto(d,"tipoExecutavel"));
+            case "ORDEM_REJEITADA" -> FatoMatching.ordemRejeitada(correlacao,texto(d,"motivo"));
+            case "ORDEM_ENCERRADA" -> FatoMatching.ordemEncerrada(correlacao,texto(d,"motivo"),
+                    inteiro(d,"executada",0,1000000),inteiro(d,"cancelada",0,1000000));
+            case "OFERTA_NO_LIVRO" -> FatoMatching.ofertaNoLivro(correlacao,inteiro(d,"restante",1,1000000),
+                    preco(d,"preco"),texto(d,"lado"));
+            case "ORDEM_REDUZIDA" -> FatoMatching.ordemReduzida(correlacao,inteiro(d,"reduzida",1,1000000),
+                    inteiro(d,"restante",1,1000000));
+            default -> FatoMatching.semCampos(tipo,correlacao);
+        };
     }
 
     private static void motivo(JsonNode d) { exigir(texto(d,"motivo").matches("[A-Z_]{1,64}"),"motivo"); }
