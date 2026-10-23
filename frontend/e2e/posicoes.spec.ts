@@ -12,7 +12,8 @@ test('negócios reais atualizam posição e resultado sem atualizar a página', 
       'Configure PROSPERO_POSICOES_E2E_CONFIG com a configuração privada do perfil posicoes.',
     );
   const config = JSON.parse(readFileSync(arquivo, 'utf8'));
-  const contraparte = config.servicos['ordens-b'];
+  // A prova de risco deixa a CONTA-003 sem custódia; a CONTA-002 conserva DELTA3 disponível.
+  const contraparte = config.servicos['ordens-a'];
   const origem = new URL(contraparte.origem);
   expect(origem.protocol).toBe('http:');
   expect(['localhost', '127.0.0.1']).toContain(origem.hostname);
