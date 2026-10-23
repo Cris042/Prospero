@@ -36,7 +36,7 @@ Atualização a cada2 s, sem sobreposição e com timeout8 s; ocultar/destruir c
 
 `runner/exemplos/posicoes.xlsx` cobre, por APIs reais, médio periódico, ampliação/redução, viradas long/short, zeragem, autonegociação e recusas de autenticação. Perfil isolado antes de outras negociações DELTA3; duas repetições fecham quantidade/PnL em zero e restauram preço40, sem apagar histórico. Não usar contra histórico arbitrário. Gerador em `gerar-posicoes.mjs`.
 
-E2E integrado exige `PROSPERO_POSICOES_E2E_CONFIG` apontando ao arquivo privado gerado por `scripts/mercado.py config-runner --perfil posicoes`, com origens loopback acessíveis ao Node. A CI gera esse arquivo em diretório temporário0600, mantém a contraparte autenticada no Node e nunca no navegador; o cenário observa a posição mudar após negócio real e fecha por outro negócio. Upload contém somente PNG, não a configuração ou traces. Evidências pertencem ao PR.
+E2E integrado exige `PROSPERO_POSICOES_E2E_CONFIG` apontando ao arquivo privado gerado por `scripts/mercado.py config-runner --perfil posicoes`, com origens loopback acessíveis ao Node. A CI gera esse arquivo0600 em diretório temporário0700, mantém a contraparte autenticada no Node e nunca no navegador; o cenário observa a posição mudar após negócio real e fecha por outro negócio. Upload contém somente PNG, não a configuração ou traces. Evidências pertencem ao PR.
 
 ## Runner XLSX — contrato P03
 

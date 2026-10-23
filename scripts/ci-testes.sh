@@ -104,6 +104,7 @@ bo_origem="http://$("${compose[@]}" port back-office 8080)"
 # Credenciais ficam no arquivo privado temporário, acessível só ao processo Node do teste.
 python3 scripts/mercado.py config-runner "$runner_cfg/posicoes-e2e.json" --perfil posicoes \
   --origem "$fo_origem" --origem-mo "$mo_origem" --origem-bo "$bo_origem"
+chmod 600 "$runner_cfg/posicoes-e2e.json"
 export PROSPERO_POSICOES_E2E_CONFIG="$runner_cfg/posicoes-e2e.json"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.

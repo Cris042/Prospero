@@ -78,7 +78,7 @@ test('negócios reais atualizam posição e resultado sem atualizar a página', 
   async function negociar(lado: 'COMPRA' | 'VENDA') {
     const boleta = page.getByRole('form', { name: 'Ordem simples' });
     await boleta.getByLabel('Ativo').selectOption('DELTA3');
-    await boleta.getByLabel('Tipo', { exact: true }).selectOption('LIMIT');
+    await boleta.getByLabel('Tipo').selectOption('LIMIT');
     await boleta.getByLabel('Lado').selectOption(lado);
     await boleta.getByLabel('Validade').selectOption('IOC');
     await boleta.getByLabel('Quantidade').fill('1');
