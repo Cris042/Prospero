@@ -4,12 +4,14 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
-import static br.prospero.mo.matching.dominio.Guarda.executavel;
+import static br.prospero.mo.matching.dominio.Guarda.tipoExecutavel;
 import static br.prospero.mo.matching.dominio.Guarda.exigir;
 
 /**
  * Reserva por intenção travada para aplicar um fato do ME (ADR-013). Grupo OCO não tem tipo próprio: os tipos ficam
- * nas pernas. Registro carregado do banco; isento das regras 8 e 9 do Object Calisthenics como representação.
+ * nas pernas. Registro carregado do banco: exceção às regras 8 e 9 do Object Calisthenics (ADR-002) justificada no
+ * PR, como espelho da linha travada extraído do repositório sem mudança de comportamento. Os campos String de
+ * recurso, tipo, validade e estado são dívida da regra 3 (objetos de valor).
  */
 public record ReservaMatching(UUID intencao, UUID ordem, String conta, String ticker, String recurso, String tipo,
                               String validade, LocalDate sessao, long inicial, long restante,
@@ -51,7 +53,7 @@ public record ReservaMatching(UUID intencao, UUID ordem, String conta, String ti
 
     private Transicao acionamento(FatoMatching fato) {
         exigir(stop() && !acionada && estado.equals("ATIVA") && gatilho != null, "stop acionamento");
-        exigir(fato.tipoExecutavel().equals(executavel(tipo)), "tipo executavel");
+        exigir(fato.tipoExecutavel().equals(tipoExecutavel(tipo)), "tipo executavel");
         return Transicao.ACIONAR_STOP;
     }
 

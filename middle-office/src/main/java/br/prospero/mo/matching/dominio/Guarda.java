@@ -14,7 +14,7 @@ final class Guarda {
     }
 
     /** Tipo em que o stop acionado executa: Stop vira Market; Stop Limit vira Limit (ADR-013). */
-    static String executavel(String tipoStop) {
+    static String tipoExecutavel(String tipoStop) {
         return tipoStop.equals("STOP") ? "MARKET" : "LIMIT";
     }
 }

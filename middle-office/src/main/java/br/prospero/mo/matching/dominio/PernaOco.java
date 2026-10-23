@@ -5,12 +5,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import static br.prospero.mo.matching.dominio.Guarda.executavel;
+import static br.prospero.mo.matching.dominio.Guarda.tipoExecutavel;
 import static br.prospero.mo.matching.dominio.Guarda.exigir;
 
 /**
- * Progresso de uma perna OCO; caixa/custódia continuam na reserva do grupo (RF05c.3b). Registro carregado do banco;
- * isento das regras 8 e 9 do Object Calisthenics como representação.
+ * Progresso de uma perna OCO; caixa/custódia continuam na reserva do grupo (RF05c.3b). Registro carregado do banco:
+ * exceção às regras 8 e 9 do Object Calisthenics (ADR-002) justificada no PR, como espelho da linha travada extraído
+ * do repositório sem mudança de comportamento. Os campos String de papel, tipo e estado são dívida da regra 3
+ * (objetos de valor).
  */
 public record PernaOco(UUID ordem, UUID intencao, String papel, String tipo, BigDecimal limite, BigDecimal gatilho,
                        long quantidade, long executada, long reduzida, long cancelada, boolean acionada,
@@ -73,7 +75,7 @@ public record PernaOco(UUID ordem, UUID intencao, String papel, String tipo, Big
 
     private Transicao acionamento(FatoMatching fato, Supplier<PernaOco> irma) {
         exigir(stopLossPendente() && !irma.get().viva(), "stop acionamento");
-        exigir(fato.tipoExecutavel().equals(executavel(tipo)), "tipo executavel");
+        exigir(fato.tipoExecutavel().equals(tipoExecutavel(tipo)), "tipo executavel");
         return Transicao.ACIONAR_STOP;
     }
 
