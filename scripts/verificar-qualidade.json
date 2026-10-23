@@ -1,0 +1,18 @@
+{
+  "prefixo": "br.prospero.",
+  "metodo_linhas": {"alerta": 30, "falha": 60},
+  "metodo_complexidade": {"alerta": 10, "falha": 20},
+  "metodo_aninhamento": {"alerta": 3, "falha": 5},
+  "metodo_parametros": {"alerta": 4, "falha": 7},
+  "metodo_else": {"alerta": 0, "falha": null},
+  "classe_linhas": {"alerta": 300, "falha": 600},
+  "classe_metodos": {"alerta": 20, "falha": null},
+  "classe_campos": {"alerta": 2, "falha": null, "isentar_records": true, "pacotes_isentos": ["dto", "jpa"]},
+  "classe_dependencias": {"alerta": 10, "falha": 20},
+  "coesao": {"min_metodos": 7, "min_componentes": 2},
+  "duplicacao": {"janela": 6, "min_ocorrencias": 3},
+  "condicional_repetida": {"min_rotulos": 2, "min_locais_switch": 2, "min_locais_condicao": 3},
+  "interface_unica": {"camadas_puras": ["dominio", "helper"], "camadas_infra": ["jpa", "kafka", "rest"]},
+  "mudanca_conjunta": {"min_commits": 3, "historico": 300, "max_arquivos_commit": 30},
+  "hotspots": {"min_commits": 2}
+}
