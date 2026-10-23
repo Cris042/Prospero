@@ -1,4 +1,4 @@
-# Processado pelo envsubst da imagem nginx; somente FO_TOKEN_LEITURA e FO_TOKEN_ORDENS são substituídos.
+# Processado pelo envsubst da imagem nginx; somente os tokens FO e BO explicitamente permitidos são substituídos.
 # RF02c (ADR-010): escrita só de origem local; GET passa, POST exige Origin de localhost/127.0.0.1.
 map "$request_method|$http_origin" $ordens_origem_recusada {
   default 1;
@@ -83,7 +83,21 @@ limit_req_zone $binary_remote_addr zone=mercado:1m rate=5r/s;
       proxy_set_header Host $host;
       proxy_set_header X-Request-ID $request_id;
     }
+    location = /servicos/back-office/api/v1/posicoes {
+      limit_except GET { deny all; }
+      proxy_hide_header Cache-Control;
+      add_header Cache-Control no-store always;
+      add_header X-Content-Type-Options nosniff always;
+      add_header Referrer-Policy same-origin always;
+      set $backend back-office:8080;
+      rewrite ^/servicos/back-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+      proxy_set_header Authorization "Bearer ${BO_TOKEN_POSICOES}";
+    }
     location /servicos/back-office/ {
+      proxy_set_header Authorization "";
       set $backend back-office:8080;
       rewrite ^/servicos/back-office/(.*)$ /$1 break;
       proxy_pass http://$backend;

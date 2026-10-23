@@ -51,7 +51,7 @@ As substituições frente à proposta de origem estão no [índice de ADRs](../a
 | RF04 | Verificar poder de compra, posição, exposição vendida e quantidade máxima; reservar recursos antes do matching. |
 | RF05 | Aplicar preço-tempo, preço da oferta passiva, parciais/totais, gatilhos de stops e cancelamento do saldo OCO. |
 | RF06 | Atualizar último preço, bid/ask e VWAP do dia por negócio; refletir também mudanças de ofertas sem execução. |
-| RF07 | Calcular posição comprada/vendida, preço médio e resultados realizados/não realizados. |
+| RF07 | Calcular posição comprada/vendida dos negócios desde a origem do log, preço médio e resultados realizados/não realizados; visão distinta da custódia inicial sem custo histórico. |
 | RF08 | Registrar negócios, razão em partidas dobradas e histórico; liquidar caixa e custódia em D+2 simulado. |
 | RF09 | Exibir estados em tempo real e a linha do tempo da ordem pelos quatro serviços. |
 | RF10 | Cancelar saldo elegível de Limit ou stop não acionado e liberar a reserva correta. |
@@ -79,7 +79,9 @@ As metas não estão comprovadas pela simples inicialização dos containers. A 
 
 Prioridade preço-tempo e preço passivo, conservação de quantidade, reserva antes do matching, efeitos idempotentes, posição long/short, partidas dobradas e D+2 fazem parte do resultado requerido. O [roadmap](../roadmap.md) detalha os aceites de cada RF e as decisões que precedem implementação.
 
-Ainda pendentes: cinco ativos e parâmetros; escalas/ticks/lotes/arredondamento; calendário e feriados; estados e combinações de ordens; reserva por tipo; corridas de cancelamento e timeout; regras de virada de posição. Não preencher esses pontos com o comportamento do projeto doador.
+Ainda pendentes: cinco ativos e parâmetros; escalas/ticks/lotes/arredondamento; calendário e feriados; estados e combinações de ordens; reserva por tipo; corridas de cancelamento e timeout. As regras da RF07 estão definidas abaixo. Não preencher esses pontos com o comportamento do projeto doador.
+
+A RF07 foi definida pelo usuário em 2026-10-23: médio ponderado nas ampliações; médio preservado na redução e resultado sobre a quantidade encerrada; virada ao preço do negócio; zeragem conserva realizado acumulado. Acumuladores exatos, exibição em quatro casas HALF_EVEN; autonegociação neutra na posição/PnL da conta. A visão começa em zero na origem do log, separada da custódia inicial. A venda descoberta continua bloqueada no risco atual. [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
 
 ## Critérios de aceite e métricas de sucesso
 

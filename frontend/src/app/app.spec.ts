@@ -4,12 +4,25 @@ import { App } from './app';
 import { MercadoService } from './mercado/mercado.service';
 import { OrdensService } from './ordens/ordens.service';
 import { SistemaService } from './sistema/sistema.service';
+import { PosicoesService } from './posicoes/posicoes.service';
 
 describe('Painel de fundação', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
+        {
+          provide: PosicoesService,
+          useValue: {
+            consultar: () =>
+              of({
+                conta: 'CONTA-001',
+                base: 'NEGOCIOS_DESDE_ORIGEM',
+                sincronizado: true,
+                posicoes: [],
+              }),
+          },
+        },
         { provide: MercadoService, useValue: { listar: () => of([]), livro: () => of(null) } },
         {
           provide: OrdensService,

@@ -127,13 +127,33 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
   await expect(page.getByRole('alert')).toContainText('Preço inválido');
   const faixa = faixaAtual(await consultarAlfa(page.request));
   await boleta.getByLabel('Preço limite (R$)').fill(decimal(faixa.maximo + faixa.tick));
+  let corpoRecusa!: unknown;
+  let grupoOco!: { grupoOco: string };
+  const urlInicial = page.url();
+  const navegacoes: string[] = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navegacoes.push(frame.url());
+  });
+  await page.route(/\/api\/v1\/ordens(?:-oco)?$/, async (rota) => {
+    if (rota.request().method() !== 'POST') return rota.fallback();
+    const respostaReal = await rota.fetch();
+    const corpo = await respostaReal.json();
+    if (rota.request().url().endsWith('/ordens-oco')) {
+      expect(respostaReal.status()).toBe(202);
+      grupoOco = corpo;
+    } else {
+      expect(respostaReal.status()).toBe(422);
+      corpoRecusa = corpo;
+    }
+    await rota.fulfill({ response: respostaReal });
+  });
   const recusa = page.waitForResponse(
     (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
   );
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
   const respostaRecusa = await recusa;
   expect(respostaRecusa.status()).toBe(422);
-  expect(await respostaRecusa.json()).toMatchObject({
+  expect(corpoRecusa).toMatchObject({
     codigo: 'PRECO_FORA_DO_TUNEL',
     detalhes: { minimo: decimal(faixa.minimo), maximo: decimal(faixa.maximo) },
   });
@@ -151,7 +171,7 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
   await oco.getByRole('button', { name: 'Registrar OCO' }).click();
   const registroOco = await respostaOco;
   expect(registroOco.status()).toBe(202);
-  const grupoOco = await registroOco.json();
+  expect(grupoOco).toBeDefined();
   // A próxima prova Market100 encontra o TP100 em repouso também no projeto mobile.
   await expect
     .poll(
@@ -169,6 +189,8 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
     .toBe('ABERTA');
   await expect(page.getByRole('status')).toContainText('Take Profit: Venda 100 ALFA3');
   await expect(page.getByRole('status')).toContainText('Stop Loss: Venda 100 ALFA3');
+  await expect(page).toHaveURL(urlInicial);
+  expect(navegacoes).toEqual([]);
 });
 
 test('envia Market e Stop Limit e repete com a mesma chave após falha de rede', async ({

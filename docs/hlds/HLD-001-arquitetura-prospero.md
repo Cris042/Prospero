@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho baseado no [PRD-001](../prds/PRD-001-simulador-prosper
 
 ## Objetivo técnico e estado atual
 
-Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam mercado, ordens/validação e SAGA de risco/reserva FO ↔ MO. RF05a implementou o núcleo puro do livro; RF05b conecta MO → ME → MO/FO com publicação recuperável, consumo/liberação e progresso das ordens, em validação. RF05c.2 integra Stop/Stop Limit simples nesse fluxo, com espera pelo gatilho e acionamento persistido antes do consumo. OCO, fechamento integrado, posições, liquidação e WebSocket permanecem planejados. O roadmap registra PRs e evidências.
+Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam mercado, ordens/validação e SAGA de risco/reserva FO ↔ MO; RF05 integra MO → ME → MO/FO, Stop/Stop Limit, OCO, encerramento e robô. RF06 integrada projeta cotação real/VWAP e atualiza a tela. RF07 em validação acrescenta projeção idempotente de posições/PnL no BO e consulta Angular. Razão, liquidação, WebSocket e cancelamento permanecem planejados nas RFs seguintes. O roadmap registra PRs/evidências.
 
 A P05 adicionou a conversão decimal técnica pura no MO, integrada pelo PR #3. Validação financeira, risco e reservas vieram depois, nas RF03–RF04 (ADR-011 e ADR-012).
 
@@ -39,7 +39,7 @@ Contratos HTTP de negócio: DTOs, `/api/v1`, Swagger/OpenAPI e status adequados 
 
 ## Dados e consistência
 
-Cada serviço é fonte de verdade de seu contexto e dono de credenciais/migrações Flyway. FO/MO possuem ordens, reservas, outbox e deduplicação; ME acrescenta metadados de replay na RF05b, sem tabela do livro; BO mantém a identidade técnica. Não existe commit global. Reservas, consumo/liberação e progresso usam transações locais e reentrega idempotente. Timeout sozinho não autoriza liberar recurso quando execução ainda pode ocorrer.
+Cada serviço é fonte de verdade de seu contexto e dono de credenciais/migrações Flyway. FO/MO possuem ordens, reservas, outbox e deduplicação; ME acrescenta metadados de replay na RF05b, sem tabela do livro; BO acrescenta na RF07 o log/checkpoint e projeções de posição/cotação no banco próprio; razão/liquidação continuam RF08. Não existe commit global. Reservas, consumo/liberação e progresso usam transações locais e reentrega idempotente. Timeout sozinho não autoriza liberar recurso quando execução ainda pode ocorrer.
 
 Livro em memória, replay da sessão e checkpoint PostgreSQL seguem ADR-013; RF05b opera laboratório de sessão única/posse exclusiva e retenção integral, sem snapshots/rebalanceamento automático. A projeção de mercado pertence ao PostgreSQL do FO (ADR-009/RF06a); Redis é somente candidato a cache medido, sem autoridade para reserva. Quatro bancos independentes não são réplicas. Kafka atual possui broker único KRaft/RF1; consenso/replicação distribuída entre bancos são N/A. Versões reais e adoção ficam em [libs](../libs.md).
 
@@ -98,7 +98,7 @@ Decisões: [ADR-001 backend/fronteiras](../adrs/ADR-001-arquitetura-backend.md),
 
 ## Verificação e rastreabilidade
 
-Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF04 integradas, RF05 integrada até PR #36, RF06a integrada no PR #37, RF06b em validação e RF07–RF10 planejadas; PRs, revisões e testes discriminados no roadmap. P03 implementada; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
+Fundação: P02 e suas [evidências — histórico Git](https://github.com/mclovin137/Prospero/blob/bd707fa972aa36c6811fa00d13ad73c3073721c1/docs/evidencias/P02-testes.md). Invariantes de precisão técnica: P05 integrada pelo PR #3. Produto financeiro: RF01–RF04 integradas, RF05 integrada até PR #36, RF06 integrada nos PRs #37/#38, RF07 em validação e RF08–RF10 planejadas; PRs, revisões e testes discriminados no roadmap. P03 implementada; validação final em V01. Atualizar este HLD quando mudar componente, integração ou fluxo; gerar C4 pelo [perfil local](../agentes/c4-diagram-generator.md) quando ajudar, sem inventar níveis.
 
 ## HLDs dos contextos
 

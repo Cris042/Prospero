@@ -282,6 +282,7 @@ services:
       DB_URL: jdbc:postgresql://postgres-back-office:5432/prospero_bo
       DB_USER: prospero_bo
       DB_PASSWORD: ${BO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      FO_JWT_JWK: ${FO_JWT_JWK:?Execute python3 scripts/preparar-ambiente.py}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
@@ -289,6 +290,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
     - dados-bo
     - eventos
@@ -464,8 +467,9 @@ services:
       FO_TOKEN_LEITURA: ${FO_TOKEN_LEITURA:?Execute python3 scripts/preparar-ambiente.py}
       # Escrita da conta demo CONTA-001 (ADR-010), só em /api/v1/ordens*, com Origin/Host locais e rate limit.
       FO_TOKEN_ORDENS: ${FO_TOKEN_ORDENS:?Execute python3 scripts/preparar-ambiente.py}
+      BO_TOKEN_POSICOES: ${BO_TOKEN_POSICOES:?Execute python3 scripts/preparar-ambiente.py}
       NGINX_ENVSUBST_OUTPUT_DIR: /tmp
-      NGINX_ENVSUBST_FILTER: ^FO_TOKEN_(LEITURA|ORDENS)$
+      NGINX_ENVSUBST_FILTER: ^(FO_TOKEN_(LEITURA|ORDENS)|BO_TOKEN_POSICOES)$
     networks:
     - web
     healthcheck:
