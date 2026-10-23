@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Caracterização do parser após a extração da regra de combinação para Admissao: aceite/rejeição em toda a matriz
@@ -68,6 +70,24 @@ class EnvelopeCombinacaoTest {
             }
         }
         assertEquals(2 * 2 * 256, casos);
+    }
+
+    /**
+     * Contrato × tipo: v1 só transporta MARKET/LIMIT e v2 só STOP/STOP_LIMIT; tipo desconhecido é inválido em ambos.
+     * Antes da refatoração, EnvelopeMatching.comando rejeitava com a mesma guarda (versao == 1 ? MARKET/LIMIT : stop).
+     */
+    @Test
+    void versaoIncompativelComTipoEhInvalida() throws Exception {
+        assertTrue(aceito(simples(1, "LIMIT", "DIA", "VENDA", "10.00", null, null)));
+        assertTrue(aceito(simples(1, "MARKET", "IOC", "VENDA", null, null, null)));
+        assertTrue(aceito(simples(2, "STOP", "DIA", "VENDA", null, null, "10.00")));
+        assertTrue(aceito(simples(2, "STOP_LIMIT", "DIA", "VENDA", "10.00", null, "10.00")));
+        assertFalse(aceito(simples(1, "STOP", "DIA", "VENDA", null, null, null)), "v1 STOP");
+        assertFalse(aceito(simples(1, "STOP_LIMIT", "DIA", "VENDA", "10.00", null, null)), "v1 STOP_LIMIT");
+        assertFalse(aceito(simples(2, "MARKET", "IOC", "VENDA", null, null, "10.00")), "v2 MARKET");
+        assertFalse(aceito(simples(2, "LIMIT", "DIA", "VENDA", "10.00", null, "10.00")), "v2 LIMIT");
+        assertFalse(aceito(simples(1, "ICEBERG", "DIA", "VENDA", "10.00", null, null)), "v1 desconhecido");
+        assertFalse(aceito(simples(2, "ICEBERG", "DIA", "VENDA", "10.00", null, "10.00")), "v2 desconhecido");
     }
 
     /** Cópia das guardas de EnvelopeMatching.comando antes da refatoração. */
