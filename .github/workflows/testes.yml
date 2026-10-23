@@ -32,6 +32,15 @@ jobs:
         package-manager-cache: false
     - name: Testes — checks determinísticos
       run: bash scripts/ci-testes.sh
+    - name: Disponibilizar capturas do navegador
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: capturas-navegador-${{ github.run_id }}-${{ github.run_attempt }}
+        path: frontend/test-results/**/*.png
+        if-no-files-found: ignore
+        retention-days: 7
+        compression-level: 0
     - name: Registrar escopo e resultado
       if: always()
       run: 'printf ''%s\n'' "Commit avaliado: $SHA_AVALIADO" "Resultados e limitações estão nos logs dos passos

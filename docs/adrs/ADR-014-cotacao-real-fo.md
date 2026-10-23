@@ -1,7 +1,8 @@
 # ADR-014 — Cotação real no front office a partir dos eventos do matching (RF06)
 
 - Data: 2026-10-22.
-- Estado: **proposta com implementação RF06a em validação para revisão**; namespace principal real e base do túnel real foram adotados como proposta revisável, sem atribuição de aceite ao usuário. RF06a inclui backend e planilha; RF06b inclui tela e E2E específico.
+- Estado: **proposta com implementação RF06a integrada no PR #37 e RF06b em validação**; namespace principal real e base do túnel real foram adotados como proposta revisável, sem atribuição de aceite ao usuário. RF06a inclui backend e planilha; RF06b inclui tela e E2E específico.
+- Integração: RF06a integrada em 2026-10-22 por autorização explícita de merge; o registro da implementação não converte a proposta inteira em aceite retroativo.
 - Origem: desenho local encontrado na retomada da [RF06](../roadmap.md#rf06--formação-e-atualização-do-mercado), confrontado com cinco pareceres independentes em 2026-10-22. As atribuições anteriores de aceite não foram recuperadas da memória e não constituem aceite comprovado.
 - Emenda: [ADR-009](ADR-009-projecao-mercado-fo.md) (namespace principal e origem) e [ADR-011](ADR-011-validacao-preco-ordens.md) (base do túnel passa a ser o último negócio real).
 
@@ -17,7 +18,7 @@ Refinamento: brief comum e cinco pareceres medium independentes (arquitetura, QA
 | --- | --- |
 | Namespace principal (proposta) | **Só dados reais do matching.** Preparação sintética no namespace principal é recusada com `409 NAMESPACE_REAL`; namespaces UUID continuam sintéticos (`mercado.xlsx`). A demonstração passa a usar o robô formador (RF05d). |
 | Base do túnel (proposta) | **Ligada na RF06**: `FonteUltimoPreco` lê o último negócio real da sessão na projeção. Defasagem da projeção frente ao ME e o risco do Kafka PLAINTEXT alcançando a base são limitações explícitas desta proposta. |
-| Tela (proposta RF06b) | Polling de ~1 s com recuo em erro até a RF09 (RF06b), com limite de taxa no Nginx em `/ativos`. |
+| Tela (implementação RF06b em validação) | Polling independente de resumo/livro, 1 s após conclusão, timeout 8 s; erro recua 1/2/4/8 s e sucesso retorna a 1 s. Pausa/cancelamento em aba oculta e destruição; retomada imediata ao voltar. Manual não interrompe chamada nem antecipa recuo. Nginx `/ativos`: 5 requisições/s por IP compartilhado, burst 10, 429 com no-store. Múltiplas abas dividem a cota; sem alegação de capacidade. WebSocket fica na RF09. |
 | Encerramento (proposta) | Após `SESSAO_ENCERRADA`, livro vazio; último, volume e VWAP da sessão permanecem visíveis e marcados `defasado`; nova sessão começa do zero ao receber seu primeiro efeito de mercado. |
 | Armazenamento | PostgreSQL do FO (ADR-009 mantido); Redis só como cache futuro medido. O roadmap que dizia "projeção Redis" foi corrigido. |
 | Consumidor | **Próprio**, grupo `front-office-cotacao`, `earliest`, um registro por vez, com o mesmo parser estrito `EnvelopeMatching` e as mesmas guardas de versão, origem e allowlists. Deduplicação própria (`cotacao_evento`, id + assinatura, e `cotacao_negocio`, identidade + assinatura), porque a tabela `matching_evento` já marca eventos aplicados às ordens. Motivos: a projeção nasce completa pelo replay do tópico (retenção infinita, uma sessão por log), sem ler o banco do ME; e uma quarentena da cotação não tira o FO de prontidão nem bloqueia a projeção de ordens — só marca o mercado como `defasado`. Custo: mais um consumidor concorrendo pelo pool e duas tabelas próprias de deduplicação. |

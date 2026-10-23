@@ -52,7 +52,7 @@ test('consulta fixture sintética por HTTP real pelo proxy, sem credencial no na
   );
   await tabela.getByRole('button', { name: /OMEGA3/ }).click();
   await expect(page.getByRole('region', { name: 'Livro de OMEGA3' })).toContainText(
-    'Nenhum snapshot preparado',
+    'Nenhum dado de mercado',
   );
 
   expect(autorizacoes.length).toBeGreaterThan(0);
@@ -158,7 +158,135 @@ test('informa indisponibilidade do mercado e recupera', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('alert')).toContainText('Não foi possível consultar o mercado');
   await page.unroute(rota);
-  await page.getByRole('button', { name: 'Atualizar mercado' }).click();
-  await expect(page.getByRole('alert')).toHaveCount(0);
+  // A recuperação deve ocorrer pelo próximo ciclo, sem intervenção manual.
+  await expect(page.getByRole('alert')).toHaveCount(0, { timeout: 12000 });
   await expect(page.getByRole('table', { name: /Ativos com último preço/ })).toContainText('ALFA3');
+});
+
+test('oferta e negócio reais atualizam livro e VWAP sem atualizar manualmente', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60000);
+  const base = '/servicos/front-office/api/v1';
+  const ticker = 'OMEGA3';
+  const consultar = async () => {
+    const r = await page.request.get(`${base}/ativos`);
+    expect(r.status()).toBe(200);
+    return (await r.json()).find((a: { ticker: string }) => a.ticker === ticker);
+  };
+  const ordem = async (id: string) => {
+    const r = await page.request.get(`${base}/ordens/${id}`);
+    expect(r.status()).toBe(200);
+    return r.json();
+  };
+  const enviar = async (
+    lado: string,
+    quantidade: number,
+    validade: string,
+    precoLimite: string,
+  ) => {
+    const r = await page.request.post(`${base}/ordens`, {
+      headers: { Origin: new URL(page.url()).origin, 'X-Idempotency-Key': crypto.randomUUID() },
+      data: { ticker, lado, tipo: 'LIMIT', validade, quantidade, precoLimite },
+    });
+    expect(r.status()).toBe(202);
+    return r.json();
+  };
+  const textual = (valor: string) => {
+    const [inteiro, fracao] = valor.split('.');
+    return inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + fracao;
+  };
+  await page.goto('/');
+  const tabela = page.getByRole('table', { name: /Ativos com último preço/ });
+  await expect(tabela.getByRole('row', { name: /OMEGA3/ })).toBeVisible();
+  await tabela.getByRole('button', { name: /OMEGA3/ }).click();
+  const livro = page.getByRole('region', { name: 'Livro de OMEGA3' });
+  const antes = await consultar();
+  const quantidade = antes.lote;
+  expect(Number.isSafeInteger(quantidade) && quantidade > 0).toBe(true);
+  // A validação anterior pode deixar compra DIA em OMEGA3: nossa venda precisa repousar acima dela.
+  const centavos = (valor: string) => BigInt(valor.replace('.', ''));
+  const referencia = centavos(antes.ultimoPreco ?? antes.precoReferencia);
+  const tick = centavos(antes.tick);
+  const acimaCompra =
+    antes.melhorCompra === null ? referencia : centavos(antes.melhorCompra) + tick;
+  const precoCentavos = acimaCompra > referencia ? acimaCompra : referencia;
+  expect(precoCentavos * 100n).toBeGreaterThanOrEqual(referencia * 90n);
+  expect(precoCentavos * 100n).toBeLessThanOrEqual(referencia * 110n);
+  expect(precoCentavos % tick).toBe(0n);
+  const preco = `${precoCentavos / 100n}.${(precoCentavos % 100n).toString().padStart(2, '0')}`;
+  const venda = await enviar('VENDA', quantidade, 'DIA', preco);
+  try {
+    await expect
+      .poll(async () => (await ordem(venda.id)).estado, { timeout: 15000 })
+      .toBe('ABERTA');
+    await expect(livro.getByRole('table', { name: /Venda/ })).toContainText(textual(preco), {
+      timeout: 15000,
+    });
+    // A oferta muda o livro, mas não o volume ou VWAP antes da execução.
+    expect((await consultar()).volumeQuantidade).toBe(antes.volumeQuantidade);
+    const compra = await enviar('COMPRA', quantidade, 'IOC', preco);
+    await expect
+      .poll(async () => (await ordem(compra.id)).estado, { timeout: 15000 })
+      .toBe('EXECUTADA');
+    await expect
+      .poll(async () => (await consultar()).volumeQuantidade, { timeout: 15000 })
+      .toBe((antes.volumeQuantidade ?? 0) + quantidade);
+    const depois = await consultar();
+    const linha = tabela.getByRole('row', { name: /OMEGA3/ });
+    await expect(linha.getByRole('cell').nth(5)).toHaveText(
+      String(depois.volumeQuantidade).replace(/\B(?=(\d{3})+(?!\d))/g, '.'),
+      { timeout: 15000 },
+    );
+    await expect(linha.getByRole('cell').nth(7)).toHaveText(textual(depois.vwap), {
+      timeout: 15000,
+    });
+    await expect(livro.getByRole('table', { name: /Venda/ })).toContainText('Sem ofertas.', {
+      timeout: 15000,
+    });
+    await expect(livro).toContainText('Mercado real');
+    await page.screenshot({ path: testInfo.outputPath('mercado-rf06b-real.png'), fullPage: true });
+  } finally {
+    // RF10 não oferece cancelamento ainda: eventual saldo da oferta é consumido por negócio real.
+    const atual = await ordem(venda.id);
+    const restante = atual.quantidade - atual.quantidadeExecutada - atual.quantidadeCancelada;
+    if (restante > 0 && ['ABERTA', 'PARCIALMENTE_EXECUTADA'].includes(atual.estado)) {
+      const limpeza = await enviar('COMPRA', restante, 'IOC', preco);
+      await expect
+        .poll(async () => (await ordem(limpeza.id)).estado, { timeout: 15000 })
+        .toBe('EXECUTADA');
+    }
+  }
+});
+
+test('consulta de ativos recusa escrita e Host externo sem armazenar respostas', async ({
+  request,
+}) => {
+  const url = '/servicos/front-office/api/v1/ativos';
+  expect((await request.post(url, { data: {} })).status()).toBe(403);
+  expect((await request.get(url, { headers: { Host: 'evil.example' } })).status()).toBe(421);
+  const consulta = await request.get(url);
+  expect(consulta.status()).toBe(200);
+  expect(consulta.headers()['cache-control']).toContain('no-store');
+});
+
+test('limite de consultas responde 429 e se recupera após drenar o burst', async ({ request }) => {
+  const url = '/servicos/front-office/api/v1/ativos';
+  const respostas = await Promise.all(Array.from({ length: 25 }, () => request.get(url)));
+  const limitadas = respostas.filter((r) => r.status() === 429);
+  expect(limitadas.length).toBeGreaterThan(0);
+  for (const resposta of limitadas)
+    expect(resposta.headers()['cache-control']).toContain('no-store');
+  // Uma sequência sustentada abaixo de 5r/s mostra recuperação do orçamento antes do próximo teste.
+  let sequencia = 0;
+  await expect
+    .poll(
+      async () => {
+        const r = await request.get(url);
+        sequencia = r.status() === 200 ? sequencia + 1 : 0;
+        return sequencia;
+      },
+      { timeout: 15000, intervals: [400] },
+    )
+    .toBe(10);
 });

@@ -4,21 +4,24 @@
       <p class="sobretitulo">CINCO ATIVOS FICTÍCIOS</p>
       <h2 id="mercado-titulo">Mercado</h2>
     </div>
-    <button type="button" (click)="atualizar()" [disabled]="carregando()">
-      {{ carregando() ? 'Consultando…' : 'Atualizar mercado' }}
+    <button type="button" (click)="atualizar()" [disabled]="carregando() || erro()">
+      {{ carregando() && ativos().length === 0 ? 'Consultando…' : 'Atualizar mercado' }}
     </button>
   </div>
 
   @if (erro()) {
     <p class="alerta" role="alert">
-      Não foi possível consultar o mercado. Verifique o front office e tente novamente.
+      Não foi possível consultar o mercado. Nova tentativa automática em alguns segundos.
+      @if (ativos().length > 0) {
+        Os últimos dados recebidos permanecem visíveis.
+      }
     </p>
   }
 
   <div class="rolagem" role="region" aria-labelledby="mercado-titulo" tabindex="0">
     <table class="ativos" [attr.aria-busy]="carregando()">
       <caption class="sr-only">
-        Ativos com último preço, variação, melhores ofertas, spread e volume da sessão
+        Ativos com último preço, variação, melhores ofertas, spread, volume e VWAP da sessão
       </caption>
       <thead>
         <tr>
@@ -30,6 +33,7 @@
           <th scope="col">Spread</th>
           <th scope="col">Volume (qtd.)</th>
           <th scope="col">Volume (R$)</th>
+          <th scope="col">VWAP (R$)</th>
           <th scope="col">Livro</th>
         </tr>
       </thead>
@@ -56,11 +60,29 @@
             <td>{{ decimal(ativo.spread) }}</td>
             <td>{{ inteiro(ativo.volumeQuantidade) }}</td>
             <td>{{ decimal(ativo.volumeFinanceiro) }}</td>
-            <td class="estado-livro">{{ estado(ativo.estadoLivro) }}</td>
+            <td>{{ decimal(ativo.vwap) }}</td>
+            <td class="estado-livro">
+              {{ estado(ativo.estadoLivro) }}
+              <span class="metadados">
+                @if (ativo.origem === 'MATCHING') {
+                  <span class="selo">Mercado real</span>
+                } @else if (ativo.origem === 'PREPARACAO_SINTETICA') {
+                  <span class="selo sintetico">Dados sintéticos</span>
+                }
+                @if (ativo.defasado) {
+                  <span class="selo defasado">Defasado</span>
+                }
+              </span>
+              @if (ativo.sessao) {
+                <span class="metadados"
+                  >Sessão {{ data(ativo.sessao) }} · revisão {{ ativo.revisao }}</span
+                >
+              }
+            </td>
           </tr>
         } @empty {
           <tr>
-            <td colspan="9">
+            <td colspan="10">
               {{ carregando() ? 'Consultando ativos…' : 'Nenhum ativo disponível.' }}
             </td>
           </tr>
@@ -70,17 +92,25 @@
   </div>
   <p class="nota">
     “—” indica dado ausente, não zero. Preços em reais; referência inicial não substitui o último
-    negócio.
+    negócio. VWAP é a média dos preços ponderada pelas quantidades negociadas na sessão. Atualização
+    automática enquanto esta aba estiver visível.
   </p>
 
   @if (ativoSelecionado(); as ativo) {
-    <div class="livro" role="region" aria-labelledby="livro-titulo">
+    <div
+      class="livro"
+      role="region"
+      aria-labelledby="livro-titulo"
+      [attr.aria-busy]="carregandoLivro()"
+    >
       <header>
         <h3 id="livro-titulo">Livro de {{ ativo.ticker }}</h3>
         @if (livro(); as livro) {
           <span class="selo">{{ estado(livro.estadoLivro) }}</span>
           @if (livro.origem === 'PREPARACAO_SINTETICA') {
             <span class="selo sintetico">Dados sintéticos</span>
+          } @else if (livro.origem === 'MATCHING') {
+            <span class="selo">Mercado real</span>
           }
           @if (livro.defasado) {
             <span class="selo defasado">Defasado</span>
@@ -92,20 +122,31 @@
       </header>
       <p class="sr-only" aria-live="polite">
         {{
-          carregandoLivro()
-            ? 'Consultando o livro de ' + ativo.ticker
-            : erroLivro()
-              ? 'Falha ao consultar o livro de ' + ativo.ticker
-              : 'Livro de ' + ativo.ticker + ' atualizado'
+          erroLivro()
+            ? 'Falha ao consultar o livro de ' + ativo.ticker
+            : 'Livro de ' + ativo.ticker + ' disponível'
         }}
       </p>
-      @if (carregandoLivro()) {
+      @if (carregandoLivro() && livro() === null) {
         <p>Consultando o livro…</p>
-      } @else if (erroLivro()) {
-        <p class="alerta" role="alert">Não foi possível consultar o livro de {{ ativo.ticker }}.</p>
-      } @else if (livro(); as livro) {
+      }
+      @if (erroLivro()) {
+        <p class="alerta" role="alert">
+          Não foi possível consultar o livro de {{ ativo.ticker }}. Nova tentativa automática.
+          @if (livro()) {
+            Os últimos dados recebidos permanecem visíveis.
+          }
+        </p>
+      }
+      @if (livro(); as livro) {
         @if (livro.compra === null || livro.venda === null) {
-          <p>Nenhum snapshot preparado para este ativo.</p>
+          <p>
+            {{
+              livro.origem === 'PREPARACAO_SINTETICA'
+                ? 'Nenhum snapshot preparado para este ativo.'
+                : 'Nenhum dado de mercado para este ativo.'
+            }}
+          </p>
         } @else {
           <div class="lados">
             @for (

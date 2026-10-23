@@ -10,7 +10,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,html,css}\" \"runner/**/*.{mjs,json}\"",
     "test:e2e": "playwright test",
     "runner": "node runner/cli.mjs",
-    "test:runner": "node --test runner/*.test.mjs"
+    "test:runner": "node --test runner/*.test.mjs",
+    "test:proxy": "node --test proxy.test.mjs"
   },
   "private": true,
   "packageManager": "npm@11.13.0",

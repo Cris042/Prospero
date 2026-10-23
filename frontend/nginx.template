@@ -8,6 +8,8 @@ map "$request_method|$http_origin" $ordens_origem_recusada {
 # Rate limit só para POST: chave vazia (GET) não é contabilizada, então listagens não esgotam envios.
 map $request_method $ordens_limite { POST $binary_remote_addr; default ""; }
 limit_req_zone $ordens_limite zone=ordens:1m rate=10r/s;
+# Resumo e livro compartilham a cota por IP; inclui outras abas da mesma origem local.
+limit_req_zone $binary_remote_addr zone=mercado:1m rate=5r/s;
   server {
     listen 8080;
     root /usr/share/nginx/html;
@@ -24,6 +26,14 @@ limit_req_zone $ordens_limite zone=ordens:1m rate=10r/s;
     }
     location ^~ /servicos/front-office/api/v1/ativos {
       limit_except GET { deny all; }
+      limit_req zone=mercado burst=10 nodelay;
+      limit_req_status 429;
+      # Inclui recusas locais, que não passam pelos filtros do FO.
+      proxy_hide_header Cache-Control;
+      add_header Cache-Control no-store always;
+      # add_header no location substitui a herança do server no Nginx 1.28.
+      add_header X-Content-Type-Options nosniff always;
+      add_header Referrer-Policy same-origin always;
       set $backend front-office:8080;
       rewrite ^/servicos/front-office/(.*)$ /$1 break;
       proxy_pass http://$backend;

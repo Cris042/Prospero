@@ -97,6 +97,13 @@ td:first-child {
   font-size: 12px;
   color: #54665e;
 }
+.metadados {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 5px;
+}
 .alerta {
   padding: 12px 16px;
   border-radius: 8px;

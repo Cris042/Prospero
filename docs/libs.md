@@ -27,6 +27,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | Micrometer / Prometheus | 1.17.1 / v3.15.0 | Métricas |
 | Loki / Grafana / Jaeger | 3.7.8 / 13.2.4 / 2.22.0 | Logs, dashboards e traces |
 | ai-memory | 3.1.0 | CLI e container separado; [guia](rules.md#memória-e-retomada) |
+| actions/upload-artifact | 7.0.2 | Capturas PNG Playwright por sete dias na CI; commit `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, [origem oficial](https://github.com/actions/upload-artifact/tree/cf430e030ddbb5b0abf93d22962f4752f3646cd9) |
 | Gitleaks / Trivy | 8.30.1 / 0.76.0 | CI; imagens fixadas por digest |
 | Go | 1.27.3 | Módulo `ferramentas/carga`; API e executor técnicos com biblioteca padrão, sem módulos runtime externos |
 | Imagem builder Go | 1.27.3-bookworm | Dockerfile e CI; digest `sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132`; runtime `scratch`, binário estático sem shell |

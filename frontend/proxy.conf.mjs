@@ -35,6 +35,23 @@ function ordensPermitidas(req, res) {
 }
 const PREPARACAO = /preparacoes-(mercado|risco)/i;
 
+// Espelha a leitura do Nginx. A cota de taxa é aplicada somente no container Nginx.
+function ativosPermitidos(req, res) {
+  const host = (req.headers.host ?? '').replace(/:[0-9]+$/, '');
+  if (!['localhost', '127.0.0.1'].includes(host)) {
+    res.statusCode = 421;
+    res.end('{"erro":"Host não permitido"}');
+    return false;
+  }
+  if (!['GET', 'HEAD'].includes(req.method)) {
+    res.statusCode = 403;
+    res.end('{"erro":"Método não permitido para mercado"}');
+    return false;
+  }
+  delete req.headers.authorization;
+  return undefined;
+}
+
 // Rotas genéricas do FO e do MO: bloqueiam preparação mesmo codificada e descartam Authorization do cliente.
 function semPreparacao(req, res) {
   let caminho = req.url ?? '';
@@ -72,6 +89,7 @@ export default {
     ...servico(8081),
     pathRewrite: { '^/servicos/front-office': '' },
     headers: token ? { Authorization: `Bearer ${token}` } : {},
+    bypass: ativosPermitidos,
   },
   '/servicos/front-office': {
     ...servico(8081),
