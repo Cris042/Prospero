@@ -115,13 +115,7 @@ public final class EnvelopeMatching {
                 campos(d, "ordem", "intencao", "conta", "precoGatilho");
                 yield new EventoMatching.StopPendente(alvo(d, ""), preco(d, "precoGatilho"));
             }
-            case "STOP_ACIONADO" -> {
-                if (!v2) throw invalido("versao");
-                campos(d, "ordem", "intencao", "conta", "tipoExecutavel", "sequencia");
-                String tipo = texto(d, "tipoExecutavel");
-                if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido("tipoExecutavel");
-                yield new EventoMatching.StopAcionado(alvo(d, ""), TipoOrdem.valueOf(tipo), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
-            }
+            case "STOP_ACIONADO" -> stopAcionado(d, v2);
             case "SESSAO_ENCERRADA" -> {
                 campos(d, "expiradas");
                 yield new EventoMatching.SessaoEncerrada(inteiro(d, "expiradas", 0, 1_000_000));
@@ -136,27 +130,40 @@ public final class EnvelopeMatching {
                 campos(d, "ordem", "intencao", "conta", "lado", "preco", "restante");
                 yield new EventoMatching.Oferta(alvo(d, ""), lado(d, "lado"), preco(d), inteiro(d, "restante", 1, 1_000_000));
             }
-            case "ORDEM_REJEITADA" -> {
-                campos(d, "ordem", "intencao", "conta", "motivo");
-                String motivo = texto(d, "motivo");
-                if (!REJEICOES.contains(motivo) && !(v2 && "LIMITE_STOPS_PENDENTES".equals(motivo))) {
-                    throw invalido("motivo");
-                }
-                yield new EventoMatching.Rejeitada(alvo(d, ""), MotivoRejeicao.valueOf(motivo));
-            }
-            case "ORDEM_ENCERRADA" -> {
-                campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
-                String motivo = texto(d, "motivo");
-                if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))
-                        && !(v3 && "CANCELADA_OCO".equals(motivo)) && !(v4 && "EXPIRADA_DIA".equals(motivo))) {
-                    throw invalido("motivo");
-                }
-                yield new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),
-                        inteiro(d, "cancelada", 0, 1_000_000));
-            }
+            case "ORDEM_REJEITADA" -> rejeitada(d, v2);
+            case "ORDEM_ENCERRADA" -> encerrada(d, v2, v3, v4);
             case "NEGOCIO" -> negocio(d, ticker, sessao);
             default -> throw invalido("tipo");
         };
+    }
+
+    private static EventoMatching.StopAcionado stopAcionado(JsonNode d, boolean v2) {
+        if (!v2) throw invalido("versao");
+        campos(d, "ordem", "intencao", "conta", "tipoExecutavel", "sequencia");
+        String tipo = texto(d, "tipoExecutavel");
+        if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido("tipoExecutavel");
+        return new EventoMatching.StopAcionado(alvo(d, ""), TipoOrdem.valueOf(tipo), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
+    }
+
+    private static EventoMatching.Rejeitada rejeitada(JsonNode d, boolean v2) {
+        campos(d, "ordem", "intencao", "conta", "motivo");
+        String motivo = texto(d, "motivo");
+        if (!REJEICOES.contains(motivo) && !(v2 && "LIMITE_STOPS_PENDENTES".equals(motivo))) {
+            throw invalido("motivo");
+        }
+        return new EventoMatching.Rejeitada(alvo(d, ""), MotivoRejeicao.valueOf(motivo));
+    }
+
+    /** v2 habilita LIMITE_CASCATA, v3 CANCELADA_OCO e v4 EXPIRADA_DIA. */
+    private static EventoMatching.Encerrada encerrada(JsonNode d, boolean v2, boolean v3, boolean v4) {
+        campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
+        String motivo = texto(d, "motivo");
+        if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))
+                && !(v3 && "CANCELADA_OCO".equals(motivo)) && !(v4 && "EXPIRADA_DIA".equals(motivo))) {
+            throw invalido("motivo");
+        }
+        return new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),
+                inteiro(d, "cancelada", 0, 1_000_000));
     }
 
     private static EventoMatching.Negocio negocio(JsonNode d, String ticker, LocalDate sessao) {
