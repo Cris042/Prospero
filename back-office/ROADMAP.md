@@ -11,7 +11,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | ID local | Tarefa global | Entrega | Estado |
 | --- | --- | --- | --- |
 | BO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
-| BO01 | RF07 | Calcular long/short, preço médio, reduções e viradas. | Planejada |
+| BO01 | RF07 | Calcular long/short, preço médio, reduções e viradas. | Refinamento inicial; decisões pendentes no roadmap global/ADR-015 |
 | BO02 | RF07 | Atualizar resultado não realizado com eventos de cotação. | Planejada |
 | BO03 | RF08 | Persistir negócio, razão e posição atomicamente e com idempotência. | Planejada |
 | BO04 | RF08 | Liquidar em D+2 com calendário, controle de tempo de teste e conciliação. | Planejada |

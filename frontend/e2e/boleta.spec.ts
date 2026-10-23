@@ -174,6 +174,8 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
 test('envia Market e Stop Limit e repete com a mesma chave após falha de rede', async ({
   page,
 }) => {
+  let market!: { id: string; quantidade: number };
+  let stopLimit!: { tipo: string; precoLimite: string; precoGatilho: string };
   const chaves: string[] = [];
   page.on('request', (pedido) => {
     if (pedido.method() === 'POST' && pedido.url().endsWith('/api/v1/ordens')) {
@@ -181,6 +183,21 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
     }
   });
   await page.goto('/');
+  const urlInicial = page.url();
+  const navegacoes: string[] = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navegacoes.push(frame.url());
+  });
+  await page.route('**/servicos/front-office/api/v1/ordens', async (rota) => {
+    if (rota.request().method() !== 'POST') return rota.fallback();
+    const respostaReal = await rota.fetch();
+    expect(respostaReal.status()).toBe(202);
+    // Retém o corpo real antes de entregá-lo ao navegador, sem depender do buffer CDP.
+    const corpo = await respostaReal.json();
+    if (rota.request().postDataJSON().tipo === 'MARKET') market = corpo;
+    if (rota.request().postDataJSON().tipo === 'STOP_LIMIT') stopLimit = corpo;
+    await rota.fulfill({ response: respostaReal });
+  });
   const boleta = page.getByRole('form', { name: 'Ordem simples' });
   await boleta.getByLabel('Tipo').selectOption('MARKET');
   await expect(boleta.getByLabel('Validade').locator('option')).toHaveText([
@@ -195,7 +212,7 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
   const registroMarket = await respostaMarket;
   expect(registroMarket.status()).toBe(202);
-  const market = await registroMarket.json();
+  expect(market).toBeDefined();
   await expect(page.getByRole('status')).toContainText('Mercado');
   // Consumidores de ordens e cotação são distintos: esperar ambos antes de derivar o próximo preço.
   await expect
@@ -239,7 +256,7 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
   const registroStopLimit = await respostaStopLimit;
   expect(registroStopLimit.status()).toBe(202);
-  expect(await registroStopLimit.json()).toMatchObject({
+  expect(stopLimit).toMatchObject({
     tipo: 'STOP_LIMIT',
     precoLimite: decimal(faixa.gatilho + faixa.tick),
     precoGatilho: decimal(faixa.gatilho),
@@ -248,6 +265,8 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
   expect(chaves).toHaveLength(3);
   expect(chaves[2]).toBe(chaves[1]);
   expect(chaves[1]).not.toBe(chaves[0]);
+  await expect(page).toHaveURL(urlInicial);
+  expect(navegacoes).toEqual([]);
 });
 
 test('proxy recusa escrita de origem externa, método indevido e Host externo', async ({

@@ -22,9 +22,11 @@ Organização por funcionalidade sob `br.prospero.bo`: REST → Actor; Actor coo
 
 ## Processamento e invariantes futuros
 
-ID determinístico de negócio permite deduplicação atômica com inserção, lançamentos e atualização de posição. Uma inserção ignorada por conflito não pode repetir efeitos. IDs e ordenação precisam preservar os dois lados/contas; o modelo antigo só tem IDs das ordens e não define como BO recebe contas, lacuna anterior à migração.
+ID determinístico de negócio permite deduplicação atômica com inserção, lançamentos e atualização de posição. Uma inserção ignorada por conflito não pode repetir efeitos. O contrato atual `NEGOCIO` de `matching.eventos.v1` já identifica preço, quantidade, ativo, sessão, negócio e ambas as contas/ordens/intenções (ADR-013); a lacuna histórica de identificação dos participantes está resolvida. A ordenação, checkpoint e aplicação no BO ainda precisam de implementação.
 
 Negócios e razão têm histórico append-only; correções exigem estratégia explícita, sem alterar silenciosamente negócio executado. Posição é projeção reconstruível: quantidade com sinal, aumento altera preço médio, redução realiza resultado e virada abre lado novo. Arredondamento e limites ainda precisam de decisão; o cálculo do Minerva não cobre short/virada nem o contrato de resultado realizado; a [proveniência e restrição de cópia](HLD-003-middle-office.md#proveniência-e-limites-de-reuso) continuam aplicáveis. Fluxo acumulado de compras/vendas não equivale a PnL realizado. Calendário só de dias da semana não resolve feriados/D+2; não importar sua regra como decisão local.
+
+A proposta estrutural da RF07 está no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md); regras financeiras e significado da posição inicial aguardam decisões no [roadmap](../roadmap.md#rf07--posições-e-resultado-financeiro). Persistência mínima de fatos para deduplicação da RF07 não representa razão ou liquidação RF08 implementadas.
 
 ## Liquidação, recuperação e pendências
 
