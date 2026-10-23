@@ -18,7 +18,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-012](ADR-012-risco-reservas-saga.md) | Risco, reservas e SAGA FO ↔ MO por Kafka/outbox (RF04) | Aceita e implementada (RF04a e RF04b) |
 | [ADR-013](ADR-013-matching-execucao.md) | Matching, admissão pelo MO, robô formador de mercado e ciclo de execução (RF05); substitui parcialmente o ADR-002 | Aceita; em implementação por fatias |
 | [ADR-014](ADR-014-cotacao-real-fo.md) | Cotação real no FO, VWAP, namespaces e fonte do túnel (RF06) | Proposta; RF06 integrada nos PRs #37/#38 |
-| [ADR-015](ADR-015-projecao-posicoes-bo.md) | Projeção de posições no BO, idempotência, consulta por conta e recuperação (RF07) | Proposta; decisões financeiras e implementação pendentes |
+| [ADR-015](ADR-015-projecao-posicoes-bo.md) | Projeção de posições no BO, idempotência, consulta por conta e recuperação (RF07) | Aceita em 2026-10-23; implementação RF07 em validação |
 
 ## Relação com a proposta original
 

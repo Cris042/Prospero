@@ -1,0 +1,79 @@
+<section class="posicoes" aria-labelledby="posicoes-titulo">
+  <div class="cabecalho">
+    <div>
+      <p class="sobretitulo">CONTA DEMO · {{ resumo()?.conta ?? 'CONTA-001' }}</p>
+      <h2 id="posicoes-titulo">Posições e resultado</h2>
+    </div>
+    <button type="button" (click)="atualizar()" [disabled]="carregando()">
+      Atualizar posições
+    </button>
+  </div>
+  <p class="nota">
+    Resultado dos negócios desde o início da simulação. A custódia inicial e a liquidação não entram
+    neste cálculo. Autonegociação não altera o resultado da própria conta.
+  </p>
+  @if (erro()) {
+    <p class="erro" role="alert">
+      Não foi possível atualizar as posições. Tentaremos novamente automaticamente.
+      @if (resumo()) {
+        Os valores abaixo pertencem à última consulta confirmada.
+      }
+    </p>
+  }
+  @if (resumo(); as snapshot) {
+    <div class="rolagem" tabindex="0" role="region" aria-label="Tabela de posições">
+      <table>
+        <caption class="sr-only">
+          Posições e resultados da conta
+          {{
+            snapshot.conta
+          }}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Ativo</th>
+            <th scope="col">Posição</th>
+            <th scope="col">Preço médio (R$)</th>
+            <th scope="col">Realizado (R$)</th>
+            <th scope="col">Não realizado (R$)</th>
+            <th scope="col">Cotação (R$)</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (posicao of snapshot.posicoes; track posicao.ticker) {
+            <tr [attr.data-ticker]="posicao.ticker">
+              <th scope="row">{{ posicao.ticker }}</th>
+              <td>
+                {{ decimal(posicao.quantidade)
+                }}<small>{{
+                  posicao.lado === 'COMPRADA'
+                    ? 'Comprada'
+                    : posicao.lado === 'VENDIDA'
+                      ? 'Vendida'
+                      : 'Zerada'
+                }}</small>
+              </td>
+              <td>{{ decimal(posicao.precoMedio) }}</td>
+              <td>{{ decimal(posicao.resultadoRealizado) }}</td>
+              <td>{{ decimal(posicao.resultadoNaoRealizado) }}</td>
+              <td>
+                {{ decimal(posicao.cotacao) }}
+                <small [class.defasada]="posicao.cotacaoDefasada || erro()">
+                  @if (posicao.cotacao === null) {
+                    Sem cotação
+                  } @else if (posicao.cotacaoDefasada) {
+                    Referência defasada · {{ data(posicao.sessaoCotacao) }}
+                  } @else {
+                    {{ data(posicao.sessaoCotacao) }} · revisão {{ posicao.revisaoCotacao }}
+                  }
+                </small>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (!erro()) {
+    <p>Consultando posições…</p>
+  }
+</section>

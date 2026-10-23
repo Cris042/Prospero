@@ -23,6 +23,8 @@ def main():
     spec.loader.exec_module(ambiente)
     credenciais = ambiente.ler(raiz / ".env")
     for servico, sigla, banco, classe in [
+        ("back-office", "BO", "bo", "PosicoesPostgresIT"),
+        ("back-office", "BO", "bo", "RacionalPostgresIT"),
         ("matching-engine", "ME", "me", "CheckpointPostgresIT"),
         ("middle-office", "MO", "mo", "MatchingPostgresIT"),
         ("middle-office", "MO", "mo", "OcoPostgresIT"),

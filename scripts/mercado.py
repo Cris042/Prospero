@@ -26,11 +26,11 @@ from importlib import import_module
 ambiente = import_module("preparar-ambiente")
 ESCOPOS = {"leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "mercado:preparacao"],
            "ordens": ["mercado:leitura", "ordens:enviar", "ordens:leitura"],
-           "risco": ["risco:leitura"], "risco-preparacao": ["risco:preparacao"], "sessao": ["sessao:encerrar"]}
+           "risco": ["risco:leitura"], "risco-preparacao": ["risco:preparacao"], "sessao": ["sessao:encerrar"], "posicoes": ["posicoes:leitura"]}
 # Escopos do MO usam audiência própria (RF04b): token do FO não vale no MO e vice-versa.
 AUDIENCIAS = {"risco": "prospero-middle-office", "risco-preparacao": "prospero-middle-office",
-              "sessao": "prospero-middle-office"}
-POR_CONTA = {"ordens", "risco"}
+              "sessao": "prospero-middle-office", "posicoes": "prospero-back-office"}
+POR_CONTA = {"ordens", "risco", "posicoes"}
 ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
 CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"}
 VALIDADE_MAXIMA = 3600
@@ -578,9 +578,10 @@ def main():
     c = sub.add_parser("config-runner", help="Grava configuração do runner com token de preparação.")
     c.add_argument("destino")
     c.add_argument("--origem", default="http://front-office:8080")
+    c.add_argument("--origem-bo", default="http://back-office:8080")
     c.add_argument("--origem-mo", default="http://middle-office:8080")
     c.add_argument("--validade", type=int, default=900)
-    c.add_argument("--perfil", choices=["mercado", "ordens", "risco", "sessao"], default="mercado",
+    c.add_argument("--perfil", choices=["mercado", "ordens", "risco", "sessao", "posicoes"], default="mercado",
                    help="Menor privilégio: cada workbook recebe só os tokens de que precisa.")
     v = sub.add_parser("verificar-ordens", help="Verifica idempotência concorrente no PostgreSQL real (CONTA-003).")
     v.add_argument("--origem", default="http://127.0.0.1:8081")
@@ -653,6 +654,14 @@ def main():
                                "risco-b": risco(token("risco", args.validade, "CONTA-003")),
                                "preparacao-risco": risco(token("risco-preparacao", args.validade)),
                                "mercado": bearer(token("leitura", args.validade))}}
+    if args.perfil == "posicoes":
+        config["servicos"]["posicoes-anonimo"] = {"origem": args.origem_bo}
+        config["servicos"]["posicoes-token-fo"] = {"origem": args.origem_bo, "headers": {
+            "Authorization": "Bearer " + token("ordens", args.validade, "CONTA-002")}}
+        config["servicos"]["posicoes-a"] = {"origem": args.origem_bo, "headers": {
+            "Authorization": "Bearer " + token("posicoes", args.validade, "CONTA-002")}}
+        config["servicos"]["posicoes-b"] = {"origem": args.origem_bo, "headers": {
+            "Authorization": "Bearer " + token("posicoes", args.validade, "CONTA-003")}}
     escrever_config(args.destino, json.dumps(config, indent=2) + "\n")
     print("Configuração do runner gravada; token não exibido.")
 

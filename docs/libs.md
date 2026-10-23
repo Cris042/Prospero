@@ -8,7 +8,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | --- | --- | --- |
 | Java Temurin | 26.0.2.1_1 | Dockerfiles; compilação e runtime |
 | Quarkus | 3.40.1 | BOM e plugin dos quatro POMs |
-| SmallRye JWT (Quarkus) | BOM 3.40.1 | `quarkus-smallrye-jwt` no FO (RF01) e no MO (RF04b, audiência `prospero-middle-office`); `quarkus-smallrye-jwt-build` só em teste |
+| SmallRye JWT (Quarkus) | BOM 3.40.1 | `quarkus-smallrye-jwt` no FO (RF01), no MO (RF04b, audiência `prospero-middle-office`) e no BO (RF07, audiência `prospero-back-office`); `quarkus-smallrye-jwt-build` só em teste |
 | Maven / Wrapper | 3.9.16 / 3.3.4 | Wrapper independente, distribuição com SHA-256 |
 | Hibernate / Flyway | 7.4.9.Final / 12.0.0 | Dependências resolvidas pelo BOM; persistência e migrações |
 | SmallRye OpenAPI | 4.3.5 | Swagger e contrato HTTP |
@@ -17,6 +17,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | ArchUnit | 1.5.1 | Fronteiras arquiteturais nos testes Java |
 | Angular / Node | 22.2.3 / 24.16.0 | package-lock / imagem builder |
 | TypeScript / RxJS | 6.0.3 / 7.8.2 | package-lock |
+| @types/node | 24.0.0 | Somente desenvolvimento: tipos Node24 para E2E com arquivo privado/crypto; `undici-types` transitivo, package-lock |
 | Vitest / Playwright | 5.0.5 / 1.64.1 | Testes de componentes / navegador |
 | ExcelJS / yauzl | 4.4.0 / 3.4.0 | Runner XLSX Node (fora do bundle); preflight ZIP limitado, package-lock |
 | UUID (override ExcelJS) | 11.1.1 | Correção GHSA-w5hq-g745-h8pq; API CommonJS v4 usada pelo ExcelJS |

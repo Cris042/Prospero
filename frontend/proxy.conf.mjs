@@ -15,6 +15,7 @@ function tokenDoAmbiente(nome) {
 
 const token = tokenDoAmbiente('FO_TOKEN_LEITURA');
 const tokenOrdens = tokenDoAmbiente('FO_TOKEN_ORDENS');
+const tokenPosicoes = tokenDoAmbiente('BO_TOKEN_POSICOES');
 const ROTA_ORDENS = /^\/servicos\/front-office\/api\/v1\/ordens(-oco)?(\/[0-9a-f-]{36})?(\?.*)?$/;
 const ORIGEM_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/;
 
@@ -32,6 +33,14 @@ function ordensPermitidas(req, res) {
     return false;
   }
   return undefined;
+}
+function posicoesPermitidas(req, res) {
+  if (!/^\/servicos\/back-office\/api\/v1\/posicoes(?:\?.*)?$/.test(req.url ?? '')) {
+    res.statusCode = 403;
+    res.end('{"erro":"Rota não permitida"}');
+    return false;
+  }
+  return ativosPermitidos(req, res);
 }
 const PREPARACAO = /preparacoes-(mercado|risco)/i;
 
@@ -105,5 +114,15 @@ export default {
     ...servico(8083),
     pathRewrite: { '^/servicos/matching-engine': '' },
   },
-  '/servicos/back-office': { ...servico(8084), pathRewrite: { '^/servicos/back-office': '' } },
+  '/servicos/back-office/api/v1/posicoes': {
+    ...servico(8084),
+    pathRewrite: { '^/servicos/back-office': '' },
+    headers: tokenPosicoes ? { Authorization: `Bearer ${tokenPosicoes}` } : {},
+    bypass: posicoesPermitidas,
+  },
+  '/servicos/back-office': {
+    ...servico(8084),
+    pathRewrite: { '^/servicos/back-office': '' },
+    bypass: semPreparacao,
+  },
 };

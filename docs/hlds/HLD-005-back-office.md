@@ -4,29 +4,31 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. Fundação técnica existe; não há registro de negócio, cálculo de posição, razão ou liquidação implementados. PnL e posição pertencem ao BO, não ao núcleo de risco MO.
-
-Futuro: consumir execuções, registrar negócio/razão/posição atomicamente, reconstruir projeções, atualizar resultado por cotação e simular caixa/custódia D+2. Não acessa tabelas FO/MO/ME; participantes e dados necessários devem chegar em contratos.
+Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. RF07 em validação implementa posição/PnL dos negócios desde a origem do log; razão, liquidação e créditos no MO continuam RF08. A posição parte de zero, não representa a custódia sintética inicial sem custo histórico. Regras confirmadas pelo usuário e limites no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
 
 ## Stack e organização
 
-Java 26, Quarkus 3.40.1, Maven Wrapper, REST Jackson/Bean Validation, JPA/Hibernate, PostgreSQL 16 e Flyway; cliente Kafka, SmallRye OpenAPI, Health, Micrometer e OpenTelemetry. Versões resolvidas/imagens e overrides: [libs](../libs.md) e ADR-005. Build e imagem próprios, sem artefato compartilhado entre serviços. Não há dependência de implementação de outro contexto.
+Java26/Quarkus3.40.1, PostgreSQL16/Flyway, REST/OpenAPI, JPA e cliente Kafka próprios. JWT usa a extensão do mesmo BOM, emissor local compartilhado e audiência BO. REST → Actor coordena domínio/Helpers puros e adaptadores JPA separados; consumidor chama o Actor diretamente. Não há banco alheio, entidades compartilhadas ou biblioteca de implementação entre contextos. [Inventário](../libs.md).
 
-Organização por funcionalidade sob `br.prospero.bo`: REST → Actor; Actor coordena domínio/Helpers puros e repositórios JPA separados. Adaptadores Kafka futuros chamam casos de uso sem passar pelo REST. Entidades JPA não são DTOs nem domínio. Pacotes vazios não são componentes de negócio implementados.
+## Interfaces e processamento RF07
 
-## Interfaces e implantação atuais
+`GET /api/v1/posicoes` exige JWT `prospero-back-office`, escopo `posicoes:leitura`, subject CONTA-001..004; nenhum parâmetro/header seleciona outra conta. Retorna os cinco ativos da conta, quantidade e valores textuais, médio ausente na zeragem, realizado acumulado e não realizado por último negócio. `Cache-Control: no-store`; 503 Problem Details durante bootstrap/lag/quarentena. Cotação ausente, de outra sessão ou encerrada é marcada como defasada; tempo sem negócio sozinho não define defasagem.
 
-`GET /api/v1/sistema` retorna identidade técnica. Porta externa `8084` em loopback → `8080` no container; `/q/health/ready`, `/q/openapi`, `/q/swagger-ui/` e `/q/metrics` são técnicos. Configuração usa variáveis locais fora do Git. Banco/container exclusivo `postgres-back-office`, banco `prospero_bo`, rede de dados própria. Não acessar tabelas de outro serviço.
+Grupo próprio `back-office-posicoes` lê `matching.eventos.v1` desde origem comprovada, chave por ativo, três partições e uma sessão/log. Envelope limitado/estrito, correlação/causação, tick e lote são conferidos. Negócio identifica os dois participantes. A transação local confirma deduplicação de evento/negócio, coordenada/hash de transporte, duas posições, cotação e checkpoint; repetição idêntica é inócua, divergente bloqueia. Autonegociação só atualiza cotação. Eventos conhecidos sem negócio avançam progresso; encerramento marca referência defasada.
 
-`src/main/resources/db/migration/V1__identificar_schema.sql` só identifica o schema. Flyway mantém histórico, sem tabelas financeiras. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Processo pode iniciar sem outro MS Java, mas depende de sua infraestrutura para ficar pronto; não confundir autonomia com conclusão de negócio sem participantes.
+V2 aditiva cria `bo_log`, `bo_checkpoint`, `bo_transporte`, `bo_evento`, `bo_negocio`, `bo_cotacao` e `bo_posicao`. As vinte posições possíveis têm PK conta/ativo e leitura com igualdade parametrizada, snapshot SQL único e limite cinco. Essa cardinalidade pequena pode justificar Seq Scan escolhido pelo PostgreSQL, sem forçar índice ou carregar histórico para a consulta. Fatos mínimos de deduplicação RF07 não equivalem ao histórico/razão contábil RF08.
 
-## Processamento e invariantes futuros
+Cálculo usa racionais reduzidos: 131072 bits/componente, temporários262146, persistência textual canônica com limites e validação. Excesso reverte todos os efeitos e bloqueia a partição, sem aproximação silenciosa. Sondas e limites de custo no ADR-015; nenhum RNF04/capacidade é presumido.
 
-ID determinístico de negócio permite deduplicação atômica com inserção, lançamentos e atualização de posição. Uma inserção ignorada por conflito não pode repetir efeitos. O contrato atual `NEGOCIO` de `matching.eventos.v1` já identifica preço, quantidade, ativo, sessão, negócio e ambas as contas/ordens/intenções (ADR-013); a lacuna histórica de identificação dos participantes está resolvida. A ordenação, checkpoint e aplicação no BO ainda precisam de implementação.
+## Implantação, prontidão e recuperação
 
-Negócios e razão têm histórico append-only; correções exigem estratégia explícita, sem alterar silenciosamente negócio executado. Posição é projeção reconstruível: quantidade com sinal, aumento altera preço médio, redução realiza resultado e virada abre lado novo. Arredondamento e limites ainda precisam de decisão; o cálculo do Minerva não cobre short/virada nem o contrato de resultado realizado; a [proveniência e restrição de cópia](HLD-003-middle-office.md#proveniência-e-limites-de-reuso) continuam aplicáveis. Fluxo acumulado de compras/vendas não equivale a PnL realizado. Calendário só de dias da semana não resolve feriados/D+2; não importar sua regra como decisão local.
+BO depende de PostgreSQL próprio e `kafka-init` concluído. Porta8084 loopback, banco `prospero_bo`, imagem/volume/rede próprios. `/api/v1/sistema`, `/q/openapi`, Swagger e métricas permanecem técnicos; `/q/health/ready` inclui sincronização da projeção. `prospero.posicoes.em_dia`, `.falhas` e `.quarentena` têm labels finitos, sem payload/conta em métricas. Processo vivo ou banco acessível não comprovam posição utilizável.
 
-A proposta estrutural da RF07 está no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md); regras financeiras e significado da posição inicial aguardam decisões no [roadmap](../roadmap.md#rf07--posições-e-resultado-financeiro). Persistência mínima de fatos para deduplicação da RF07 não representa razão ou liquidação RF08 implementadas.
+Identidade do tópico, origem zero, fim, offset confirmado Kafka e checkpoint PostgreSQL são confrontados. Lock transacional por partição impede efeitos fora de ordem entre gerações. Falha após poll rebobina; Kafka só recebe ack depois do commit e da confirmação do checkpoint. Tópico recriado, lacuna, bootstrap parcial ou progresso incompatível bloqueiam. Retenção integral e uma sessão/log são limites atuais; não implementar reset automático para contorná-los.
+
+Migração aplicada não é editada. Retornar à imagem anterior preserva tabelas mas interrompe RF07; preferir correção para frente. Reconstrução deve parar somente o consumidor BO e tratar suas tabelas/grupo como uma unidade com cópia recuperável; nunca limpar parcialmente nem apagar volumes por rotina. Hash não autentica produtor: Kafka PLAINTEXT permite forjar negócio coerente e alterar PnL, risco local herdado dos ADRs013/014.
+
+Verificação local: domínio/propriedades, REST/JWT, consumidor controlado e PostgreSQL real. CI inclui ITs BO em bancos efêmeros próprios, workbook `posicoes.xlsx` duas vezes e E2E desktop/mobile com PNGs. A planilha exige perfil isolado antes de outras negociações DELTA3; fecha posições/PnL e restaura40 por negócio real, sem reset de dados. Resultados finais no PR/roadmap, sem alegar execução HTTP antes do gate.
 
 ## Liquidação, recuperação e pendências
 

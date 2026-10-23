@@ -26,6 +26,18 @@ No Nginx, resumo e livro compartilham limite de cinco requisições/s por IP, bu
 
 A RF06b altera apresentação e ritmo de consulta; não muda contrato ou cálculo financeiro. Conforme ADR-004, dispensa nova planilha: `cotacao.xlsx` preserva a prova financeira por APIs, complementada pelos testes de tempo controlado e E2E de atualização visual sem clique. A CI disponibiliza somente capturas PNG de `test-results` como artefato por sete dias, sem traces, configuração ou credenciais.
 
+## Posições e resultado — RF07
+
+A seção da conta demo mostra posição dos negócios desde o início da simulação, preço médio, realizado acumulado e não realizado. A custódia inicial e a liquidação não entram nesse cálculo. Autonegociação preserva o resultado da própria conta. Valores chegam textuais; o frontend não calcula dinheiro com `Number`.
+
+A consulta usa `/servicos/back-office/api/v1/posicoes`, token `BO_TOKEN_POSICOES` somente no proxy, audiência/escopo BO e conta definida pelo token. GET/HEAD na rota exata; Authorization recebido é descartado nas rotas genéricas. Rode `python3 scripts/preparar-ambiente.py` na raiz para gerar/renovar a configuração local sem expor credenciais e reconstrua/reinicie os containers afetados.
+
+Atualização a cada2 s, sem sobreposição e com timeout8 s; ocultar/destruir cancela consultas. Falha ou503 preserva o snapshot anterior com aviso, sem mostrar zeros como confirmação. Cotação ausente ou defasada tem rótulo; a tabela possui rolagem própria no mobile e foco visível, sem anúncio acessível a cada tick.
+
+`runner/exemplos/posicoes.xlsx` cobre, por APIs reais, médio periódico, ampliação/redução, viradas long/short, zeragem, autonegociação e recusas de autenticação. Perfil isolado antes de outras negociações DELTA3; duas repetições fecham quantidade/PnL em zero e restauram preço40, sem apagar histórico. Não usar contra histórico arbitrário. Gerador em `gerar-posicoes.mjs`.
+
+E2E integrado exige `PROSPERO_POSICOES_E2E_CONFIG` apontando ao arquivo privado gerado por `scripts/mercado.py config-runner --perfil posicoes`, com origens loopback acessíveis ao Node. A CI gera esse arquivo em diretório temporário0600, mantém a contraparte autenticada no Node e nunca no navegador; o cenário observa a posição mudar após negócio real e fecha por outro negócio. Upload contém somente PNG, não a configuração ou traces. Evidências pertencem ao PR.
+
 ## Runner XLSX — contrato P03
 
 CLI Node independente do Angular, sem acesso a bancos, Kafka ou Redis. Formato v1: exatamente três abas visíveis, sem fórmulas, macros, células mescladas, hyperlinks ou objetos de célula. Primeira linha contém os cabeçalhos exatos abaixo, nesta ordem; demais linhas pertencem explicitamente a um cenário.

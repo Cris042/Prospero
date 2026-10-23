@@ -94,6 +94,11 @@ def main():
         novos["FO_TOKEN_ORDENS"] = jwt({"iss": "prospero-local", "aud": "prospero-front-office", "sub": "CONTA-001",
                                         "iat": agora, "exp": agora + VALIDADE_ORDENS,
                                         "groups": ["ordens:enviar", "ordens:leitura"]}, chave)
+    # RF07: leitura da posição da mesma conta demo, audiência BO e escopo próprio.
+    if "FO_JWT_CHAVE" in novos or expira_em(existentes.get("BO_TOKEN_POSICOES", "")) < agora + RENOVAR_ANTES:
+        novos["BO_TOKEN_POSICOES"] = jwt({"iss": "prospero-local", "aud": "prospero-back-office", "sub": "CONTA-001",
+                                         "iat": agora, "exp": agora + VALIDADE_ORDENS,
+                                         "groups": ["posicoes:leitura"]}, chave)
     # RF05d (ADR-013): token próprio do robô formador (CONTA-004), entregue só ao container opt-in, nunca ao Nginx.
     if "FO_JWT_CHAVE" in novos or expira_em(existentes.get("FO_TOKEN_ROBO", "")) < agora + RENOVAR_ANTES:
         novos["FO_TOKEN_ROBO"] = jwt({"iss": "prospero-local", "aud": "prospero-front-office", "sub": "CONTA-004",

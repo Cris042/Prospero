@@ -69,6 +69,9 @@ rodar_workbook() {
     runner-planilhas "runner/exemplos/$workbook.xlsx" --config /config/runner.json
 }
 rodar_workbook mercado mercado
+# RF07: DELTA3 antes das outras negociações; repete fechando posições e PnL por APIs.
+rodar_workbook posicoes posicoes
+rodar_workbook posicoes posicoes
 # RF06a: livro real, VWAP e repetição sem zerar acumuladores ou reservas.
 rodar_workbook cotacao risco
 rodar_workbook cotacao risco
@@ -97,6 +100,11 @@ rodar_workbook ordens ordens
 rodar_workbook validacao ordens
 python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"
 python3 scripts/mercado.py preparar-demo --origem "$fo_origem"
+bo_origem="http://$("${compose[@]}" port back-office 8080)"
+# Credenciais ficam no arquivo privado temporário, acessível só ao processo Node do teste.
+python3 scripts/mercado.py config-runner "$runner_cfg/posicoes-e2e.json" --perfil posicoes \
+  --origem "$fo_origem" --origem-mo "$mo_origem" --origem-bo "$bo_origem"
+export PROSPERO_POSICOES_E2E_CONFIG="$runner_cfg/posicoes-e2e.json"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
 playwright_deps=()
