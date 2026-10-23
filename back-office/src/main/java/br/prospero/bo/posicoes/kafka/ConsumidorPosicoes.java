@@ -62,6 +62,11 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
 
     @Override public boolean emDia() { return ativo && ciclo != null && ciclo.emDia(); }
 
+    /** O Admin recusa timeout de API menor que o de requisição (padrão 30 s); ambos ficam em 5 s. */
+    static java.util.Map<String, Object> configuracaoAdmin(String servidores) {
+        return java.util.Map.of("bootstrap.servers", servidores, "default.api.timeout.ms", "5000", "request.timeout.ms", "5000");
+    }
+
     private Properties propriedades() {
         Properties p = new Properties();
         p.put("bootstrap.servers", servidores);
@@ -79,7 +84,7 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
     }
 
     private void consumir() {
-        try (Admin admin = Admin.create(java.util.Map.of("bootstrap.servers", servidores, "default.api.timeout.ms", "5000"));
+        try (Admin admin = Admin.create(configuracaoAdmin(servidores));
              var c = new KafkaConsumer<String, byte[]>(propriedades())) {
             consumidor = c;
             while (ativo) {
@@ -98,7 +103,8 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
             }
         } catch (WakeupException parada) { LOG.debug("Consumo de posições encerrado."); }
         catch (InterruptedException parada) { Thread.currentThread().interrupt(); }
-        catch (RuntimeException erro) { LOG.errorf("Consumo de posições interrompido: %s", erro.getClass().getSimpleName()); }
+        catch (RuntimeException erro) { LOG.errorf("Consumo de posições interrompido: %s causa=%s", erro.getClass().getSimpleName(),
+                erro.getCause() == null ? "-" : erro.getCause().getClass().getSimpleName()); }
         finally { if (ciclo != null) ciclo.invalidar(); consumidor = null; }
     }
 
