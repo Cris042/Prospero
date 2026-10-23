@@ -1,5 +1,6 @@
 package br.prospero.mo.matching.helper;
 
+import br.prospero.mo.matching.dominio.FatoMatching;
 import br.prospero.mo.mensageria.dominio.MensagemInvalidaException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,29 +40,52 @@ public final class EnvelopeMatching {
             Instant.parse(texto(r,"ocorridoEm"));
             exigir(r.get("traceparent").isNull() || texto(r,"traceparent").matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}"),"traceparent");
             JsonNode d = r.get("dados");
-            switch (texto(r,"tipo")) {
-                case "ORDEM_ACEITA" -> { campos(d,"ordem,intencao,conta,sequencia"); inteiro(d,"sequencia",1,Long.MAX_VALUE); }
-                case "STOP_PENDENTE" -> { exigir(v2,"versao"); campos(d,"ordem,intencao,conta,precoGatilho"); preco(d,"precoGatilho"); }
-                case "STOP_ACIONADO" -> { exigir(v2,"versao"); campos(d,"ordem,intencao,conta,tipoExecutavel,sequencia"); exigir(Set.of("MARKET","LIMIT").contains(texto(d,"tipoExecutavel")),"tipoExecutavel"); inteiro(d,"sequencia",1,Long.MAX_VALUE); }
-                case "SESSAO_ENCERRADA" -> { campos(d,"expiradas"); inteiro(d,"expiradas",0,1000000); }
-                case "ORDEM_REDUZIDA" -> { exigir(v3,"versao"); campos(d,"ordem,intencao,conta,reduzida,restante"); inteiro(d,"reduzida",1,1000000); inteiro(d,"restante",1,1000000); }
-                case "OFERTA_NO_LIVRO" -> { campos(d,"ordem,intencao,conta,lado,preco,restante"); exigir(Set.of("COMPRA","VENDA").contains(texto(d,"lado")),"lado"); preco(d,"preco"); inteiro(d,"restante",1,1000000); }
-                case "ORDEM_REJEITADA" -> { campos(d,"ordem,intencao,conta,motivo"); exigir(Set.of("ATIVO_DESCONHECIDO","COMBINACAO_INVALIDA","PRECO_ACIMA_DA_RESERVA","PRECO_INVALIDO","QUANTIDADE_INVALIDA","SESSAO_ANTERIOR","SESSAO_ENCERRADA","SESSAO_NAO_ENCERRADA","LIMITE_ORDENS_ATIVAS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_STOPS_PENDENTES"),"motivo"); }
-                case "ORDEM_ENCERRADA" -> { campos(d,"ordem,intencao,conta,motivo,executada,cancelada"); exigir(v4 == texto(d,"motivo").equals("EXPIRADA_DIA"),"motivo"); exigir(v4 || Set.of("EXECUTADA","SALDO_CANCELADO_IOC","FOK_SEM_LIQUIDEZ","FORA_DA_FAIXA","LIMITADA_PELA_RESERVA","SEM_LIQUIDEZ","LIMITE_NEGOCIOS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_CASCATA") || v3 && texto(d,"motivo").equals("CANCELADA_OCO"),"motivo"); inteiro(d,"executada",0,1000000); inteiro(d,"cancelada",0,1000000); }
-                case "NEGOCIO" -> {
-                    campos(d,"negocio,preco,quantidade,ordemCompra,intencaoCompra,contaCompra,ordemVenda,intencaoVenda,contaVenda,agressor");
-                    exigir(texto(d,"negocio").matches("[A-Z0-9]+-\\d{4}-\\d{2}-\\d{2}-[1-9][0-9]*"),"negocio");
-                    exigir(texto(d,"negocio").startsWith(texto(r,"ticker")+"-"+texto(r,"dataSessao")+"-"),"negocio");
-                    preco(d,"preco"); inteiro(d,"quantidade",1,1000000);
-                    for (String lado : Set.of("Compra","Venda")) { uuid(d,"ordem"+lado); uuid(d,"intencao"+lado); conta(d,"conta"+lado); }
-                    exigir(Set.of("COMPRA","VENDA").contains(texto(d,"agressor")),"agressor");
-                }
-                default -> throw invalida("tipo");
-            }
+            exigirDados(r, d, v2, v3, v4);
             if (!texto(r,"tipo").equals("NEGOCIO") && !texto(r,"tipo").equals("SESSAO_ENCERRADA")) { uuid(d,"ordem"); uuid(d,"intencao"); conta(d,"conta"); }
             return r;
         } catch (MensagemInvalidaException e) { throw e; }
         catch (Exception e) { throw invalida("envelope"); }
+    }
+
+    /** Campos e limites de cada tipo de fato; v2 habilita stops, v3 OCO e v4 a expiração. Chamado dentro do try de ler. */
+    private static void exigirDados(JsonNode r, JsonNode d, boolean v2, boolean v3, boolean v4) {
+        switch (texto(r,"tipo")) {
+            case "ORDEM_ACEITA" -> { campos(d,"ordem,intencao,conta,sequencia"); inteiro(d,"sequencia",1,Long.MAX_VALUE); }
+            case "STOP_PENDENTE" -> { exigir(v2,"versao"); campos(d,"ordem,intencao,conta,precoGatilho"); preco(d,"precoGatilho"); }
+            case "STOP_ACIONADO" -> { exigir(v2,"versao"); campos(d,"ordem,intencao,conta,tipoExecutavel,sequencia"); exigir(Set.of("MARKET","LIMIT").contains(texto(d,"tipoExecutavel")),"tipoExecutavel"); inteiro(d,"sequencia",1,Long.MAX_VALUE); }
+            case "SESSAO_ENCERRADA" -> { campos(d,"expiradas"); inteiro(d,"expiradas",0,1000000); }
+            case "ORDEM_REDUZIDA" -> { exigir(v3,"versao"); campos(d,"ordem,intencao,conta,reduzida,restante"); inteiro(d,"reduzida",1,1000000); inteiro(d,"restante",1,1000000); }
+            case "OFERTA_NO_LIVRO" -> { campos(d,"ordem,intencao,conta,lado,preco,restante"); exigir(Set.of("COMPRA","VENDA").contains(texto(d,"lado")),"lado"); preco(d,"preco"); inteiro(d,"restante",1,1000000); }
+            case "ORDEM_REJEITADA" -> { campos(d,"ordem,intencao,conta,motivo"); exigir(Set.of("ATIVO_DESCONHECIDO","COMBINACAO_INVALIDA","PRECO_ACIMA_DA_RESERVA","PRECO_INVALIDO","QUANTIDADE_INVALIDA","SESSAO_ANTERIOR","SESSAO_ENCERRADA","SESSAO_NAO_ENCERRADA","LIMITE_ORDENS_ATIVAS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_STOPS_PENDENTES"),"motivo"); }
+            case "ORDEM_ENCERRADA" -> { campos(d,"ordem,intencao,conta,motivo,executada,cancelada"); exigir(v4 == texto(d,"motivo").equals("EXPIRADA_DIA"),"motivo"); exigir(v4 || Set.of("EXECUTADA","SALDO_CANCELADO_IOC","FOK_SEM_LIQUIDEZ","FORA_DA_FAIXA","LIMITADA_PELA_RESERVA","SEM_LIQUIDEZ","LIMITE_NEGOCIOS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_CASCATA") || v3 && texto(d,"motivo").equals("CANCELADA_OCO"),"motivo"); inteiro(d,"executada",0,1000000); inteiro(d,"cancelada",0,1000000); }
+            case "NEGOCIO" -> {
+                campos(d,"negocio,preco,quantidade,ordemCompra,intencaoCompra,contaCompra,ordemVenda,intencaoVenda,contaVenda,agressor");
+                exigir(texto(d,"negocio").matches("[A-Z0-9]+-\\d{4}-\\d{2}-\\d{2}-[1-9][0-9]*"),"negocio");
+                exigir(texto(d,"negocio").startsWith(texto(r,"ticker")+"-"+texto(r,"dataSessao")+"-"),"negocio");
+                preco(d,"preco"); inteiro(d,"quantidade",1,1000000);
+                for (String lado : Set.of("Compra","Venda")) { uuid(d,"ordem"+lado); uuid(d,"intencao"+lado); conta(d,"conta"+lado); }
+                exigir(Set.of("COMPRA","VENDA").contains(texto(d,"agressor")),"agressor");
+            }
+            default -> throw invalida("tipo");
+        }
+    }
+
+    /** Campos do fato de ordem conforme o tipo, já validados com os mesmos limites por {@link #ler}. */
+    public static FatoMatching fato(JsonNode evento, JsonNode d) {
+        String tipo=texto(evento,"tipo");
+        UUID correlacao=uuid(evento,"correlacao");
+        return switch (tipo) {
+            case "STOP_PENDENTE" -> FatoMatching.stopPendente(correlacao,preco(d,"precoGatilho"));
+            case "STOP_ACIONADO" -> FatoMatching.stopAcionado(correlacao,texto(d,"tipoExecutavel"));
+            case "ORDEM_REJEITADA" -> FatoMatching.ordemRejeitada(correlacao,texto(d,"motivo"));
+            case "ORDEM_ENCERRADA" -> FatoMatching.ordemEncerrada(correlacao,texto(d,"motivo"),
+                    inteiro(d,"executada",0,1000000),inteiro(d,"cancelada",0,1000000));
+            case "OFERTA_NO_LIVRO" -> FatoMatching.ofertaNoLivro(correlacao,inteiro(d,"restante",1,1000000),
+                    preco(d,"preco"),texto(d,"lado"));
+            case "ORDEM_REDUZIDA" -> FatoMatching.ordemReduzida(correlacao,inteiro(d,"reduzida",1,1000000),
+                    inteiro(d,"restante",1,1000000));
+            default -> FatoMatching.semCampos(tipo,correlacao);
+        };
     }
 
     private static void motivo(JsonNode d) { exigir(texto(d,"motivo").matches("[A-Z_]{1,64}"),"motivo"); }

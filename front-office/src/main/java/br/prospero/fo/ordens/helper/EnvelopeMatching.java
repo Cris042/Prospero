@@ -38,18 +38,10 @@ public final class EnvelopeMatching {
     }
 
     public static EventoMatching evento(byte[] bytes, String chave) {
-        if (bytes == null || bytes.length == 0 || bytes.length > 16 * 1024) {
-            throw invalido("tamanho");
-        }
-        JsonNode r;
-        try {
-            r = JSON.readTree(bytes);
-        } catch (IOException erro) {
-            throw invalido("json");
-        }
+        JsonNode r = ler(bytes);
         int versao = r != null && r.path("versao").isInt() ? r.get("versao").intValue() : 0;
         // v2 (stops), v3 (OCO) e v4 (encerramento) acrescentam a causação raiz; v4 só expira e marca a sessão.
-        boolean v2 = versao >= 2 && versao <= 4, v3 = versao == 3, v4 = versao == 4;
+        boolean v2 = versao >= 2 && versao <= 4, v4 = versao == 4;
         if (v2) campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados", "causacao");
         else campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados");
         if (!r.get("versao").isInt() || (versao != 1 && !v2)
@@ -60,29 +52,60 @@ public final class EnvelopeMatching {
         if (!ATIVOS.contains(ticker) || !ticker.equals(chave)) {
             throw invalido("ticker ou chave");
         }
-        LocalDate sessao;
+        LocalDate sessao = sessao(r);
+        exigirTraceparent(r);
+        JsonNode d = r.get("dados");
+        if (v4 != exclusivoDaV4(texto(r, "tipo"), d)) {
+            throw invalido("versao");
+        }
+        EventoMatching.Detalhe detalhe = detalhe(texto(r, "tipo"), d, ticker, sessao, versao);
+        return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe,
+                v2 ? uuid(r, "causacao") : null, versao);
+    }
+
+    private static JsonNode ler(byte[] bytes) {
+        if (bytes == null || bytes.length == 0 || bytes.length > 16 * 1024) {
+            throw invalido("tamanho");
+        }
+        try {
+            return JSON.readTree(bytes);
+        } catch (IOException erro) {
+            throw invalido("json");
+        }
+    }
+
+    private static LocalDate sessao(JsonNode r) {
         try {
             Instant.parse(texto(r, "ocorridoEm"));
             String data = texto(r, "dataSessao");
-            sessao = LocalDate.parse(data);
+            LocalDate sessao = LocalDate.parse(data);
             if (!sessao.toString().equals(data)) {
                 throw invalido("dataSessao");
             }
+            return sessao;
         } catch (java.time.DateTimeException erro) {
             throw invalido("data");
         }
+    }
+
+    private static void exigirTraceparent(JsonNode r) {
         JsonNode trace = r.get("traceparent");
         if (!trace.isNull() && (!trace.isTextual()
                 || !trace.textValue().matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}"))) {
             throw invalido("traceparent");
         }
-        JsonNode d = r.get("dados");
-        String tipoEvento = texto(r, "tipo");
-        if (v4 != ("SESSAO_ENCERRADA".equals(tipoEvento) || "ORDEM_ENCERRADA".equals(tipoEvento) && d != null
-                && d.path("motivo").isTextual() && "EXPIRADA_DIA".equals(d.path("motivo").textValue()))) {
-            throw invalido("versao");
-        }
-        EventoMatching.Detalhe detalhe = switch (texto(r, "tipo")) {
+    }
+
+    /** v4 transporta somente o marco e a expiração DIA. */
+    private static boolean exclusivoDaV4(String tipoEvento, JsonNode d) {
+        return "SESSAO_ENCERRADA".equals(tipoEvento) || "ORDEM_ENCERRADA".equals(tipoEvento) && d != null
+                && d.path("motivo").isTextual() && "EXPIRADA_DIA".equals(d.path("motivo").textValue());
+    }
+
+    private static EventoMatching.Detalhe detalhe(String tipoEvento, JsonNode d, String ticker, LocalDate sessao,
+                                                  int versao) {
+        boolean v2 = versao >= 2 && versao <= 4, v3 = versao == 3, v4 = versao == 4;
+        return switch (tipoEvento) {
             case "ORDEM_ACEITA" -> {
                 campos(d, "ordem", "intencao", "conta", "sequencia");
                 yield new EventoMatching.Aceita(alvo(d, ""), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
@@ -92,13 +115,7 @@ public final class EnvelopeMatching {
                 campos(d, "ordem", "intencao", "conta", "precoGatilho");
                 yield new EventoMatching.StopPendente(alvo(d, ""), preco(d, "precoGatilho"));
             }
-            case "STOP_ACIONADO" -> {
-                if (!v2) throw invalido("versao");
-                campos(d, "ordem", "intencao", "conta", "tipoExecutavel", "sequencia");
-                String tipo = texto(d, "tipoExecutavel");
-                if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido("tipoExecutavel");
-                yield new EventoMatching.StopAcionado(alvo(d, ""), TipoOrdem.valueOf(tipo), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
-            }
+            case "STOP_ACIONADO" -> stopAcionado(d, v2);
             case "SESSAO_ENCERRADA" -> {
                 campos(d, "expiradas");
                 yield new EventoMatching.SessaoEncerrada(inteiro(d, "expiradas", 0, 1_000_000));
@@ -113,43 +130,56 @@ public final class EnvelopeMatching {
                 campos(d, "ordem", "intencao", "conta", "lado", "preco", "restante");
                 yield new EventoMatching.Oferta(alvo(d, ""), lado(d, "lado"), preco(d), inteiro(d, "restante", 1, 1_000_000));
             }
-            case "ORDEM_REJEITADA" -> {
-                campos(d, "ordem", "intencao", "conta", "motivo");
-                String motivo = texto(d, "motivo");
-                if (!REJEICOES.contains(motivo) && !(v2 && "LIMITE_STOPS_PENDENTES".equals(motivo))) {
-                    throw invalido("motivo");
-                }
-                yield new EventoMatching.Rejeitada(alvo(d, ""), MotivoRejeicao.valueOf(motivo));
-            }
-            case "ORDEM_ENCERRADA" -> {
-                campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
-                String motivo = texto(d, "motivo");
-                if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))
-                        && !(v3 && "CANCELADA_OCO".equals(motivo)) && !(v4 && "EXPIRADA_DIA".equals(motivo))) {
-                    throw invalido("motivo");
-                }
-                yield new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),
-                        inteiro(d, "cancelada", 0, 1_000_000));
-            }
-            case "NEGOCIO" -> {
-                campos(d, "negocio", "preco", "quantidade", "ordemCompra", "intencaoCompra", "contaCompra",
-                        "ordemVenda", "intencaoVenda", "contaVenda", "agressor");
-                String negocio = texto(d, "negocio");
-                if (!negocio.matches(java.util.regex.Pattern.quote(ticker + "-" + sessao + "-") + "[1-9][0-9]{0,9}")) {
-                    throw invalido("negocio");
-                }
-                var compra = alvo(d, "Compra");
-                var venda = alvo(d, "Venda");
-                if (compra.ordem().equals(venda.ordem()) || compra.intencao().equals(venda.intencao())) {
-                    throw invalido("lados do negocio");
-                }
-                yield new EventoMatching.Negocio(negocio, preco(d), inteiro(d, "quantidade", 1, 1_000_000),
-                        compra, venda, lado(d, "agressor"));
-            }
+            case "ORDEM_REJEITADA" -> rejeitada(d, v2);
+            case "ORDEM_ENCERRADA" -> encerrada(d, v2, v3, v4);
+            case "NEGOCIO" -> negocio(d, ticker, sessao);
             default -> throw invalido("tipo");
         };
-        return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe,
-                v2 ? uuid(r, "causacao") : null, versao);
+    }
+
+    private static EventoMatching.StopAcionado stopAcionado(JsonNode d, boolean v2) {
+        if (!v2) throw invalido("versao");
+        campos(d, "ordem", "intencao", "conta", "tipoExecutavel", "sequencia");
+        String tipo = texto(d, "tipoExecutavel");
+        if (!Set.of("MARKET", "LIMIT").contains(tipo)) throw invalido("tipoExecutavel");
+        return new EventoMatching.StopAcionado(alvo(d, ""), TipoOrdem.valueOf(tipo), inteiro(d, "sequencia", 1, Long.MAX_VALUE));
+    }
+
+    private static EventoMatching.Rejeitada rejeitada(JsonNode d, boolean v2) {
+        campos(d, "ordem", "intencao", "conta", "motivo");
+        String motivo = texto(d, "motivo");
+        if (!REJEICOES.contains(motivo) && !(v2 && "LIMITE_STOPS_PENDENTES".equals(motivo))) {
+            throw invalido("motivo");
+        }
+        return new EventoMatching.Rejeitada(alvo(d, ""), MotivoRejeicao.valueOf(motivo));
+    }
+
+    /** v2 habilita LIMITE_CASCATA, v3 CANCELADA_OCO e v4 EXPIRADA_DIA. */
+    private static EventoMatching.Encerrada encerrada(JsonNode d, boolean v2, boolean v3, boolean v4) {
+        campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
+        String motivo = texto(d, "motivo");
+        if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))
+                && !(v3 && "CANCELADA_OCO".equals(motivo)) && !(v4 && "EXPIRADA_DIA".equals(motivo))) {
+            throw invalido("motivo");
+        }
+        return new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),
+                inteiro(d, "cancelada", 0, 1_000_000));
+    }
+
+    private static EventoMatching.Negocio negocio(JsonNode d, String ticker, LocalDate sessao) {
+        campos(d, "negocio", "preco", "quantidade", "ordemCompra", "intencaoCompra", "contaCompra",
+                "ordemVenda", "intencaoVenda", "contaVenda", "agressor");
+        String negocio = texto(d, "negocio");
+        if (!negocio.matches(java.util.regex.Pattern.quote(ticker + "-" + sessao + "-") + "[1-9][0-9]{0,9}")) {
+            throw invalido("negocio");
+        }
+        var compra = alvo(d, "Compra");
+        var venda = alvo(d, "Venda");
+        if (compra.ordem().equals(venda.ordem()) || compra.intencao().equals(venda.intencao())) {
+            throw invalido("lados do negocio");
+        }
+        return new EventoMatching.Negocio(negocio, preco(d), inteiro(d, "quantidade", 1, 1_000_000),
+                compra, venda, lado(d, "agressor"));
     }
 
     public static String assinatura(byte[] bytes) {

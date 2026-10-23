@@ -29,8 +29,8 @@ public final class PoliticaOrdem {
         if (!VALIDADES.get(tipo).contains(validade)) {
             throw regra("COMBINACAO_INVALIDA", "Validade não permitida para o tipo de ordem.");
         }
-        boolean exigeLimite = tipo == TipoOrdem.LIMIT || tipo == TipoOrdem.STOP_LIMIT;
-        boolean exigeGatilho = tipo == TipoOrdem.STOP || tipo == TipoOrdem.STOP_LIMIT;
+        boolean exigeLimite = tipo.comLimite();
+        boolean exigeGatilho = tipo.stop();
         if ((exigeLimite && precoLimite == null) || (exigeGatilho && precoGatilho == null)) {
             throw regra("CAMPO_EXIGIDO_PELO_TIPO", "Preço limite ou de gatilho ausente para o tipo de ordem.");
         }
@@ -44,7 +44,7 @@ public final class PoliticaOrdem {
      * A existência da posição é verificada na RF04.
      */
     public static void validarOco(LadoOrdem lado, TipoOrdem tipoStopLoss, BigDecimal alvo, BigDecimal gatilho) {
-        if (tipoStopLoss != TipoOrdem.STOP && tipoStopLoss != TipoOrdem.STOP_LIMIT) {
+        if (tipoStopLoss == null || !tipoStopLoss.stop()) {
             throw regra("OCO_TIPO_INVALIDO", "Stop Loss do OCO deve ser STOP ou STOP_LIMIT.");
         }
         int comparacao = alvo.compareTo(gatilho);
