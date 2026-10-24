@@ -4,7 +4,7 @@
 
 Registrar negócios, calcular posições e resultados e simular liquidação. Comunicação com outros serviços somente por Kafka; persistência exclusiva em `postgres-back-office`, banco/usuário `prospero_bo`. Este roteiro detalha a participação do componente nas tarefas do [roadmap global](../docs/roadmap.md); não cria PRs duplicados para o mesmo RF.
 
-A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. RF07 integrada pelo PR #42 acrescentou projeção idempotente de negócios/posições/cotação, API autenticada e migração V2 aditiva; a RF08b (em revisão) acrescenta V3 com fatos econômicos, razão D0 append-only, liquidação pendente e `GET /api/v1/negocios`/`/api/v1/razao` (escopo `razao:leitura`); RF08d implementa data de movimento, liquidação D+2 em lotes e outbox na branch `feat/rf08d-liquidacao-bo`, em validação; conciliação e tela continuam RF08e.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. RF07 integrada pelo PR #42 acrescentou projeção idempotente de negócios/posições/cotação, API autenticada e migração V2 aditiva; a RF08b (integrada pelo PR #45) acrescenta V3 com fatos econômicos, razão D0 append-only, liquidação pendente e `GET /api/v1/negocios`/`/api/v1/razao` (escopo `razao:leitura`); RF08d implementa data de movimento, liquidação D+2 em lotes e outbox no [PR #47](https://github.com/mclovin137/Prospero/pull/47), aguardando revisão/merge; conciliação e tela continuam RF08e.
 
 ## Entregas
 
@@ -13,8 +13,8 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | BO00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | BO01 | RF07 | Calcular long/short, preço médio, reduções e viradas. | Concluída — PR #42 integrado |
 | BO02 | RF07 | Atualizar resultado não realizado com eventos de cotação. | Concluída — PR #42 integrado |
-| BO03 | RF08 | Persistir negócio, razão e posição atomicamente e com idempotência. | RF08b implementada (V3, razão D0, consultas); em revisão |
-| BO04 | RF08 | Liquidar em D+2 com calendário, controle de tempo de teste e conciliação. | RF08d implementada em validação; conciliação RF08e planejada |
+| BO03 | RF08 | Persistir negócio, razão e posição atomicamente e com idempotência. | RF08b concluída — PR #45 integrado (V3, razão D0, consultas) |
+| BO04 | RF08 | Liquidar em D+2 com calendário, controle de tempo de teste e conciliação. | RF08d no PR #47, aguardando revisão/merge; conciliação RF08e planejada |
 | BO05 | RF09 | Publicar os estados que compõem a trajetória da ordem. | Planejada |
 | BO99 | V01 | Resiliência, métricas, rastreio e critérios não funcionais aplicáveis | Planejada |
 
