@@ -162,6 +162,15 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
 
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
+    public boolean liquidacaoPendente(String conta) {
+        // Índice parcial liquidacao_expectativa_pendente: só expectativas não creditadas da conta.
+        return !em.createNativeQuery("""
+                        SELECT 1 FROM liquidacao_expectativa WHERE conta = :c AND creditada_em IS NULL LIMIT 1""")
+                .setParameter("c", conta).getResultList().isEmpty();
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.MANDATORY)
     public void bloquearConta(String conta) {
         em.createNativeQuery("SELECT conta FROM conta_risco WHERE conta = :c FOR UPDATE")
                 .setParameter("c", conta).getResultList();

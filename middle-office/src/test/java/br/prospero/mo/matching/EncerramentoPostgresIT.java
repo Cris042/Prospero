@@ -35,7 +35,8 @@ class EncerramentoPostgresIT {
     @Inject EntityManager em;
 
     private void limpar() {
-        for (String tabela : new String[]{"matching_evento", "matching_negocio", "reserva_perna", "reserva", "decisao_risco"}) {
+        for (String tabela : new String[]{"liquidacao_expectativa", "liquidacao_aplicada", "liquidacao_aguardando", "liquidacao_recusada",
+                "matching_evento", "matching_negocio", "reserva_perna", "reserva", "decisao_risco"}) {
             em.createNativeQuery("DELETE FROM " + tabela).executeUpdate();
         }
         em.createNativeQuery("UPDATE conta_risco SET total=1000,disponivel=1000,reservado=0").executeUpdate();
