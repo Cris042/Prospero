@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. RF07 em validação implementa posição/PnL dos negócios desde a origem do log; razão, liquidação e créditos no MO continuam RF08. A posição parte de zero, não representa a custódia sintética inicial sem custo histórico. Regras confirmadas pelo usuário e limites no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
+Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. RF07, integrada pelo PR #42, implementa posição/PnL dos negócios desde a origem do log; razão, liquidação e créditos no MO continuam RF08. A posição parte de zero, não representa a custódia sintética inicial sem custo histórico. Regras confirmadas pelo usuário e limites no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
 
 ## Stack e organização
 
@@ -26,13 +26,13 @@ BO depende de PostgreSQL próprio e `kafka-init` concluído. Porta8084 loopback,
 
 Identidade do tópico, origem zero, fim, offset confirmado Kafka e checkpoint PostgreSQL são confrontados. Lock transacional por partição impede efeitos fora de ordem entre gerações. Falha após poll rebobina; Kafka só recebe ack depois do commit e da confirmação do checkpoint. Tópico recriado, lacuna, bootstrap parcial ou progresso incompatível bloqueiam. Retenção integral e uma sessão/log são limites atuais; não implementar reset automático para contorná-los.
 
-Migração aplicada não é editada. Retornar à imagem anterior preserva tabelas mas interrompe RF07; preferir correção para frente. Reconstrução deve parar somente o consumidor BO e tratar suas tabelas/grupo como uma unidade com cópia recuperável; nunca limpar parcialmente nem apagar volumes por rotina. Hash não autentica produtor: Kafka PLAINTEXT permite forjar negócio coerente e alterar PnL, risco local herdado dos ADRs013/014.
+Migração aplicada não é editada. Retornar à imagem anterior preserva tabelas mas interrompe RF07; preferir correção para frente. Reconstrução deve parar somente o consumidor BO e tratar suas tabelas/grupo como uma unidade com cópia recuperável; nunca limpar parcialmente nem apagar volumes por rotina; a recriação única de `bo-dados` para o legado RF07 é decisão do usuário no [ADR-016](../adrs/ADR-016-razao-liquidacao-d2.md). Hash não autentica produtor: Kafka PLAINTEXT permite forjar negócio coerente e alterar PnL, risco local herdado dos ADRs013/014.
 
 Verificação local: domínio/propriedades, REST/JWT, consumidor controlado e PostgreSQL real. CI inclui ITs BO em bancos efêmeros próprios, workbook `posicoes.xlsx` duas vezes e E2E desktop/mobile com PNGs. A planilha exige perfil isolado antes de outras negociações DELTA3; fecha posições/PnL e restaura40 por negócio real, sem reset de dados. Resultados finais no PR/roadmap, sem alegar execução HTTP antes do gate.
 
 ## Liquidação, recuperação e pendências
 
-**Decisão RF08:** o [ADR-016](../adrs/ADR-016-razao-liquidacao-d2.md) fixa calendário, data de movimento, plano de contas, estados `PENDENTE → LIQUIDADO`, contrato `liquidacao.eventos.v1` e expectativa de crédito no MO. A liquidação local é uma transação BO com UPDATE condicional; claim/lease/`DESCONHECIDO` abaixo permanecem como avaliação para efeitos externos futuros, não adotados. Os parágrafos seguintes registram a análise anterior.
+**Decisão RF08:** o [ADR-016](../adrs/ADR-016-razao-liquidacao-d2.md) fixa calendário, data de movimento, plano de contas, estados `PENDENTE → LIQUIDADO`, contrato `liquidacao.eventos.v1` e expectativa de crédito no MO. Calendário e data de liquidação existem só no BO; a liquidação local é uma transação BO com UPDATE condicional; claim/lease/`DESCONHECIDO` abaixo permanecem como avaliação para efeitos externos futuros, não adotados. Os parágrafos seguintes registram a análise anterior.
 
 D+2 precisa de calendário/dias úteis/feriados, estados, falhas, conciliação e relógio controlável por API de teste. Diferenciar disponível, reservado e liquidado e publicar efeitos idempotentes para MO. Repetir job/evento após reinício não pode liquidar novamente; resultado desconhecido exige reconciliação segura, sem assumir falha e refazer efeitos.
 
