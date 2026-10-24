@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 
 // Tokens exclusivamente fictícios: o teste não depende de .env nem imprime segredos locais.
 process.env.FO_TOKEN_LEITURA = 'token-ficticio-leitura';
@@ -172,5 +173,24 @@ test('negócios e razão recusam escrita, Host externo e extensões de rota', ()
     const { res, resultado } = consultarRazao(rota, 'GET', caminho);
     assert.equal(resultado, false, caminho);
     assert.equal(res.statusCode, 403);
+  }
+});
+
+test('data de movimento descarta Authorization e nunca recebe token administrativo no proxy', () => {
+  for (const method of ['POST', 'GET', 'HEAD', 'PUT', 'DELETE']) {
+    const req = {
+      method,
+      url: '/servicos/back-office/api/v1/data-movimento',
+      headers: { authorization: 'Bearer credencial-administrativa-do-cliente' },
+    };
+    const res = { end() {} };
+    assert.equal(proxy['/servicos/back-office'].bypass(req, res), undefined);
+    assert.equal(req.headers.authorization, undefined);
+    assert.equal(proxy['/servicos/back-office'].headers?.Authorization, undefined);
+  }
+  for (const arquivo of ['proxy.conf.mjs', 'nginx.template']) {
+    const fonte = readFileSync(new URL(arquivo, import.meta.url), 'utf8');
+    assert.doesNotMatch(fonte, /BO_TOKEN_(?:ADMIN|LIQUIDACAO|RELOGIO|MOVIMENTO)/);
+    assert.doesNotMatch(fonte, /liquidacao:administrar/);
   }
 });

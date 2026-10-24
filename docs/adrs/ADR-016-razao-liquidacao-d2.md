@@ -1,7 +1,7 @@
 # ADR-016 — Razão em partidas dobradas e liquidação D+2
 
 - Data: 2026-10-24.
-- Estado: **aceita em 2026-10-24**; RF08c integrada pelo PR #44; RF08b implementada no PR #45, em revisão; RF08d–e planejadas.
+- Estado: **aceita em 2026-10-24**; RF08c integrada pelo PR #44; RF08b integrada pelo PR #45; RF08d implementada no PR #47, aguardando revisão/merge; RF08e planejada.
 - Origem: refinamento da RF08 após merge autorizado do PR #42 (RF07).
 - Decisor: usuário, em 2026-10-24, escolhendo entre alternativas apresentadas: calendário "Seg–sex + feriados fixos", disponibilidade "Só após D+2", falhas "Sem falha simulada", legado "Exigir recriar bo-dados", plano de contas "Confirmo esse plano" após o exemplo numérico, e aceite dos defaults de histórico sem contraparte, recusa da preparação, risco PLAINTEXT e créditos ao robô. Registro no PR #43; andamento no [roadmap](../roadmap.md#rf08--razão-histórico-e-liquidação-d2).
 - Relação: complementa ADR-001/002/003/004; emenda ADR-012 (nova origem de alteração da carteira MO), ADR-013 (créditos adiados passam a D+2) e ADR-015 (transação de negócio ampliada e guarda do legado). Substitui, para a liquidação local, o desenho de claim/`DESCONHECIDO` avaliado no HLD-005.

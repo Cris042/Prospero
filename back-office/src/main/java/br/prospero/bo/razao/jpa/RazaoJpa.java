@@ -58,6 +58,23 @@ public class RazaoJpa implements ConsultaRazao {
         conferir(fato.negocio(), transacoes.size(), partidas);
     }
 
+    public void registrarOrigem(String negocio, UUID evento) {
+        em().createNativeQuery("INSERT INTO bo_negocio_origem(negocio_id,evento) VALUES(:n,:e)")
+                .setParameter("n", negocio).setParameter("e", evento).executeUpdate();
+    }
+
+    public void liquidar(TransacaoContabil transacao, LocalDate data) {
+        for (Partida p : transacao.partidas()) inserir(transacao, p, data);
+        Object[] saldo = (Object[]) em().createNativeQuery("""
+                SELECT count(*),coalesce(sum(CASE natureza WHEN 'D' THEN coalesce(valor,quantidade)
+                                        ELSE -coalesce(valor,quantidade) END),0),count(DISTINCT unidade)
+                FROM bo_lancamento WHERE negocio_id=:n AND lado=:l AND momento='D2' AND transacao=:t
+                """).setParameter("n", transacao.negocio()).setParameter("l", transacao.lado().name())
+                .setParameter("t", transacao.id()).getSingleResult();
+        if (numero(saldo[0]) != 2 || ((BigDecimal) saldo[1]).signum() != 0 || numero(saldo[2]) != 1)
+            throw new ProjecaoIncoerenteException("RAZAO_DESBALANCEADA");
+    }
+
     private void inserir(TransacaoContabil t, Partida p, LocalDate data) {
         Montante m = p.montante();
         // A coluna é escolhida por unidade (literal interno); nenhum identificador SQL vem da entrada.
@@ -87,6 +104,7 @@ public class RazaoJpa implements ConsultaRazao {
 
     @Override @Transactional
     public List<ParticipacaoNegocio> negocios(String conta, long antesDe, int limite) {
+        conferirLiquidacao();
         return em().createNativeQuery(PARTICIPACAO + " WHERE l.conta=:c AND l.id<:a ORDER BY l.id DESC")
                 .setParameter("c", conta).setParameter("a", antesDe).setMaxResults(limite).getResultList().stream()
                 .map(o -> participacao((Object[]) o)).toList();
@@ -94,6 +112,7 @@ public class RazaoJpa implements ConsultaRazao {
 
     @Override @Transactional
     public List<ParticipacaoNegocio> negocio(String conta, String negocio) {
+        conferirLiquidacao();
         return em().createNativeQuery(PARTICIPACAO + " WHERE l.negocio_id=:n AND l.conta=:c ORDER BY l.id")
                 .setParameter("n", negocio).setParameter("c", conta).setMaxResults(2).getResultList().stream()
                 .map(o -> participacao((Object[]) o)).toList();
@@ -101,6 +120,7 @@ public class RazaoJpa implements ConsultaRazao {
 
     @Override @Transactional
     public List<LancamentoRazao> lancamentos(String conta, long antesDe, int limite) {
+        conferirLiquidacao();
         return em().createNativeQuery("""
                 SELECT l.id,l.transacao,l.negocio_id,f.ticker,l.lado,l.momento,l.data_referencia,l.conta_contabil,
                        l.natureza,l.unidade,l.valor,l.quantidade
@@ -108,6 +128,11 @@ public class RazaoJpa implements ConsultaRazao {
                 WHERE l.conta=:c AND l.id<:a ORDER BY l.id DESC
                 """).setParameter("c", conta).setParameter("a", antesDe).setMaxResults(limite).getResultList().stream()
                 .map(o -> lancamento((Object[]) o)).toList();
+    }
+
+    private void conferirLiquidacao() {
+        if (!em().createNativeQuery("SELECT motivo FROM bo_liquidacao_controle WHERE id=1").getResultList().isEmpty())
+            throw new RazaoIndisponivelException();
     }
 
     private static ParticipacaoNegocio participacao(Object[] r) {

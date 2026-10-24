@@ -63,7 +63,7 @@ class PosicoesPostgresIT {
     void prepararSomenteSchemaDaExecucao() throws Exception {
         try (var c = conexao(); var s = c.createStatement()) {
             // V3: fatos, liquidações e razão referenciam bo_negocio (TRUNCATE não aciona os gatilhos append-only).
-            s.execute("TRUNCATE bo_lancamento,bo_liquidacao,bo_negocio_fato,bo_transporte,bo_evento,bo_negocio,bo_checkpoint,bo_log");
+            s.execute("TRUNCATE bo_negocio_origem,bo_lancamento,bo_liquidacao,bo_negocio_fato,bo_transporte,bo_evento,bo_negocio,bo_checkpoint,bo_log");
             s.execute("UPDATE bo_posicao SET quantidade=0,medio_n=null,medio_d=null,realizado_n='0',realizado_d='1'");
             s.execute("UPDATE bo_cotacao SET preco=null,sessao=null,encerrada=false,revisao=0,atualizada_em=null");
         }
