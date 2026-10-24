@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. RF07, integrada pelo PR #42, implementa posição/PnL dos negócios desde a origem do log; razão, liquidação e créditos no MO continuam RF08. A posição parte de zero, não representa a custódia sintética inicial sem custo histórico. Regras confirmadas pelo usuário e limites no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
+Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. RF07, integrada pelo PR #42, implementa posição/PnL dos negócios desde a origem do log. RF08b (em revisão) acrescenta fatos econômicos, razão D0, liquidação pendente e consultas; liquidação D+2 e créditos no MO continuam RF08c–e. A posição parte de zero, não representa a custódia sintética inicial sem custo histórico. Regras confirmadas pelo usuário e limites no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
 
 ## Stack e organização
 
@@ -19,6 +19,18 @@ Grupo próprio `back-office-posicoes` lê `matching.eventos.v1` desde origem com
 V2 aditiva cria `bo_log`, `bo_checkpoint`, `bo_transporte`, `bo_evento`, `bo_negocio`, `bo_cotacao` e `bo_posicao`. As vinte posições possíveis têm PK conta/ativo e leitura com igualdade parametrizada, snapshot SQL único e limite cinco. Essa cardinalidade pequena pode justificar Seq Scan escolhido pelo PostgreSQL, sem forçar índice ou carregar histórico para a consulta. Fatos mínimos de deduplicação RF07 não equivalem ao histórico/razão contábil RF08.
 
 Cálculo usa racionais reduzidos: 131072 bits/componente, temporários262146, persistência textual canônica com limites e validação. Excesso reverte todos os efeitos e bloqueia a partição, sem aproximação silenciosa. Sondas e limites de custo no ADR-015; nenhum RNF04/capacidade é presumido.
+
+## Razão D0 e consultas — RF08b
+
+Implementa a fatia RF08b do [ADR-016](../adrs/ADR-016-razao-liquidacao-d2.md), sem liquidação D+2, data de movimento ou outbox (RF08d). Na mesma transação e checkpoint da RF07, `AplicarPosicoesActor` grava o fato econômico do negócio (`bo_negocio_fato`: ativo, `dataSessao`, data de liquidação, preço `NUMERIC(9,2)`, quantidade inteira, valor `NUMERIC(15,2)` = preço × quantidade, contas e ordens), uma liquidação `PENDENTE` por (negócio, lado) com unicidade e os lançamentos D0 do plano de contas (`CAIXA`, `CAIXA_A_RECEBER`, `CUSTODIA`, `CUSTODIA_A_RECEBER`, contraparte `CAMARA`), por unidade BRL/ativo. Autonegociação gera os dois lados. O domínio recusa transação desbalanceada e o adaptador confere no banco, antes do commit, contagens e Σdébitos = Σcréditos por transação e unidade; divergência é `RAZAO_DESBALANCEADA`.
+
+Calendário puro (`Calendario`): seg–sex menos os feriados nacionais de data fixa em lei de 2026–2027 (`bo_feriado`, cobertura em `bo_calendario`, sem API de edição). D+2 conta dois dias úteis a partir da `dataSessao` do envelope, nunca de `ocorridoEm`; sessão em dia não útil parte do próximo dia útil. Qualquer dia fora da cobertura é `CALENDARIO_INSUFICIENTE`. Carnaval, Sexta-feira Santa e Corpus Christi (datas móveis, não feriados nacionais fixos) não entram.
+
+V3 aditiva cria as tabelas acima; `bo_lancamento` e `bo_negocio_fato` recusam UPDATE/DELETE por gatilho (`APPEND_ONLY`); correção futura só por estorno vinculado. No bootstrap, negócio RF07 sem fato (`SEM_ORIGEM`, anti-join executado uma vez) é quarentena `RAZAO_SEM_ORIGEM`: prontidão DOWN e consultas 503, sem backfill nem reset. Recuperação decidida pelo usuário: parar o BO, recriar o volume `bo-dados`, remover o grupo Kafka `back-office-posicoes` (o offset confirmado à frente do banco vazio seria `HISTORICO_INCOMPATIVEL`) e reiniciar para reconstruir desde a origem do log. Calendário insuficiente, desbalanço e conflito de identidade seguem a quarentena RF07, sem nova tentativa automática.
+
+`GET /api/v1/negocios`, `GET /api/v1/negocios/{id}` e `GET /api/v1/razao` exigem JWT `prospero-back-office` com escopo próprio `razao:leitura`; a conta vem só do subject. Listas mais recentes primeiro, padrão 50 e máximo 100, cursor opaco base64url com tipo, sequência e vínculo resumido de tipo/conta: cursor inválido, adulterado, de outra conta ou de outra listagem é o mesmo 400 `CONSULTA_INVALIDA`. Negócio inexistente, malformado ou sem participação é o mesmo 404 `NEGOCIO_NAO_ENCONTRADO`. Respostas mostram só o lado da própria conta (ordem própria, sem contraparte) e partidas contra `CAMARA`; `no-store`; bootstrap/atraso/quarentena ou falha de leitura são 503 `RAZAO_INDISPONIVEL`. Leituras usam índices `(conta, id)` com igualdade parametrizada e `LIMIT`. O proxy (Nginx e dev) injeta `BO_TOKEN_RAZAO` (CONTA-001) só nas rotas exatas GET/HEAD; a sequência interna decodificável no cursor revela apenas volume relativo, como o id de negócio já revela. Logs/métricas continuam só com motivo enumerado, partição e offset.
+
+Evidência: domínio (calendário com datas fixas, propriedade de balanço/conservação 100 sementes × 100 negócios, cursor), REST Assured das consultas, IT PostgreSQL `RazaoPostgresIT` (atomicidade com falha injetada, reentrega, identidade divergente, append-only, unicidade, invariante, calendário, V2 → V3 com dados) e `razao.xlsx` por APIs reais duas vezes na CI.
 
 ## Implantação, prontidão e recuperação
 

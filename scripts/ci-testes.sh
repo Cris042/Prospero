@@ -72,6 +72,9 @@ rodar_workbook mercado mercado
 # RF07: DELTA3 antes das outras negociações; repete fechando posições e PnL por APIs.
 rodar_workbook posicoes posicoes
 rodar_workbook posicoes posicoes
+# RF08b: negócios e razão D0 em DELTA3 logo após posições; repete abrindo e fechando por negócios reais.
+rodar_workbook razao razao
+rodar_workbook razao razao
 # RF06a: livro real, VWAP e repetição sem zerar acumuladores ou reservas.
 rodar_workbook cotacao risco
 rodar_workbook cotacao risco

@@ -25,6 +25,7 @@ def main():
     for servico, sigla, banco, classe in [
         ("back-office", "BO", "bo", "PosicoesPostgresIT"),
         ("back-office", "BO", "bo", "RacionalPostgresIT"),
+        ("back-office", "BO", "bo", "RazaoPostgresIT"),
         ("matching-engine", "ME", "me", "CheckpointPostgresIT"),
         ("middle-office", "MO", "mo", "MatchingPostgresIT"),
         ("middle-office", "MO", "mo", "OcoPostgresIT"),

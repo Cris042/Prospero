@@ -42,6 +42,12 @@ Atualização a cada2 s, sem sobreposição e com timeout8 s; ocultar/destruir c
 
 E2E integrado exige `PROSPERO_POSICOES_E2E_CONFIG` apontando ao arquivo privado gerado por `scripts/mercado.py config-runner --perfil posicoes`, com origens loopback acessíveis ao Node. A CI gera esse arquivo0600 em diretório temporário0700, mantém a contraparte autenticada no Node e nunca no navegador; o cenário observa a posição mudar após negócio real e fecha por outro negócio. Upload contém somente PNG, não a configuração ou traces. Evidências pertencem ao PR.
 
+## Negócios e razão — RF08b
+
+Sem tela nesta fatia (RF08e). O proxy injeta `BO_TOKEN_RAZAO` (conta demo, audiência BO, escopo `razao:leitura`) somente em GET/HEAD de `/servicos/back-office/api/v1/negocios`, `/negocios/{id}` (um segmento; o BO responde o mesmo 404 para inexistente e alheio) e `/razao`; demais extensões são recusadas e Authorization do cliente é descartado.
+
+`runner/exemplos/razao.xlsx` (gerado por `gerar-razao.mjs`, perfil `--perfil razao`) roda logo após `posicoes.xlsx`: recusas 401/403/400/404, prepara CONTA-002/003, abre 2 DELTA3 a 40,00, confere o negócio de cada lado pela ordem capturada, data de sessão e de liquidação coerentes entre os lados, detalhe, 404 para CONTA-001, as quatro partidas D0 de cada lado contra a Câmara, paginação por cursor e cursor de outra conta 400; fecha por negócio inverso, com posição/PnL zero e cotação 40. Repetível duas vezes na CI; não usar contra histórico arbitrário com outras negociações DELTA3 simultâneas. O D+2 exato é provado pelos testes com datas fixas.
+
 ## Runner XLSX — contrato P03
 
 CLI Node independente do Angular, sem acesso a bancos, Kafka ou Redis. Formato v1: exatamente três abas visíveis, sem fórmulas, macros, células mescladas, hyperlinks ou objetos de célula. Primeira linha contém os cabeçalhos exatos abaixo, nesta ordem; demais linhas pertencem explicitamente a um cenário.

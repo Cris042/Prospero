@@ -19,7 +19,10 @@ public class ProblemasPosicoes implements ContainerResponseFilter {
     public record ProblemaDTO(String type, String title, int status, String codigo, String detail, String instance) { }
 
     @Override public void filter(ContainerRequestContext pedido, ContainerResponseContext resposta) {
-        if (pedido.getUriInfo().getPath().startsWith("api/v1/posicoes")) resposta.getHeaders().putSingle("Cache-Control", "no-store");
+        String caminho = pedido.getUriInfo().getPath();
+        if (caminho.startsWith("api/v1/posicoes") || caminho.startsWith("api/v1/negocios") || caminho.startsWith("api/v1/razao")) {
+            resposta.getHeaders().putSingle("Cache-Control", "no-store");
+        }
     }
 
     @ServerExceptionMapper({UnauthorizedException.class, AuthenticationFailedException.class})
@@ -41,7 +44,7 @@ public class ProblemasPosicoes implements ContainerResponseFilter {
         return problema(erro.getResponse().getStatus(), "ERRO_HTTP", "Requisição recusada pelo protocolo HTTP.", pedido);
     }
 
-    private static Response problema(int status, String codigo, String mensagem, ContainerRequestContext pedido) {
+    public static Response problema(int status, String codigo, String mensagem, ContainerRequestContext pedido) {
         String caminho = pedido.getUriInfo().getPath();
         String instancia = caminho.matches("[A-Za-z0-9/_.-]{0,200}") ? "/" + caminho : "/";
         return Response.status(status).type("application/problem+json").header("Cache-Control", "no-store")

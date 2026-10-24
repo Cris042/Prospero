@@ -79,6 +79,23 @@ class TokenOrdensTest(PrepararAmbienteTest):
         self.assertEqual(renovados["FO_TOKEN_LEITURA"], valores["FO_TOKEN_LEITURA"])
 
 
+class TokenRazaoTest(PrepararAmbienteTest):
+    def test_token_de_leitura_do_razao_da_conta_demo_com_audiencia_bo_e_escopo_proprio(self):
+        ambiente.main()
+        valores = ambiente.ler(self.env)
+        claims = json.loads(decodificar(valores["BO_TOKEN_RAZAO"].split(".")[1]))
+        self.assertEqual(claims["sub"], "CONTA-001")
+        self.assertEqual(claims["aud"], "prospero-back-office")
+        self.assertEqual(claims["groups"], ["razao:leitura"])
+        self.assertLessEqual(claims["exp"] - claims["iat"], 7 * 24 * 3600)
+        prestes = ambiente.jwt({"exp": 1}, valores["FO_JWT_CHAVE"])
+        self.env.write_text(self.env.read_text().replace(valores["BO_TOKEN_RAZAO"], prestes))
+        ambiente.main()
+        renovados = ambiente.ler(self.env)
+        self.assertNotEqual(renovados["BO_TOKEN_RAZAO"], prestes)
+        self.assertEqual(renovados["BO_TOKEN_POSICOES"], valores["BO_TOKEN_POSICOES"])
+
+
 class TokenRoboTest(PrepararAmbienteTest):
     def test_token_do_robo_formador_restrito_a_conta_004_e_renovado(self):
         ambiente.main()
