@@ -12,6 +12,9 @@ import java.util.List;
 /** Progresso e evidência de transporte participam da transação financeira do Actor. */
 @ApplicationScoped
 public class CheckpointPosicoesJpa {
+    /** RF08b: negócio RF07 sem fato econômico; anti-join executado só no bootstrap. */
+    public static final String SEM_ORIGEM = "SELECT EXISTS(SELECT 1 FROM bo_negocio n WHERE NOT EXISTS("
+            + "SELECT 1 FROM bo_negocio_fato f WHERE f.negocio_id=n.id))";
     private final Instance<EntityManager> gerenciadores;
     @Inject public CheckpointPosicoesJpa(Instance<EntityManager> gerenciadores) { this.gerenciadores = gerenciadores; }
     private EntityManager em() { return gerenciadores.get(); }
@@ -20,6 +23,8 @@ public class CheckpointPosicoesJpa {
     public void iniciar(String topicoId) {
         if (topicoId == null || !topicoId.matches("[A-Za-z0-9_-]{22}")) throw erro("TOPICO_INVALIDO");
         em().createNativeQuery("SELECT pg_advisory_xact_lock(71407001)").getSingleResult();
+        // ADR-016: volume da RF07 sem fatos econômicos não é completado nem reiniciado; exige recriar bo-dados.
+        if ((Boolean) em().createNativeQuery(SEM_ORIGEM).getSingleResult()) throw erro("RAZAO_SEM_ORIGEM");
         List<?> log = em().createNativeQuery("SELECT topico_id FROM bo_log WHERE id=1").getResultList();
         long particoes = ((Number) em().createNativeQuery("SELECT count(*) FROM bo_checkpoint").getSingleResult()).longValue();
         if (log.isEmpty()) {
