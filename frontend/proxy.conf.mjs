@@ -44,7 +44,8 @@ function posicoesPermitidas(req, res) {
   return ativosPermitidos(req, res);
 }
 // RF08b: listagem, um negócio (segmento único; o BO responde 404 idêntico) e razão, somente leitura.
-const ROTA_NEGOCIOS = /^\/servicos\/back-office\/api\/v1\/negocios(?:\/[A-Za-z0-9-]{1,40})?(?:\?.*)?$/;
+const ROTA_NEGOCIOS =
+  /^\/servicos\/back-office\/api\/v1\/negocios(?:\/[A-Za-z0-9-]{1,40})?(?:\?.*)?$/;
 const ROTA_RAZAO = /^\/servicos\/back-office\/api\/v1\/razao(?:\?.*)?$/;
 function leituraBo(rota) {
   return (req, res) => {

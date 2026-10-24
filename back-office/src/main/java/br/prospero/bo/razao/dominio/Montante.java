@@ -3,7 +3,7 @@ package br.prospero.bo.razao.dominio;
 import java.math.BigDecimal;
 import java.util.Set;
 
-/** Quantia por unidade: BRL com escala exata de centavos; ativo em quantidade inteira. Nunca double. */
+/** Quantia por unidade: BRL com escala exata de centavos; ativo em quantidade inteira. Sem ponto flutuante. */
 public record Montante(String unidade, BigDecimal valor) {
     public static final String BRL = "BRL";
     public static final Set<String> ATIVOS = Set.of("ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3");
