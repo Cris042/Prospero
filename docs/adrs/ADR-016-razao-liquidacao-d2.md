@@ -68,14 +68,14 @@ Cada avanço liquida, em lotes limitados e retomáveis, toda pendência com data
 **MO.** Ao consumir o negócio, grava na mesma transação a expectativa de crédito por (negócio, lado): conta, recurso, ativo e valor exato, sem data. O consumidor de `liquidacao.eventos.v1` confere origem, id derivado, chave Kafka igual à conta do evento e igualdade com a expectativa; a data de liquidação é responsabilidade do BO e não é reconferida. Resultados por evento:
 
 - expectativa idêntica: crédito pelo mesmo UPDATE condicional por conta do ADR-012 e deduplicação por id e hash na mesma transação; só o crédito aplicado ocupa a deduplicação;
-- expectativa ainda ausente: o evento fica guardado como liquidação aguardando negócio, sem crédito, e é aplicado na transação que grava a expectativa correspondente; não trava a partição nem a prontidão;
+- expectativa ainda ausente: o evento fica guardado como liquidação aguardando negócio, por (id, hash), sem crédito; a transação que grava a expectativa aplica o aguardando idêntico e recusa os divergentes do mesmo id. Não trava a partição nem a prontidão; volume aguardando tem teto configurado e, acima dele, novos eventos sem expectativa são recusados com motivo;
 - divergência ou contrato inválido: o evento é recusado e registrado com motivo, sem crédito e sem ocupar a deduplicação; a partição segue.
 
 O consumidor usa o modo financeiro do `ConsumoKafka` (sem descarte) apenas para falhas técnicas transitórias; pendência e recusa são estados persistidos, não exceções. Métricas de aguardando, recusadas e idade da mais antiga, com labels finitos.
 
 **Consultas.** `GET /api/v1/negocios` e `GET /api/v1/razao` no BO pela conta do JWT, escopo de leitura próprio, paginação por cursor opaco com limite máximo de 100, `no-store`, 503 durante bootstrap ou quarentena. O cursor não carrega a conta como autoridade; cursor inválido ou de outra conta é 400 genérico. Negócio de que a conta não participa é 404 idêntico ao inexistente. O proxy injeta o token de leitura só por rota e método exatos, como no ADR-015.
 
-**Logs e métricas.** Labels sem conta, valor, preço ou id de negócio; logs só com id técnico, partição/offset e motivo enumerado; quarentenas e recusas ficam visíveis por métrica e prontidão, não por payload.
+**Logs e métricas.** Labels sem conta, valor, preço ou id de negócio; logs só com id técnico, partição/offset e motivo enumerado; recusas e aguardando do MO ficam visíveis por métrica; a prontidão reflete apenas bootstrap e quarentena técnica; nada é exposto por payload.
 
 ## Fatias
 
@@ -107,7 +107,7 @@ RF08b e RF08c não dependem uma da outra. O MO tolerante entra antes do emissor:
 | D+2: segunda → quarta, quinta → segunda, sexta → terça, feriado no intervalo e no próprio D+2, negócio em dia não útil, perto da meia-noite, `CALENDARIO_INSUFICIENTE` | b | JUnit com datas fixas |
 | `RAZAO_SEM_ORIGEM` falha fechado; recriar `bo-dados` reconstrói | b | IT V2 → V3 com dados; roteiro no PR |
 | Consultas: só a própria conta, 404 idêntico, cursor adulterado 400, limite, `no-store`, 503 | b | REST Assured; `razao.xlsx` (ADR-004) |
-| Expectativa idêntica credita uma vez; aguardando aplica depois do negócio; divergente recusado sem ocupar deduplicação; chave/origem incoerentes recusadas; partição segue | c | IT MO com eventos sintéticos |
+| Expectativa idêntica credita uma vez; aguardando aplica depois do negócio; divergente aguardando antes do legítimo não impede o crédito único; teto do aguardando; divergente recusado sem ocupar deduplicação; chave/origem incoerentes recusadas; partição segue | c | IT MO com eventos sintéticos |
 | Preparação com pendência → 409 `LIQUIDACAO_PENDENTE` sem escrita | c | REST Assured / IT |
 | Data de movimento: flag desligada 404, 401/403, retroativa 409, igual sem efeito, limite 422, concorrência, auditoria; ArchUnit sem `now()` | d | REST Assured, IT, ArchUnit |
 | Liquidação uma vez com avanço repetido, lote maior que o limite, queda antes do commit e entre commit e relay | d | IT PostgreSQL; teste de configuração do producer |
