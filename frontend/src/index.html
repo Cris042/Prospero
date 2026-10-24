@@ -9,6 +9,15 @@
       name="description"
       content="Simulador local de mercado financeiro para estudo de ordens, risco, execução e liquidação."
     />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Aplica o tema salvo antes do primeiro paint; sem escolha, o CSS segue o sistema.
+      try {
+        var tema = localStorage.getItem('prospero-tema');
+        if (tema === 'claro' || tema === 'escuro')
+          document.documentElement.setAttribute('data-theme', tema === 'escuro' ? 'dark' : 'light');
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <app-root></app-root>

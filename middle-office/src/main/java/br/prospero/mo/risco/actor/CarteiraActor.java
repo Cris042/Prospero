@@ -25,13 +25,21 @@ public class CarteiraActor {
     private static final Logger LOG = Logger.getLogger(CarteiraActor.class);
     private final RepositorioRisco repositorio;
     private final boolean preparacaoHabilitada;
+    private final boolean recusarLiquidacaoPendente;
 
+    /**
+     * {@code recusarLiquidacaoPendente} (MO_RECUSAR_LIQUIDACAO_PENDENTE) nasce desligada: sem o emissor da RF08d toda
+     * negociação deixa crédito pendente e as planilhas repetidas da CI não conseguiriam preparar (ADR-016, RF08e liga).
+     */
     @Inject
     public CarteiraActor(RepositorioRisco repositorio,
                          @ConfigProperty(name = "prospero.risco.preparacao.habilitada", defaultValue = "false")
-                         boolean preparacaoHabilitada) {
+                         boolean preparacaoHabilitada,
+                         @ConfigProperty(name = "prospero.risco.preparacao.recusar-liquidacao-pendente",
+                                 defaultValue = "false") boolean recusarLiquidacaoPendente) {
         this.repositorio = repositorio;
         this.preparacaoHabilitada = preparacaoHabilitada;
+        this.recusarLiquidacaoPendente = recusarLiquidacaoPendente;
     }
 
     public CarteiraResponseDTO consultar(String conta) {
@@ -52,6 +60,12 @@ public class CarteiraActor {
         BigDecimal saldo = EntradaCarteira.saldo(pedido.saldo());
         Map<String, Long> custodia = EntradaCarteira.custodia(pedido.custodia(), ticker ->
                 repositorio.parametros(ticker).isPresent());
+        // Lock da conta antes da leitura: crédito e expectativa novos esperam; a recusa precede qualquer escrita.
+        repositorio.bloquearConta(conta);
+        if (recusarLiquidacaoPendente && repositorio.liquidacaoPendente(conta)) {
+            throw new RegraNegocioException(Categoria.CONFLITO, "LIQUIDACAO_PENDENTE",
+                    "Conta possui liquidação pendente; avance a data de movimento antes de preparar.");
+        }
         repositorio.preparar(conta, saldo, custodia);
         LOG.infof("Carteira de teste preparada: conta=%s", conta);
         return consultar(conta);

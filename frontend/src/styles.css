@@ -1,10 +1,148 @@
+/*
+ * Paleta centralizada. :root mantém o tema claro original; o escuro reaproveita os mesmos
+ * nomes. Sem escolha salva, segue prefers-color-scheme; data-theme no <html> fixa a escolha.
+ */
+:root {
+  color-scheme: light;
+  --cor-fundo: #f6f8f4;
+  --cor-texto: #1d352c;
+  --cor-superficie: #fff;
+  --cor-superficie-suave: #edf3ed;
+  --cor-superficie-botao: #f5f9f7;
+  --cor-superficie-selecionada: #eef6f0;
+  --cor-selo: #eef2ef;
+  --cor-selecao: #c8dfce;
+  --cor-marca: #173c34;
+  --cor-sobre-marca: #fff;
+  --cor-texto-marca: #173c34;
+  --cor-texto-acao: #183c2d;
+  --cor-sobretitulo: #486b5f;
+  --cor-texto-apoio: #54665e;
+  --cor-texto-apoio-alt: #52665d;
+  --cor-texto-rotulo: #36493f;
+  --cor-texto-introducao: #4e6158;
+  --cor-texto-discreto: #687c71;
+  --cor-texto-rodape: #617268;
+  --cor-borda: #dae2df;
+  --cor-borda-secao: #d5dfd8;
+  --cor-borda-painel: #dbe4e0;
+  --cor-borda-controle: #b8c7c0;
+  --cor-borda-controle-alt: #bdcec5;
+  --cor-borda-destaque: #b8cebd;
+  --cor-divisoria: #eef2ef;
+  --cor-divisoria-alt: #e7ede9;
+  --cor-foco: #34795d;
+  --cor-foco-alt: #267852;
+  --cor-alta: #1d6b43;
+  --cor-baixa: #a3321f;
+  --cor-erro: #8a3a1c;
+  --cor-alerta-fundo: #fbeae6;
+  --cor-alerta-texto: #7a2414;
+  --cor-sintetico-fundo: #fff4d6;
+  --cor-sintetico-texto: #6b4d00;
+  --cor-aviso-fundo: #fff8e6;
+  --cor-aviso-texto: #5c4500;
+  --cor-aviso-borda: #c99a2e;
+  --cor-sucesso-fundo: #eaf5ee;
+  --cor-sucesso-texto: #1d4d33;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --cor-fundo: #0f1714;
+    --cor-texto: #e3ece7;
+    --cor-superficie: #16211d;
+    --cor-superficie-suave: #1c2a25;
+    --cor-superficie-botao: #1c2a25;
+    --cor-superficie-selecionada: #1f3a2f;
+    --cor-selo: #24332d;
+    --cor-selecao: #2f5a48;
+    --cor-marca: #9ad7bb;
+    --cor-sobre-marca: #0d2219;
+    --cor-texto-marca: #a8dcc3;
+    --cor-texto-acao: #a8dcc3;
+    --cor-sobretitulo: #8ccbb0;
+    --cor-texto-apoio: #a9bab2;
+    --cor-texto-apoio-alt: #a9bab2;
+    --cor-texto-rotulo: #c7d5ce;
+    --cor-texto-introducao: #b4c4bc;
+    --cor-texto-discreto: #9aaca3;
+    --cor-texto-rodape: #9aaca3;
+    --cor-borda: #2c3b35;
+    --cor-borda-secao: #2c3b35;
+    --cor-borda-painel: #2c3b35;
+    --cor-borda-controle: #5f776c;
+    --cor-borda-controle-alt: #5f776c;
+    --cor-borda-destaque: #3d6b55;
+    --cor-divisoria: #22302b;
+    --cor-divisoria-alt: #22302b;
+    --cor-foco: #6fd1a6;
+    --cor-foco-alt: #6fd1a6;
+    --cor-alta: #6fdc9c;
+    --cor-baixa: #ff9a85;
+    --cor-erro: #ffab94;
+    --cor-alerta-fundo: #3a1e19;
+    --cor-alerta-texto: #ffb4a6;
+    --cor-sintetico-fundo: #3a2f12;
+    --cor-sintetico-texto: #f5d27a;
+    --cor-aviso-fundo: #2f2814;
+    --cor-aviso-texto: #f0d58c;
+    --cor-aviso-borda: #c99a2e;
+    --cor-sucesso-fundo: #173426;
+    --cor-sucesso-texto: #a6e3bf;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --cor-fundo: #0f1714;
+  --cor-texto: #e3ece7;
+  --cor-superficie: #16211d;
+  --cor-superficie-suave: #1c2a25;
+  --cor-superficie-botao: #1c2a25;
+  --cor-superficie-selecionada: #1f3a2f;
+  --cor-selo: #24332d;
+  --cor-selecao: #2f5a48;
+  --cor-marca: #9ad7bb;
+  --cor-sobre-marca: #0d2219;
+  --cor-texto-marca: #a8dcc3;
+  --cor-texto-acao: #a8dcc3;
+  --cor-sobretitulo: #8ccbb0;
+  --cor-texto-apoio: #a9bab2;
+  --cor-texto-apoio-alt: #a9bab2;
+  --cor-texto-rotulo: #c7d5ce;
+  --cor-texto-introducao: #b4c4bc;
+  --cor-texto-discreto: #9aaca3;
+  --cor-texto-rodape: #9aaca3;
+  --cor-borda: #2c3b35;
+  --cor-borda-secao: #2c3b35;
+  --cor-borda-painel: #2c3b35;
+  --cor-borda-controle: #5f776c;
+  --cor-borda-controle-alt: #5f776c;
+  --cor-borda-destaque: #3d6b55;
+  --cor-divisoria: #22302b;
+  --cor-divisoria-alt: #22302b;
+  --cor-foco: #6fd1a6;
+  --cor-foco-alt: #6fd1a6;
+  --cor-alta: #6fdc9c;
+  --cor-baixa: #ff9a85;
+  --cor-erro: #ffab94;
+  --cor-alerta-fundo: #3a1e19;
+  --cor-alerta-texto: #ffb4a6;
+  --cor-sintetico-fundo: #3a2f12;
+  --cor-sintetico-texto: #f5d27a;
+  --cor-aviso-fundo: #2f2814;
+  --cor-aviso-texto: #f0d58c;
+  --cor-aviso-borda: #c99a2e;
+  --cor-sucesso-fundo: #173426;
+  --cor-sucesso-texto: #a6e3bf;
+}
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
-  background: #f6f8f4;
-  color: #1d352c;
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
   font-family:
     Inter,
     ui-sans-serif,
@@ -20,9 +158,9 @@ button {
 }
 a:focus-visible,
 button:focus-visible {
-  outline: 3px solid #34795d;
+  outline: 3px solid var(--cor-foco);
   outline-offset: 4px;
 }
 ::selection {
-  background: #c8dfce;
+  background: var(--cor-selecao);
 }

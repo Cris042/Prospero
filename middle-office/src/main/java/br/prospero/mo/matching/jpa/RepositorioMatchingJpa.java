@@ -1,5 +1,7 @@
 package br.prospero.mo.matching.jpa;
 
+import br.prospero.mo.liquidacao.dominio.CreditoEsperado;
+import br.prospero.mo.liquidacao.dominio.RepositorioLiquidacao;
 import br.prospero.mo.matching.dominio.FatoMatching;
 import br.prospero.mo.matching.dominio.NegocioMatching;
 import br.prospero.mo.matching.dominio.PernaOco;
@@ -27,6 +29,7 @@ import static br.prospero.mo.matching.helper.EnvelopeMatching.*;
 @ApplicationScoped
 public class RepositorioMatchingJpa {
     @Inject Instance<EntityManager> gerenciadores;
+    @Inject RepositorioLiquidacao liquidacao;
 
     private EntityManager em() {
         return gerenciadores.get();
@@ -87,6 +90,9 @@ public class RepositorioMatchingJpa {
         consumirCompra(compra,q,consumo); consumirVenda(venda,q);
         if (pernaCompra!=null) executarPerna(pernaCompra,q);
         if (pernaVenda!=null) executarPerna(pernaVenda,q);
+        // RF08c (ADR-016): créditos D+2 esperados na mesma transação dos débitos D0, sob os locks das contas.
+        liquidacao.registrarExpectativas(uuid(evento,"id"),CreditoEsperado.doNegocio(texto(d,"negocio"),texto(evento,"ticker"),
+                compra.conta(),venda.conta(),p,q));
         inserir("matching_negocio","negocio",texto(d,"negocio"),assinaturaNegocio);
     }
 

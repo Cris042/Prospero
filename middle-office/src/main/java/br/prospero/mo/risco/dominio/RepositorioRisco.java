@@ -33,4 +33,7 @@ public interface RepositorioRisco {
      * mapa ficam com zero. Histórico e deduplicação são preservados.
      */
     void preparar(String conta, BigDecimal saldo, Map<String, Long> custodia);
+
+    /** Expectativa de crédito D+2 ainda não liquidada para a conta (ADR-016); leitura sob o lock da conta. */
+    boolean liquidacaoPendente(String conta);
 }

@@ -78,6 +78,10 @@ class MatchingPostgresIT {
     private Par preparar() {
         Par par = new Par(UUID.randomUUID(), UUID.randomUUID());
         QuarkusTransaction.requiringNew().run(() -> {
+            // RF08c: o mesmo id de negócio volta a cada teste; a expectativa acompanha a deduplicação apagada.
+            for (String tabela : new String[]{"liquidacao_expectativa", "liquidacao_aplicada", "liquidacao_aguardando", "liquidacao_recusada"}) {
+                em.createNativeQuery("DELETE FROM " + tabela).executeUpdate();
+            }
             em.createNativeQuery("DELETE FROM matching_evento").executeUpdate();
             em.createNativeQuery("DELETE FROM matching_negocio").executeUpdate();
             em.createNativeQuery("DELETE FROM reserva").executeUpdate();

@@ -15,6 +15,7 @@ import static org.hamcrest.Matchers.equalTo;
 @QuarkusTest
 class CarteiraResourceTest {
     private static final String CHAVE = "chave-sintetica-de-teste-com-mais-de-32-bytes";
+    @jakarta.inject.Inject RepositorioRiscoMemoria repositorio;
 
     private static String token(String conta, String... grupos) {
         var builder = Jwt.issuer("prospero-local").audience("prospero-middle-office").groups(Set.of(grupos))
@@ -67,5 +68,17 @@ class CarteiraResourceTest {
         preparar(prep, "CONTA-002", Map.of("saldo", "1.00", "custodia", Map.of("ALFA3", -1))).then().statusCode(400)
                 .body("codigo", equalTo("CUSTODIA_INVALIDA"));
         preparar(prep, "CONTA-002", Map.of("saldo", "1.00", "extra", 1)).then().statusCode(400);
+    }
+
+    @Test
+    void flagPadraoDesligadaPreparaMesmoComLiquidacaoPendente() {
+        // RF08c: sem emissor (RF08d) toda negociação deixa expectativa pendente; a recusa só liga na RF08e.
+        repositorio.marcarLiquidacaoPendente("CONTA-002");
+        try {
+            preparar(token(null, "risco:preparacao"), "CONTA-002", Map.of("saldo", "3.00")).then().statusCode(200)
+                    .body("saldoTotal", equalTo("3.00"));
+        } finally {
+            repositorio.limparLiquidacoesPendentes();
+        }
     }
 }

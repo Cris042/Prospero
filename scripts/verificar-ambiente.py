@@ -61,6 +61,11 @@ for service, port in [('front-office', 8081), ('middle-office', 8082), ('matchin
     aguardar(service + ': proxy Angular', frontend + f'/servicos/{service}/api/v1/sistema',
              lambda body, _, s=service: json.loads(body).get('servico') == s)
 
+# RF08c: consumidor de liquidacao.eventos.v1 ativo e métricas de aguardando/recusas publicadas (labels finitos).
+aguardar('middle-office: métricas de liquidação', endereco('middle-office', 8080, 8082) + '/q/metrics',
+         lambda body, _: 'prospero_liquidacao_aguardando' in body
+         and 'topico="liquidacao.eventos.v1"' in body)
+
 prometheus = endereco('prometheus', 9090, 19090)
 
 

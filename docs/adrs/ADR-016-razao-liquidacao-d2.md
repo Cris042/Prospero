@@ -1,7 +1,7 @@
 # ADR-016 — Razão em partidas dobradas e liquidação D+2
 
 - Data: 2026-10-24.
-- Estado: **aceita em 2026-10-24**; implementação em fatias RF08b–RF08e; RF08b implementada em revisão (branch `feat/rf08b-razao-bo`), demais não iniciadas aqui.
+- Estado: **aceita em 2026-10-24**; RF08c integrada pelo PR #44; RF08b implementada no PR #45, em revisão; RF08d–e planejadas.
 - Origem: refinamento da RF08 após merge autorizado do PR #42 (RF07).
 - Decisor: usuário, em 2026-10-24, escolhendo entre alternativas apresentadas: calendário "Seg–sex + feriados fixos", disponibilidade "Só após D+2", falhas "Sem falha simulada", legado "Exigir recriar bo-dados", plano de contas "Confirmo esse plano" após o exemplo numérico, e aceite dos defaults de histórico sem contraparte, recusa da preparação, risco PLAINTEXT e créditos ao robô. Registro no PR #43; andamento no [roadmap](../roadmap.md#rf08--razão-histórico-e-liquidação-d2).
 - Relação: complementa ADR-001/002/003/004; emenda ADR-012 (nova origem de alteração da carteira MO), ADR-013 (créditos adiados passam a D+2) e ADR-015 (transação de negócio ampliada e guarda do legado). Substitui, para a liquidação local, o desenho de claim/`DESCONHECIDO` avaliado no HLD-005.
@@ -63,7 +63,7 @@ Cada avanço liquida, em lotes limitados e retomáveis, toda pendência com data
 
 **BO, liquidação (D+2).** Uma transação local muda o estado por UPDATE condicional `PENDENTE → LIQUIDADO`, grava os lançamentos D+2 e a outbox. Queda antes do commit reverte tudo; unicidade por (negócio, lado) impede liquidar duas vezes. Relay próprio do BO, cópia do padrão MO, sem biblioteca compartilhada; teste de construção do producer com a configuração real (lição RF07). O worker não entra na prontidão.
 
-**Contrato BO → MO.** Tópico `liquidacao.eventos.v1`, 3 partições, chave = conta, retenção integral, criado pelo `kafka-init`, origem `back-office`. Evento `LIQUIDACAO_EFETIVADA` v1, um por lado, id determinístico derivado de `liquidacao:<negocioId>:<COMPRADOR|VENDEDOR>`, causação = evento do negócio, valores textuais.
+**Contrato BO → MO.** Tópico `liquidacao.eventos.v1`, 3 partições, chave = conta, retenção integral, criado pelo `kafka-init`, origem `back-office`. Evento `LIQUIDACAO_EFETIVADA` v1, um por lado, id determinístico derivado de `liquidacao:<negocioId>:<COMPRADOR|VENDEDOR>`, causação = evento do negócio, valores textuais. Derivação fixada na RF08c: `UUID.nameUUIDFromBytes` (UUID v3) dos bytes UTF-8 dessa string; campos do envelope no [HLD-003](../hlds/HLD-003-middle-office.md#crédito-de-liquidação-d2--rf08c).
 
 **MO.** Ao consumir o negócio, grava na mesma transação a expectativa de crédito por (negócio, lado): conta, recurso, ativo e valor exato, sem data. O consumidor de `liquidacao.eventos.v1` confere origem, id derivado, chave Kafka igual à conta do evento e igualdade com a expectativa; a data de liquidação é responsabilidade do BO e não é reconferida. Resultados por evento:
 
@@ -71,7 +71,7 @@ Cada avanço liquida, em lotes limitados e retomáveis, toda pendência com data
 - expectativa ainda ausente: o evento fica guardado como liquidação aguardando negócio, por (id, hash), sem crédito; a transação que grava a expectativa aplica o aguardando idêntico e recusa os divergentes do mesmo id. Não trava a partição nem a prontidão; volume aguardando tem teto configurado e, acima dele, novos eventos sem expectativa são recusados com motivo;
 - divergência ou contrato inválido: o evento é recusado e registrado com motivo, sem crédito e sem ocupar a deduplicação; a partição segue.
 
-O consumidor usa o modo financeiro do `ConsumoKafka` (sem descarte) apenas para falhas técnicas transitórias; pendência e recusa são estados persistidos, não exceções. Métricas de aguardando, recusadas e idade da mais antiga, com labels finitos.
+O consumidor usa o modo financeiro do `ConsumoKafka` (sem descarte) apenas para falhas técnicas transitórias; pendência e recusa são estados persistidos, não exceções. Métricas de aguardando, recusadas e idade da mais antiga, com labels finitos. Detalhes técnicos da RF08c: teto padrão 10000 (`MO_LIQUIDACAO_AGUARDANDO_TETO`) e a recusa da preparação atrás de `MO_RECUSAR_LIQUIDACAO_PENDENTE`, desligada até a RF08e, porque sem emissor toda negociação deixaria crédito pendente e quebraria as planilhas repetidas da CI.
 
 **Consultas.** `GET /api/v1/negocios` e `GET /api/v1/razao` no BO pela conta do JWT, escopo de leitura próprio, paginação por cursor opaco com limite máximo de 100, `no-store`, 503 durante bootstrap ou quarentena. O cursor não carrega a conta como autoridade; cursor inválido ou de outra conta é 400 genérico. Negócio de que a conta não participa é 404 idêntico ao inexistente. O proxy injeta o token de leitura só por rota e método exatos, como no ADR-015.
 

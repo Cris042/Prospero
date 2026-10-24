@@ -3,7 +3,7 @@ package br.prospero.mo.matching.helper;
 import java.math.BigDecimal;
 import static br.prospero.mo.matching.helper.EnvelopeMatching.exigir;
 
-/** Valores exatos debitados da compra; o troco volta ao disponível, sem crédito ao vendedor. */
+/** Valores exatos debitados da compra; o troco volta ao disponível. Créditos só na liquidação D+2 (ADR-016). */
 public final class CalculoConsumo {
     private CalculoConsumo() { }
     public record Compra(BigDecimal retido, BigDecimal custo, BigDecimal troco, long restante) { }
