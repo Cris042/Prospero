@@ -4,9 +4,9 @@
 .posicoes {
   margin: 2rem 0;
   padding: 1.5rem;
-  border: 1px solid #dbe4e0;
+  border: 1px solid var(--cor-borda-painel);
   border-radius: 1rem;
-  background: #fff;
+  background: var(--cor-superficie);
 }
 .cabecalho {
   display: flex;
@@ -19,24 +19,24 @@
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.12em;
-  color: #52665d;
+  color: var(--cor-texto-apoio-alt);
 }
 h2 {
   margin: 0;
   font-size: 1.5rem;
 }
 .nota {
-  color: #52665d;
+  color: var(--cor-texto-apoio-alt);
   max-width: 80ch;
   line-height: 1.6;
 }
 button {
   min-height: 44px;
   padding: 0.6rem 0.9rem;
-  border: 1px solid #bdcec5;
+  border: 1px solid var(--cor-borda-controle-alt);
   border-radius: 0.5rem;
-  background: #f5f9f7;
-  color: #183c2d;
+  background: var(--cor-superficie-botao);
+  color: var(--cor-texto-acao);
   cursor: pointer;
   font: inherit;
 }
@@ -56,7 +56,7 @@ table {
 th,
 td {
   padding: 1rem 0.75rem;
-  border-bottom: 1px solid #e7ede9;
+  border-bottom: 1px solid var(--cor-divisoria-alt);
   text-align: right;
 }
 th:first-child {
@@ -64,21 +64,21 @@ th:first-child {
 }
 thead th {
   font-size: 0.75rem;
-  color: #52665d;
+  color: var(--cor-texto-apoio-alt);
 }
 small {
   display: block;
   margin-top: 0.3rem;
   font-size: 0.7rem;
-  color: #52665d;
+  color: var(--cor-texto-apoio-alt);
 }
 .defasada,
 .erro {
-  color: #8a3a1c;
+  color: var(--cor-erro);
 }
 button:focus-visible,
 .rolagem:focus-visible {
-  outline: 3px solid #267852;
+  outline: 3px solid var(--cor-foco-alt);
   outline-offset: 3px;
 }
 .sr-only {
