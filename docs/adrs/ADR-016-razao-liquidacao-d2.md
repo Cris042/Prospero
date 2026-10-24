@@ -107,9 +107,11 @@ RF08b e RF08c não dependem uma da outra. O MO tolerante entra antes do emissor:
 | D+2: segunda → quarta, quinta → segunda, sexta → terça, feriado no intervalo e no próprio D+2, negócio em dia não útil, perto da meia-noite, `CALENDARIO_INSUFICIENTE` | b | JUnit com datas fixas |
 | `RAZAO_SEM_ORIGEM` falha fechado; recriar `bo-dados` reconstrói | b | IT V2 → V3 com dados; roteiro no PR |
 | Consultas: só a própria conta, 404 idêntico, cursor adulterado 400, limite, `no-store`, 503 | b | REST Assured; `razao.xlsx` (ADR-004) |
+| Invariante violada no BO entra em quarentena sem nova tentativa e as consultas retornam 503 | b | IT PostgreSQL; REST Assured |
 | Expectativa idêntica credita uma vez; aguardando aplica depois do negócio; divergente aguardando antes do legítimo não impede o crédito único; teto do aguardando; divergente recusado sem ocupar deduplicação; chave/origem incoerentes recusadas; partição segue | c | IT MO com eventos sintéticos |
 | Preparação com pendência → 409 `LIQUIDACAO_PENDENTE` sem escrita | c | REST Assured / IT |
 | Data de movimento: flag desligada 404, 401/403, retroativa 409, igual sem efeito, limite 422, concorrência, auditoria; ArchUnit sem `now()` | d | REST Assured, IT, ArchUnit |
+| Proxy não injeta o token administrativo e descarta `Authorization` na rota da data de movimento | d | Teste do proxy |
 | Liquidação uma vez com avanço repetido, lote maior que o limite, queda antes do commit e entre commit e relay | d | IT PostgreSQL; teste de configuração do producer |
 | Conciliação BO × MO com diferença zero; planilha avança até a data devolvida pela API; duas execuções na CI | e | `liquidacao.xlsx` |
 | Queda do BO durante a liquidação e MO parado no D+2 sem duplicar; robô creditado | e | CI com `kill`/`start`; `verificar-robo` |
