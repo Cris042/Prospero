@@ -586,7 +586,7 @@ def main():
     c.add_argument("--origem-bo", default="http://back-office:8080")
     c.add_argument("--origem-mo", default="http://middle-office:8080")
     c.add_argument("--validade", type=int, default=900)
-    c.add_argument("--perfil", choices=["mercado", "ordens", "risco", "sessao", "posicoes", "razao"], default="mercado",
+    c.add_argument("--perfil", choices=["mercado", "ordens", "risco", "sessao", "posicoes", "razao", "liquidacao"], default="mercado",
                    help="Menor privilégio: cada workbook recebe só os tokens de que precisa.")
     v = sub.add_parser("verificar-ordens", help="Verifica idempotência concorrente no PostgreSQL real (CONTA-003).")
     v.add_argument("--origem", default="http://127.0.0.1:8081")
@@ -677,6 +677,12 @@ def main():
                                    "razao-token-fo": {"origem": args.origem_bo, "headers": {
                                        "Authorization": "Bearer " + token("ordens", args.validade, "CONTA-002")}},
                                    "posicoes-a": bo("posicoes", "CONTA-002"), "posicoes-b": bo("posicoes", "CONTA-003")})
+    if args.perfil == "liquidacao":
+        # Somente leitura da conta robô e controle administrativo no processo runner, nunca no navegador.
+        config = {"servicos": {
+            "razao-robo": {"origem": args.origem_bo, "headers": {"Authorization": "Bearer " + token("razao", args.validade, "CONTA-004")}},
+            "risco-robo": risco(token("risco", args.validade, "CONTA-004")),
+            "movimento": {"origem": args.origem_bo, "headers": {"Authorization": "Bearer " + token("liquidacao", args.validade)}}}}
     escrever_config(args.destino, json.dumps(config, indent=2) + "\n")
     print("Configuração do runner gravada; token não exibido.")
 

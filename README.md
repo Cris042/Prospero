@@ -6,11 +6,11 @@ Simulador local de mercado financeiro com cinco ações fictícias, livro de ofe
 
 A fundação contém quatro microsserviços Quarkus/Java26, Angular e Docker Compose, com saúde, OpenAPI e métricas. RF01–RF04 entregam consulta de mercado sintético, boleta idempotente, validação de lote/tick/túnel e risco/reservas por Kafka. A ordem entra como `RECEBIDA` e o MO confirma `RESERVADA` ou `REJEITADA`. [Roadmap](docs/roadmap.md) registra PRs, gates e limites de cada entrega.
 
-RF05 integra matching ao risco e projeta execução no FO: prioridade preço-tempo/FIFO, preço passivo, parciais, IOC/FOK, Stop/Stop Limit, OCO e encerramento de sessão. O robô formador de mercado foi integrado no PR #36. O laboratório mantém uma sessão por log e posse exclusiva; não há virada diária automática. Liquidação e créditos de caixa/custódia dependem da RF08. A RF06a (PR #37) projeta cotação real e VWAP; a RF06b integrada pelo PR #38 apresenta polling e VWAP visual. [Contratos e recuperação](docs/hlds/HLD-004-matching-engine.md#contrato-de-integração-rf05b).
+RF05 integra matching ao risco e projeta execução no FO: prioridade preço-tempo/FIFO, preço passivo, parciais, IOC/FOK, Stop/Stop Limit, OCO e encerramento de sessão. O robô formador de mercado foi integrado no PR #36. O laboratório mantém uma sessão por log e posse exclusiva; não há virada diária automática. RF08b/c/d integram razão, liquidação D+2 e créditos de caixa/custódia; a RF08e fecha conciliação e tela. A RF06a (PR #37) projeta cotação real e VWAP; a RF06b integrada pelo PR #38 apresenta polling e VWAP visual. [Contratos e recuperação](docs/hlds/HLD-004-matching-engine.md#contrato-de-integração-rf05b).
 
-A RF07 está em validação: BO calcula a posição e o PnL dos negócios desde o início do log, sem inventar custo para a custódia inicial. Preço médio e resultados usam racionais exatos; quatro casas HALF_EVEN só na exposição. A consulta autenticada `/api/v1/posicoes` e a seção de posições distinguem cotação ausente/defasada e indisponibilidade da projeção. Autonegociação é neutra para a conta. Não há razão, liquidação ou crédito no MO; [desenho e recuperação](docs/hlds/HLD-005-back-office.md).
+A RF07 foi integrada pelo PR #42: BO calcula a posição e o PnL dos negócios desde o início do log, sem inventar custo para a custódia inicial. Preço médio e resultados usam racionais exatos; quatro casas HALF_EVEN só na exposição. A consulta autenticada `/api/v1/posicoes` e a seção de posições distinguem cotação ausente/defasada e indisponibilidade da projeção. Autonegociação é neutra para a conta. A RF08 acrescenta razão e liquidação no BO, crédito verificado no MO e histórico da conta na tela; [desenho e recuperação](docs/hlds/HLD-005-back-office.md).
 
-`python3 scripts/mercado.py preparar-demo` popula um UUID sintético de teste pela API e informa seu identificador; a consulta desse cenário exige `?namespace=<UUID>` nas APIs de ativos/livro. O mercado principal usa dados reais do matching e essa preparação não semeia o livro de execução. O token de escrita da conta demo vale7 dias; ao expirar, rode `python3 scripts/preparar-ambiente.py` e `docker compose up -d frontend`. Preparação de carteira recusa409 com reserva viva; não apaga ofertas nem reservas para limpar testes. `matching.xlsx` repete cenários por APIs e encerra suas ofertas por negócios reais.
+`python3 scripts/mercado.py preparar-demo` popula um UUID sintético de teste pela API e informa seu identificador; a consulta desse cenário exige `?namespace=<UUID>` nas APIs de ativos/livro. O mercado principal usa dados reais do matching e essa preparação não semeia o livro de execução. O token de escrita da conta demo vale7 dias; ao expirar, rode `python3 scripts/preparar-ambiente.py` e `docker compose up -d frontend`. Preparação de carteira recusa409 com reserva viva ou liquidação pendente; não apaga ofertas nem reservas para limpar testes. `matching.xlsx` repete cenários por APIs e encerra suas ofertas por negócios reais.
 
 ## Escopo do simulador
 
@@ -202,7 +202,7 @@ O comportamento pretendido distingue aumento, redução e abertura do lado opost
 | Vender 4 a 110 | 4 × (110 − 100) = 40 | Long 6, preço médio 100. |
 | Vender 15 a 110 | 10 × (110 − 100) = 100 | Short 5, preço médio 110; o resultado futuro desse novo lado depende da cotação/fechamento. |
 
-PnL não realizado é marcação da exposição ainda aberta; não é caixa liquidado. Negociação e liquidação são etapas diferentes, com reconciliação de caixa/custódia em D+2 conforme calendário a definir.
+PnL não realizado é marcação da exposição ainda aberta; não é caixa liquidado. Negociação e liquidação são etapas diferentes, com reconciliação de caixa/custódia em D+2 conforme calendário do ADR-016.
 
 </details>
 

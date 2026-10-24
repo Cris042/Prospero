@@ -10,6 +10,7 @@ import br.prospero.mo.liquidacao.dominio.RecursoCredito;
 import br.prospero.mo.liquidacao.dominio.RegrasLiquidacao;
 import br.prospero.mo.liquidacao.dominio.RepositorioLiquidacao;
 import br.prospero.mo.liquidacao.dominio.ResumoLiquidacao;
+import br.prospero.mo.liquidacao.dto.CreditosDTO.CreditoDTO;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -40,6 +41,21 @@ public class RepositorioLiquidacaoJpa implements RepositorioLiquidacao {
 
     private NativeQuery<?> nativa(String sql) {
         return em().createNativeQuery(sql).unwrap(NativeQuery.class);
+    }
+
+    /** Igualdade indexável pelo PK (negocio,lado), conta sempre do JWT; consulta limitada a dois lados. */
+    @Transactional
+    public List<CreditoDTO> consultarCreditos(String conta, String negocio) {
+        List<?> linhas = em().createNativeQuery("""
+                SELECT negocio, lado, ticker, recurso, coalesce(valor, quantidade), creditada_em IS NOT NULL
+                FROM liquidacao_expectativa WHERE negocio = :n AND conta = :c ORDER BY lado
+                """).setParameter("n", negocio).setParameter("c", conta).setMaxResults(2).getResultList();
+        return linhas.stream().map(l -> {
+            Object[] r = (Object[]) l;
+            String valor = r[3].equals("CAIXA") ? ((BigDecimal) r[4]).setScale(2).toPlainString()
+                    : ((BigDecimal) r[4]).toBigIntegerExact().toString();
+            return new CreditoDTO(r[0].toString(), r[1].toString(), r[2].toString(), r[3].toString(), valor, (Boolean) r[5]);
+        }).toList();
     }
 
     @Override

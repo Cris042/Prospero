@@ -30,6 +30,8 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+# Compatibilidade das provas D0 históricas; a fase RF08e ao fim exige a guarda ativa.
+export PROSPERO_CI_GUARDA_LIQUIDACAO=false
 python3 scripts/preparar-ambiente.py
 "${compose[@]}" config --quiet
 cache="${RUNNER_TEMP:?Runner temporário não definido}/prospero-maven"
@@ -119,4 +121,23 @@ playwright_deps=()
 python3 scripts/mercado.py verificar-robo --origem "$fo_origem" --projeto "$project"
 # RF05c.4: encerramento por último; o ativo passa a recusar ordens na data (uma sessão por log), não repetível.
 rodar_workbook sessao sessao
+# RF08e: fim da negociação, nenhuma preparação entre referência e conciliação.
+# A fase legada acima não serve como evidência da proteção de pendências.
+export PROSPERO_CI_GUARDA_LIQUIDACAO=true
+"${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 middle-office
+mo_origem="http://$("${compose[@]}" port middle-office 8080)"
+bo_origem="http://$("${compose[@]}" port back-office 8080)"
+timeout 600 python3 scripts/liquidacao.py --origem-bo "$bo_origem" --origem-mo "$mo_origem" \
+  --projeto "$project" --falhas > .ci-evidencias/liquidacao.json
+python3 -c 'import json; r=json.load(open(".ci-evidencias/liquidacao.json")); assert r["roboCreditado"] and r["ladosConciliados"]>50 and not r["diferencas"]'
+# kill/start pode renovar portas publicadas; tokens e nomes internos do runner permanecem próprios.
+mo_origem="http://$("${compose[@]}" port middle-office 8080)"
+bo_origem="http://$("${compose[@]}" port back-office 8080)"
+rodar_workbook liquidacao liquidacao
+rodar_workbook liquidacao liquidacao
+# Segunda conciliação, já D+2: nenhum crédito pendente, nenhum efeito adicional.
+timeout 240 python3 scripts/liquidacao.py --origem-bo "$bo_origem" --origem-mo "$mo_origem" > .ci-evidencias/liquidacao-repetida.json
+python3 -c 'import json; r=json.load(open(".ci-evidencias/liquidacao-repetida.json")); assert r["ladosConciliados"]==0 and not r["diferencas"]'
+# Captura do estado D+2 real, preservando também as capturas da fase D0.
+(cd frontend && PROSPERO_HISTORICO_LIQUIDADO=true npm run test:e2e -- --grep 'histórico consulta APIs reais' --output test-results-liquidado)
 printf '%s\n' 'Testes independentes, aplicação empacotada e observabilidade validados.'

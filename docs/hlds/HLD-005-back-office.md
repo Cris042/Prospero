@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. RF07, integrada pelo PR #42, implementa posição/PnL dos negócios desde a origem do log. RF08b (em revisão) acrescenta fatos econômicos, razão D0, liquidação pendente e consultas; liquidação D+2 e créditos no MO continuam RF08c–e. A posição parte de zero, não representa a custódia sintética inicial sem custo histórico. Regras confirmadas pelo usuário e limites no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
+Contexto de pós-negociação: RF07/RF08 e eventos de trajetória RF09. RF07, integrada pelo PR #42, implementa posição/PnL dos negócios desde a origem do log. RF08b (integrada pelo PR #45) acrescenta fatos econômicos, razão D0, liquidação pendente e consultas; RF08c/d integram crédito no MO e emissor D+2; conciliação e tela são RF08e. A posição parte de zero, não representa a custódia sintética inicial sem custo histórico. Regras confirmadas pelo usuário e limites no [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
 
 ## Stack e organização
 
@@ -145,7 +145,7 @@ Fundação: saúde de banco/Kafka, métricas técnicas, logs com correlação e 
 
 ## RF08d — data de movimento e liquidação
 
-Implementação na branch `feat/rf08d-liquidacao-bo`, conforme ADR-016. `POST /api/v1/data-movimento` recebe `{"dataAlvo":"2026-10-27"}`. A flag `BO_RELOGIO_HABILITADO` permanece desligada por padrão (404 antes da autenticação); ligada, exige audiência BO, grupo `liquidacao:administrar`, `sub` e `jti` limitados. `python3 scripts/mercado.py token --escopo liquidacao` emite o token local, sem passá-lo ao navegador. Os proxies descartam a autorização recebida na rota administrativa.
+Integrada pelo PR #47, conforme ADR-016. `POST /api/v1/data-movimento` recebe `{"dataAlvo":"2026-10-27"}`. A flag `BO_RELOGIO_HABILITADO` permanece desligada por padrão (404 antes da autenticação); ligada, exige audiência BO, grupo `liquidacao:administrar`, `sub` e `jti` limitados. `python3 scripts/mercado.py token --escopo liquidacao` emite o token local, sem passá-lo ao navegador. Os proxies descartam a autorização recebida na rota administrativa.
 
 A data inicia no primeiro uso com a data civil de São Paulo, persiste em `bo_data_movimento` e só avança: igual retorna 200 sem efeito; retroativa 409; mais de dez dias úteis ou fora da cobertura do calendário retorna 422. Lock da linha mais UPDATE condicional serializam avanços concorrentes. A sessão do matching e o relógio de cotação permanecem independentes.
 
@@ -157,4 +157,12 @@ Invariante ou constraint violada reverte o lote e grava quarentena em nova trans
 
 A V4 é aditiva e não modifica as migrações aplicadas. `bo_negocio_origem` guarda o id do evento NEGOCIO na transação D0 para a causação do crédito. Fatos gravados pela RF08b antes dessa tabela não contêm essa origem: não há backfill inferido. Se houver pendência anterior, o lote falha fechado com `LIQUIDACAO_SEM_ORIGEM`; exige reconstrução explícita do banco BO desde a origem do log, pelo procedimento de legado acima, sem reset automático. A V7 do MO também não cria expectativas para negócios antigos: antes de usar um histórico anterior à RF08c, recuperar explicitamente as expectativas pela origem; esta entrega não altera nem apaga volumes existentes.
 
-Recuperação de migração: preservar backup privado antes de atualizar um banco com dados; correções de schema usam nova versão Flyway. Restaurar backup completo e imagem compatível é alternativa operacional, sem Flyway Undo. Não foi executada restauração nesta entrega. Conciliação BO × MO, planilha de liquidação, falhas dos processos completos e ativação da recusa de preparação continuam na RF08e.
+Recuperação de migração: preservar backup privado antes de atualizar um banco com dados; correções de schema usam nova versão Flyway. Restaurar backup completo e imagem compatível é alternativa operacional, sem Flyway Undo. Não foi executada restauração nesta entrega. A RF08e acrescenta conciliação BO × MO, planilha de liquidação, prova de falhas dos processos completos e recusa da preparação ativa por padrão; estado e evidências no roadmap.
+
+## RF08e — histórico e conciliação por movimentos
+
+Angular consulta negócios e razão com páginas de 20, até 100 itens por seção, atualização manual e timeout de oito segundos; em falha preserva o snapshot com aviso. Valores textuais são formatados sem conversão financeira a ponto flutuante. O proxy injeta apenas o token de leitura da conta demo; data de movimento administrativa fica fora da tela.
+
+`scripts/liquidacao.py` usa somente APIs para os fatos/saldos: espera a expectativa MO de cada lado pendente, captura carteiras já com os débitos D0, avança a data no BO e confirma crédito aplicado no MO. Confere duas partidas D2 por lado, unidade/valor/data/transação e variação exata dos recursos, inclusive CONTA-004. As reservas não podem mudar durante a janela; saldos absolutos preparados antes não são tratados como razão histórica.
+
+Na CI descartável, worker/relay BO ficam inicialmente suspensos pela propriedade existente `prospero.liquidacao.worker-habilitado`; o POST confirma somente seu lote de até 50 lados. O harness confere configuração e labels, interrompe MO, observa BO parcialmente liquidado, interrompe BO e o recria com worker/relay ativos, preservando banco e log. BO conclui enquanto MO está parado; MO volta e confirma créditos. `finally` restaura os serviços da própria execução. Não é prova de backup, disco perdido ou host reiniciado. Duas execuções de `liquidacao.xlsx`, segunda conciliação sem novos créditos e capturas E2E de D0/D+2 complementam a recuperação; resultados reais ficam no PR.
