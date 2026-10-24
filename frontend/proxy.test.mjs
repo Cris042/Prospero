@@ -5,6 +5,7 @@ import test from 'node:test';
 process.env.FO_TOKEN_LEITURA = 'token-ficticio-leitura';
 process.env.FO_TOKEN_ORDENS = 'token-ficticio-ordens';
 process.env.BO_TOKEN_POSICOES = 'token-ficticio-posicoes';
+process.env.BO_TOKEN_RAZAO = 'token-ficticio-razao';
 const { default: proxy } = await import('./proxy.conf.mjs');
 const leitura = proxy['/servicos/front-office/api/v1/ativos'];
 
@@ -111,4 +112,65 @@ test('rota genérica do BO não repassa Authorization recebido do navegador', ()
   const res = { end() {} };
   assert.equal(proxy['/servicos/back-office'].bypass(req, res), undefined);
   assert.equal(req.headers.authorization, undefined);
+});
+
+function consultarRazao(rota, method, url, host = 'localhost:4200') {
+  const req = { method, url, headers: { host, authorization: 'Bearer cliente-nao-confiavel' } };
+  const res = {
+    statusCode: 200,
+    end(corpo) {
+      this.corpo = corpo;
+    },
+  };
+  return { req, res, resultado: proxy[rota].bypass(req, res) };
+}
+const NEGOCIOS = '/servicos/back-office/api/v1/negocios';
+const RAZAO = '/servicos/back-office/api/v1/razao';
+
+test('negócios e razão GET/HEAD usam credencial de leitura BO só no servidor e descartam a do cliente', () => {
+  for (const metodo of ['GET', 'HEAD']) {
+    for (const [rota, caminho] of [
+      [NEGOCIOS, NEGOCIOS],
+      [NEGOCIOS, `${NEGOCIOS}?limite=20&cursor=djEucmF6YW8uOS5hYmM`],
+      [NEGOCIOS, `${NEGOCIOS}/ALFA3-2026-10-23-1`],
+      [NEGOCIOS, `${NEGOCIOS}/nao-e-um-negocio`],
+      [RAZAO, RAZAO],
+      [RAZAO, `${RAZAO}?limite=100`],
+    ]) {
+      const { req, res, resultado } = consultarRazao(rota, metodo, caminho);
+      assert.equal(resultado, undefined, caminho);
+      assert.equal(res.statusCode, 200);
+      assert.equal(req.headers.authorization, undefined);
+    }
+  }
+  for (const rota of [NEGOCIOS, RAZAO]) {
+    assert.equal(proxy[rota].headers.Authorization, 'Bearer token-ficticio-razao');
+  }
+});
+
+test('negócios e razão recusam escrita, Host externo e extensões de rota', () => {
+  for (const rota of [NEGOCIOS, RAZAO]) {
+    for (const metodo of ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'TRACE', 'CONNECT']) {
+      const { res, resultado } = consultarRazao(rota, metodo, rota);
+      assert.equal(resultado, false);
+      assert.equal(res.statusCode, 403);
+    }
+    for (const host of ['evil.example', 'localhost.evil.example', '']) {
+      const { res, resultado } = consultarRazao(rota, 'GET', rota, host);
+      assert.equal(resultado, false);
+      assert.equal(res.statusCode, 421);
+    }
+  }
+  for (const [rota, caminho] of [
+    [NEGOCIOS, `${NEGOCIOS}-extra`],
+    [NEGOCIOS, `${NEGOCIOS}/ALFA3-2026-10-23-1/lancamentos`],
+    [NEGOCIOS, `${NEGOCIOS}/..%2Fposicoes`],
+    [NEGOCIOS, `${NEGOCIOS}/`],
+    [RAZAO, `${RAZAO}/admin`],
+    [RAZAO, `${RAZAO}-extra`],
+  ]) {
+    const { res, resultado } = consultarRazao(rota, 'GET', caminho);
+    assert.equal(resultado, false, caminho);
+    assert.equal(res.statusCode, 403);
+  }
 });

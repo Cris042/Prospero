@@ -16,6 +16,7 @@ function tokenDoAmbiente(nome) {
 const token = tokenDoAmbiente('FO_TOKEN_LEITURA');
 const tokenOrdens = tokenDoAmbiente('FO_TOKEN_ORDENS');
 const tokenPosicoes = tokenDoAmbiente('BO_TOKEN_POSICOES');
+const tokenRazao = tokenDoAmbiente('BO_TOKEN_RAZAO');
 const ROTA_ORDENS = /^\/servicos\/front-office\/api\/v1\/ordens(-oco)?(\/[0-9a-f-]{36})?(\?.*)?$/;
 const ORIGEM_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/;
 
@@ -41,6 +42,19 @@ function posicoesPermitidas(req, res) {
     return false;
   }
   return ativosPermitidos(req, res);
+}
+// RF08b: listagem, um negócio (segmento único; o BO responde 404 idêntico) e razão, somente leitura.
+const ROTA_NEGOCIOS = /^\/servicos\/back-office\/api\/v1\/negocios(?:\/[A-Za-z0-9-]{1,40})?(?:\?.*)?$/;
+const ROTA_RAZAO = /^\/servicos\/back-office\/api\/v1\/razao(?:\?.*)?$/;
+function leituraBo(rota) {
+  return (req, res) => {
+    if (!rota.test(req.url ?? '')) {
+      res.statusCode = 403;
+      res.end('{"erro":"Rota não permitida"}');
+      return false;
+    }
+    return ativosPermitidos(req, res);
+  };
 }
 const PREPARACAO = /preparacoes-(mercado|risco)/i;
 
@@ -119,6 +133,18 @@ export default {
     pathRewrite: { '^/servicos/back-office': '' },
     headers: tokenPosicoes ? { Authorization: `Bearer ${tokenPosicoes}` } : {},
     bypass: posicoesPermitidas,
+  },
+  '/servicos/back-office/api/v1/negocios': {
+    ...servico(8084),
+    pathRewrite: { '^/servicos/back-office': '' },
+    headers: tokenRazao ? { Authorization: `Bearer ${tokenRazao}` } : {},
+    bypass: leituraBo(ROTA_NEGOCIOS),
+  },
+  '/servicos/back-office/api/v1/razao': {
+    ...servico(8084),
+    pathRewrite: { '^/servicos/back-office': '' },
+    headers: tokenRazao ? { Authorization: `Bearer ${tokenRazao}` } : {},
+    bypass: leituraBo(ROTA_RAZAO),
   },
   '/servicos/back-office': {
     ...servico(8084),
