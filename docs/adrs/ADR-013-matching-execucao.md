@@ -1,7 +1,7 @@
 # ADR-013 — Matching, admissão pelo MO e ciclo de execução (RF05)
 
 - Data: 2026-10-18.
-- Estado: **aceita**; implementação em fatias RF05a–RF05d (roadmap).
+- Estado: **aceita**; implementação em fatias RF05a–RF05d (roadmap). Emendada pelo [ADR-016](ADR-016-razao-liquidacao-d2.md): créditos ao comprador e ao vendedor adiados para a RF08 entram em D+2.
 - Origem: refinamento da [RF05](../roadmap.md#rf05--matching-e-ciclo-de-execução) com cinco pareceres medium (arquitetura, QA, segurança, operação, viabilidade), todos **SEGUIR COM RESSALVAS**.
 - Decisor: usuário (admissão pelo MO, robô formador de mercado na RF05, autonegociação permitida, efeitos de caixa/custódia só na RF08); detalhes técnicos consolidados dos pareceres.
 - Relação: **substitui parcialmente o ADR-002** quanto à orquestração — o FO continua dono do estado visível da ordem, mas a admissão no matching é publicada pelo MO; complementa ADR-010, ADR-011 e ADR-012.

@@ -1,7 +1,7 @@
 # ADR-012 — Risco, reservas e SAGA FO ↔ MO (RF04)
 
 - Data: 2026-10-18.
-- Estado: **aceita e implementada** — RF04a (contrato, reserva e SAGA, PR #21) e RF04b (carteira e preparação local no MO, `risco.xlsx`, tela, prova SQL e recuperação).
+- Estado: **aceita e implementada** — RF04a (contrato, reserva e SAGA, PR #21) e RF04b (carteira e preparação local no MO, `risco.xlsx`, tela, prova SQL e recuperação). Emendada pelo [ADR-016](ADR-016-razao-liquidacao-d2.md): créditos D+2 verificados por expectativa passam a alterar a carteira MO e a preparação recusa liquidação pendente.
 - Origem: refinamento da [RF04](../roadmap.md#rf04--risco-reservas-e-saga) com cinco pareceres medium (arquitetura, QA, segurança, operação, viabilidade), todos **SEGUIR COM RESSALVAS**.
 - Decisor: usuário (carteiras iniciais e preparação local, sem short, preço de reserva sem limite, OCO e quantidade máxima); detalhes técnicos consolidados dos pareceres.
 

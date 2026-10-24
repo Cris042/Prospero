@@ -1,7 +1,7 @@
 # ADR-015 — Projeção de posições no back office
 
 - Data: 2026-10-23.
-- Estado: **aceita em 2026-10-23**, em implementação; proposta originalmente registrada no PR #41.
+- Estado: **aceita em 2026-10-23**; implementada pelo PR #42 (merge `fea0b23`); proposta originalmente registrada no PR #41. Emendada pelo [ADR-016](ADR-016-razao-liquidacao-d2.md) para a RF08.
 - Origem: refinamento inicial da RF07, após merge autorizado do PR #38.
 - Decisor: usuário, confirmação explícita “conformo sim, pode seguir” após apresentação das regras; andamento no [roadmap](../roadmap.md#rf07--posições-e-resultado-financeiro).
 - Relação: complementa ADR-001/002/003/004 e ADR-013; não altera reservas, admissão ou liquidação.
