@@ -3,6 +3,8 @@ package br.prospero.bo;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.lang.ArchRule;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -10,6 +12,16 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
 
 @AnalyzeClasses(packages = "br.prospero.bo", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArquiteturaTest {
+    @ArchTest
+    static final ArchRule dominioSemRelogioDireto = noClasses().that()
+            .resideInAnyPackage("..dominio..", "..helper..")
+            .should().callMethodWhere(new DescribedPredicate<JavaMethodCall>("obtém now() de java.time") {
+                @Override public boolean test(JavaMethodCall chamada) {
+                    return chamada.getTarget().getName().equals("now")
+                            && chamada.getTarget().getOwner().getPackageName().startsWith("java.time");
+                }
+            });
+
     @ArchTest
     static final ArchRule restNaoAcessaJpa = noClasses().that().resideInAPackage("..rest..")
             .should().dependOnClassesThat().resideInAnyPackage("..jpa..", "jakarta.persistence..");

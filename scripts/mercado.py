@@ -27,11 +27,11 @@ ambiente = import_module("preparar-ambiente")
 ESCOPOS = {"leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "mercado:preparacao"],
            "ordens": ["mercado:leitura", "ordens:enviar", "ordens:leitura"],
            "risco": ["risco:leitura"], "risco-preparacao": ["risco:preparacao"], "sessao": ["sessao:encerrar"], "posicoes": ["posicoes:leitura"],
-           "razao": ["razao:leitura"]}
+           "razao": ["razao:leitura"], "liquidacao": ["liquidacao:administrar"]}
 # Escopos do MO usam audiência própria (RF04b): token do FO não vale no MO e vice-versa.
 AUDIENCIAS = {"risco": "prospero-middle-office", "risco-preparacao": "prospero-middle-office",
               "sessao": "prospero-middle-office", "posicoes": "prospero-back-office",
-              "razao": "prospero-back-office"}
+              "razao": "prospero-back-office", "liquidacao": "prospero-back-office"}
 POR_CONTA = {"ordens", "risco", "posicoes", "razao"}
 ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
 CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"}
@@ -51,6 +51,9 @@ def token(escopo, validade, conta=None):
     agora = int(time.time())
     claims = {"iss": "prospero-local", "aud": AUDIENCIAS.get(escopo, "prospero-front-office"), "iat": agora,
               "exp": agora + validade, "groups": ESCOPOS[escopo]}
+    if escopo == "liquidacao":
+        claims["sub"] = "operador-local"
+        claims["jti"] = str(uuid.uuid4())
     if conta:
         claims["sub"] = conta
     return ambiente.jwt(claims, chave)

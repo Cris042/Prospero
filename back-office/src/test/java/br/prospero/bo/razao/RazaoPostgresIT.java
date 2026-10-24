@@ -60,7 +60,7 @@ class RazaoPostgresIT {
     void prepararSomenteSchemaDaExecucao() throws Exception {
         try (var c = conexao(); var s = c.createStatement()) {
             // TRUNCATE não dispara os gatilhos de linha append-only; só o harness descartável limpa o schema.
-            s.execute("TRUNCATE bo_lancamento,bo_liquidacao,bo_negocio_fato,bo_transporte,bo_evento,bo_negocio,bo_checkpoint,bo_log");
+            s.execute("TRUNCATE bo_negocio_origem,bo_lancamento,bo_liquidacao,bo_negocio_fato,bo_transporte,bo_evento,bo_negocio,bo_checkpoint,bo_log");
             s.execute("UPDATE bo_posicao SET quantidade=0,medio_n=null,medio_d=null,realizado_n='0',realizado_d='1'");
             s.execute("UPDATE bo_cotacao SET preco=null,sessao=null,encerrada=false,revisao=0,atualizada_em=null");
             s.execute("DROP TRIGGER IF EXISTS it_falha ON bo_liquidacao");

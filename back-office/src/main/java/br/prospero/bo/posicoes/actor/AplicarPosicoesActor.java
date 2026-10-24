@@ -36,6 +36,7 @@ public class AplicarPosicoesActor {
     private void aplicarNegocio(EventoMatching evento, EventoMatching.Negocio negocio) {
         FatoNegocio fato = FatoNegocio.de(evento, negocio, razao.calendario());
         razao.registrar(fato, PlanoDeContas.d0(fato));
+        razao.registrarOrigem(fato.negocio(), evento.id());
         // A mesma conta nos dois lados não realiza resultado nem altera médio; cotação continua sendo fato de mercado.
         if (!negocio.compra().conta().equals(negocio.venda().conta())) {
             var deltas = new TreeMap<String, Long>();

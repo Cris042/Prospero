@@ -26,6 +26,7 @@ def main():
         ("back-office", "BO", "bo", "PosicoesPostgresIT"),
         ("back-office", "BO", "bo", "RacionalPostgresIT"),
         ("back-office", "BO", "bo", "RazaoPostgresIT"),
+        ("back-office", "BO", "bo", "LiquidacaoPostgresIT"),
         ("matching-engine", "ME", "me", "CheckpointPostgresIT"),
         ("middle-office", "MO", "mo", "MatchingPostgresIT"),
         ("middle-office", "MO", "mo", "OcoPostgresIT"),

@@ -279,6 +279,7 @@ services:
     ports:
     - 127.0.0.1:8084:8080
     environment:
+      BO_RELOGIO_HABILITADO: ${BO_RELOGIO_HABILITADO:-false}
       DB_URL: jdbc:postgresql://postgres-back-office:5432/prospero_bo
       DB_USER: prospero_bo
       DB_PASSWORD: ${BO_DB_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
