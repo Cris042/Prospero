@@ -32,6 +32,8 @@ Verificação local: domínio/propriedades, REST/JWT, consumidor controlado e Po
 
 ## Liquidação, recuperação e pendências
 
+**Decisão RF08:** o [ADR-016](../adrs/ADR-016-razao-liquidacao-d2.md) fixa calendário, data de movimento, plano de contas, estados `PENDENTE → LIQUIDADO`, contrato `liquidacao.eventos.v1` e expectativa de crédito no MO. A liquidação local é uma transação BO com UPDATE condicional; claim/lease/`DESCONHECIDO` abaixo permanecem como avaliação para efeitos externos futuros, não adotados. Os parágrafos seguintes registram a análise anterior.
+
 D+2 precisa de calendário/dias úteis/feriados, estados, falhas, conciliação e relógio controlável por API de teste. Diferenciar disponível, reservado e liquidado e publicar efeitos idempotentes para MO. Repetir job/evento após reinício não pode liquidar novamente; resultado desconhecido exige reconciliação segura, sem assumir falha e refazer efeitos.
 
 Resolver conflito conceitual entre append-only e `lancamento.estado`; estados de liquidação não estão completamente modelados. Definir projeção não realizada por cotação/idade, passagem de ordenação por ativo para conta, participantes, IDs, e fechamento de caixa/custódia. O dicionário não define toda a contabilidade nem um scheduler adotado.
