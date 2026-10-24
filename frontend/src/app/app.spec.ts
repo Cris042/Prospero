@@ -3,7 +3,6 @@ import { of } from 'rxjs';
 import { App } from './app';
 import { MercadoService } from './mercado/mercado.service';
 import { OrdensService } from './ordens/ordens.service';
-import { SistemaService } from './sistema/sistema.service';
 import { PosicoesService } from './posicoes/posicoes.service';
 
 describe('Painel de fundação', () => {
@@ -28,23 +27,6 @@ describe('Painel de fundação', () => {
           provide: OrdensService,
           useValue: { listar: () => of({ ordens: [], proximoCursor: null }) },
         },
-        {
-          provide: SistemaService,
-          useValue: {
-            consultar: () =>
-              of([
-                {
-                  id: 'front-office',
-                  nome: 'Front office',
-                  papel: 'Ordens',
-                  porta: 8081,
-                  disponivel: false,
-                  versao: '—',
-                  etapa: 'Não foi possível consultar',
-                },
-              ]),
-          },
-        },
       ],
     }).compileComponents();
   });
@@ -57,11 +39,34 @@ describe('Painel de fundação', () => {
     expect(html.textContent).toContain('Liquidação ainda não implementada');
   });
 
-  it('mostra indisponibilidade por texto e oferece nova consulta', async () => {
+  it('não exibe mais o estado dos serviços na página principal', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const html = fixture.nativeElement as HTMLElement;
-    expect(html.textContent).toContain('Indisponível');
-    expect(html.textContent).toContain('Atualizar');
+    expect(html.querySelector('.componentes')).toBeNull();
+    expect(html.textContent).not.toContain('Estado dos serviços');
+  });
+
+  it('oferece alternância de tema acessível na barra superior', async () => {
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const botao = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '.topbar button.alternar-tema',
+    )!;
+    expect(botao.textContent).toContain('Tema escuro');
+    expect(botao.getAttribute('aria-pressed')).toBe('false');
+
+    botao.click();
+    await fixture.whenStable();
+    expect(botao.getAttribute('aria-pressed')).toBe('true');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+    botao.click();
+    await fixture.whenStable();
+    expect(botao.getAttribute('aria-pressed')).toBe('false');
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
   });
 });

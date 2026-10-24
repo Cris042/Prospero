@@ -1,6 +1,6 @@
 # Próspero — Angular
 
-Interface local do simulador. Apresenta os quatro contextos, mercado real do matching e boleta com acompanhamento de ordens. A RF05 integra execução, risco, Stop/Stop Limit e OCO; posições e liquidação continuam pendentes. Estado e evidências no roadmap global.
+Interface local do simulador. Apresenta mercado real do matching, boleta com acompanhamento de ordens e posições; a identidade dos quatro serviços segue disponível pelo Swagger de cada um. A RF05 integra execução, risco, Stop/Stop Limit e OCO; posições e liquidação continuam pendentes. Estado e evidências no roadmap global.
 
 ## Executar e verificar
 
@@ -15,6 +15,10 @@ npm start
 Node 24.16.0; Angular 22.2.3 e TypeScript 6.0. O dev server usa `proxy.conf.mjs` para as APIs em localhost:8081–8084 e injeta o token de leitura da RF01 (`FO_TOKEN_LEITURA`) e o de ordens da conta demo (`FO_TOKEN_ORDENS`, só GET/POST em `/api/v1/ordens*`, POST com Origin local), lidos do ambiente ou do `.env`; a preparação de mercado é bloqueada pelo proxy. O Nginx do container aplica as mesmas regras, além de recusar Host não local (421) e limitar a taxa de envio. No container, o build estático é servido por Nginx em 8080 e publicado em localhost:4200, com proxy por DNS Docker e mesma origem.
 
 Consulte o [roadmap Angular](ROADMAP.md), o [README geral](../README.md) e os [contratos de API](../docs/adrs/ADR-003-contratos-api.md). O runner de planilhas da P03 é uma CLI em container, descrita abaixo.
+
+## Tema claro e escuro
+
+As cores ficam em variáveis CSS em `src/styles.css`; `:root` define o tema claro e o escuro reutiliza os mesmos nomes. Sem escolha salva, a página segue `prefers-color-scheme`. O botão “Tema escuro” da barra superior (`aria-pressed`) fixa a escolha em `data-theme` no `<html>` e a salva em `localStorage` (`prospero-tema`); um script inline no `index.html` aplica a escolha antes do primeiro paint. Com armazenamento bloqueado, a troca vale só na sessão.
 
 ## Atualização do mercado — RF06b
 

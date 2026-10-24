@@ -2,7 +2,18 @@
   <a class="marca" href="/" aria-label="Próspero — início"
     ><span class="simbolo" aria-hidden="true">P</span> Próspero</a
   >
-  <span class="ambiente">Ambiente local de estudo</span>
+  <div class="acoes-topo">
+    <span class="ambiente">Ambiente local de estudo</span>
+    <button
+      type="button"
+      class="alternar-tema"
+      [attr.aria-pressed]="tema.tema() === 'escuro'"
+      (click)="tema.alternar()"
+    >
+      <span aria-hidden="true">{{ tema.tema() === 'escuro' ? '☾' : '☀' }}</span
+      ><span class="rotulo-tema">Tema escuro</span>
+    </button>
+  </div>
 </header>
 <main>
   <section class="abertura" aria-labelledby="titulo">
@@ -23,46 +34,6 @@
   <app-mercado />
   <app-boleta />
   <app-posicoes />
-  <section class="componentes" aria-labelledby="servicos-titulo">
-    <div class="cabecalho-secao">
-      <div>
-        <p class="sobretitulo">QUATRO CONTEXTOS INDEPENDENTES</p>
-        <h2 id="servicos-titulo">Estado dos serviços</h2>
-      </div>
-      <button type="button" (click)="atualizar()" [disabled]="carregando()">
-        {{ carregando() ? 'Consultando…' : 'Atualizar' }}
-      </button>
-    </div>
-    <div class="grade" aria-live="polite" [attr.aria-busy]="carregando()">
-      @for (servico of servicos(); track servico.id) {
-        <article class="cartao">
-          <span class="estado" [class.disponivel]="servico.disponivel"
-            ><span aria-hidden="true">●</span>
-            {{ servico.disponivel ? 'Disponível' : 'Indisponível' }}</span
-          >
-          <h3>{{ servico.nome }}</h3>
-          <p>{{ servico.papel }}</p>
-          <div class="detalhes">
-            <span>{{ servico.etapa }}</span
-            ><span>{{ servico.versao }}</span>
-          </div>
-          <a
-            [href]="'http://localhost:' + servico.porta + '/q/swagger-ui/'"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Explorar a API <span aria-hidden="true">↗</span
-            ><span class="sr-only"> (abre em nova aba)</span></a
-          >
-        </article>
-      } @empty {
-        <p>Consultando a identidade e a prontidão dos quatro serviços…</p>
-      }
-    </div>
-    <p class="nota">
-      A disponibilidade confirma a conexão com PostgreSQL e Kafka. Cada serviço possui seu próprio
-      banco.
-    </p>
-  </section>
   <section class="fluxo" aria-labelledby="fluxo-titulo">
     <p class="sobretitulo">CAMINHO DA ORDEM</p>
     <h2 id="fluxo-titulo">Uma ordem, quatro responsabilidades.</h2>

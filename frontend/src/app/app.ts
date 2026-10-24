@@ -1,17 +1,8 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  inject,
-  OnInit,
-  signal,
-} from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { finalize } from 'rxjs';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Mercado } from './mercado/mercado';
 import { Boleta } from './ordens/boleta';
 import { Posicoes } from './posicoes/posicoes';
-import { EstadoServico, SistemaService } from './sistema/sistema.service';
+import { TemaService } from './tema/tema.service';
 
 @Component({
   selector: 'app-root',
@@ -20,25 +11,6 @@ import { EstadoServico, SistemaService } from './sistema/sistema.service';
   imports: [Mercado, Boleta, Posicoes],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class App implements OnInit {
-  private readonly sistema = inject(SistemaService);
-  private readonly destroyRef = inject(DestroyRef);
-  readonly servicos = signal<EstadoServico[]>([]);
-  readonly carregando = signal(false);
-
-  ngOnInit(): void {
-    this.atualizar();
-  }
-
-  atualizar(): void {
-    if (this.carregando()) return;
-    this.carregando.set(true);
-    this.sistema
-      .consultar()
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        finalize(() => this.carregando.set(false)),
-      )
-      .subscribe((servicos) => this.servicos.set(servicos));
-  }
+export class App {
+  protected readonly tema = inject(TemaService);
 }

@@ -1,32 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-const servicos = [
-  { id: 'front-office', nome: 'Front office' },
-  { id: 'middle-office', nome: 'Middle office' },
-  { id: 'matching-engine', nome: 'Matching engine' },
-  { id: 'back-office', nome: 'Back office' },
-];
-
-function cartao(page: Page, nome: string) {
-  return page
-    .getByRole('article')
-    .filter({ has: page.getByRole('heading', { name: nome, exact: true }) });
-}
-
-async function esperarDisponiveis(page: Page) {
-  await expect(page.getByRole('article')).toHaveCount(4);
-  for (const servico of servicos) {
-    await expect(cartao(page, servico.nome).locator('.estado')).toHaveText('● Disponível', {
-      timeout: 15_000,
-    });
-    await expect(
-      cartao(page, servico.nome).getByRole('link', { name: /Explorar a API/ }),
-    ).toHaveAttribute('rel', 'noopener noreferrer');
-  }
-  await expect(page.getByRole('button', { name: 'Atualizar', exact: true })).toBeEnabled();
-}
-
-test('consulta os quatro serviços reais e atualiza sem erros ou transbordamento', async ({
+test('apresenta a página principal sem erros, sem transbordamento e sem estado dos serviços', async ({
   page,
 }, testInfo) => {
   const erros: string[] = [];
@@ -34,44 +8,16 @@ test('consulta os quatro serviços reais e atualiza sem erros ou transbordamento
   page.on('console', (mensagem) => {
     if (mensagem.type() === 'error') erros.push(mensagem.text());
   });
-  const respostas: { url: string; status: number }[] = [];
-  page.on('response', (resposta) => {
-    if (
-      /\/servicos\/[^/]+\/(api\/v1\/sistema|q\/health\/ready)$/.test(
-        new URL(resposta.url()).pathname,
-      )
-    ) {
-      respostas.push({ url: resposta.url(), status: resposta.status() });
-    }
-  });
 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Próspero');
   await expect(
     page.getByText('Liquidação ainda não implementada.', { exact: false }),
   ).toBeVisible();
-  await esperarDisponiveis(page);
-  for (const servico of servicos) {
-    for (const rota of ['api/v1/sistema', 'q/health/ready']) {
-      expect(
-        respostas.filter((resposta) => resposta.url.endsWith(`/servicos/${servico.id}/${rota}`)),
-      ).toHaveLength(1);
-    }
-  }
-  expect(respostas.every((resposta) => resposta.status === 200)).toBe(true);
-
-  const atualizacoes = servicos.flatMap((servico) =>
-    ['api/v1/sistema', 'q/health/ready'].map((rota) =>
-      page.waitForResponse(
-        (resposta) =>
-          resposta.url().endsWith(`/servicos/${servico.id}/${rota}`) && resposta.status() === 200,
-      ),
-    ),
-  );
-  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
-  await Promise.all(atualizacoes);
-  await esperarDisponiveis(page);
-  expect(respostas).toHaveLength(16);
+  await expect(page.getByRole('heading', { name: 'Estado dos serviços' })).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Uma ordem, quatro responsabilidades.' }),
+  ).toBeVisible();
   expect(erros).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -82,27 +28,35 @@ test('consulta os quatro serviços reais e atualiza sem erros ou transbordamento
   });
 });
 
-test('isola indisponibilidade de um backend e recupera após nova consulta', async ({ page }) => {
-  const erros: string[] = [];
-  page.on('pageerror', (erro) => erros.push(erro.message));
-  const rota = '**/servicos/middle-office/api/v1/sistema';
-  await page.route(rota, (route) =>
-    route.fulfill({
-      status: 503,
-      contentType: 'application/json',
-      body: '{"erro":"indisponibilidade controlada no teste"}',
-    }),
-  );
+test('segue o tema do sistema e persiste a alternância entre recargas', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
-  await expect(cartao(page, 'Middle office').locator('.estado')).toHaveText('● Indisponível');
-  await expect(cartao(page, 'Middle office')).toContainText('Não foi possível consultar');
-  for (const servico of servicos.filter((servico) => servico.id !== 'middle-office')) {
-    await expect(cartao(page, servico.nome).locator('.estado')).toHaveText('● Disponível', {
-      timeout: 15_000,
-    });
-  }
-  await page.unroute(rota);
-  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
-  await esperarDisponiveis(page);
-  expect(erros).toEqual([]);
+  const botao = page.getByRole('button', { name: 'Tema escuro' });
+  await expect(botao).toHaveAttribute('aria-pressed', 'true');
+  const fundo = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(await fundo()).toBe('rgb(15, 23, 20)');
+
+  await botao.focus();
+  await page.keyboard.press('Enter');
+  await expect(botao).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  expect(await fundo()).toBe('rgb(246, 248, 244)');
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.getByRole('button', { name: 'Tema escuro' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+
+  await page.getByRole('button', { name: 'Tema escuro' }).click();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(await fundo()).toBe('rgb(15, 23, 20)');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: testInfo.outputPath('tema-escuro.png'), fullPage: true });
 });
