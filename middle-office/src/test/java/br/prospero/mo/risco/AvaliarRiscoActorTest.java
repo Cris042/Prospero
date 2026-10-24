@@ -177,6 +177,22 @@ class AvaliarRiscoActorTest {
         final Map<UUID, Decisao> decisoes = new HashMap<>();
         final Map<String, BigDecimal> totais = new HashMap<>();
         final Map<String, Long> custodiaTotal = new HashMap<>();
+        /** RF08c: contas com expectativa de crédito D+2 não liquidada. */
+        final java.util.Set<String> liquidacoesPendentes = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+        @Override
+        public boolean liquidacaoPendente(String conta) {
+            return liquidacoesPendentes.contains(conta);
+        }
+
+        /** Métodos, não campos: os testes Quarkus recebem o proxy do bean. */
+        public void marcarLiquidacaoPendente(String conta) {
+            liquidacoesPendentes.add(conta);
+        }
+
+        public void limparLiquidacoesPendentes() {
+            liquidacoesPendentes.clear();
+        }
 
         @Override
         public Optional<Decisao> decisao(UUID intencao) {
