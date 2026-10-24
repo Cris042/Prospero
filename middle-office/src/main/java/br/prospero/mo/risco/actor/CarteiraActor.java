@@ -28,7 +28,7 @@ public class CarteiraActor {
     private final boolean recusarLiquidacaoPendente;
 
     /**
-     * {@code recusarLiquidacaoPendente} (MO_RECUSAR_LIQUIDACAO_PENDENTE) nasce desligada: sem o emissor da RF08d toda
+     * {@code recusarLiquidacaoPendente} (MO_RECUSAR_LIQUIDACAO_PENDENTE) é ligada na RF08e. No perfil legado de testes D0, toda
      * negociação deixa crédito pendente e as planilhas repetidas da CI não conseguiriam preparar (ADR-016, RF08e liga).
      */
     @Inject
@@ -36,7 +36,7 @@ public class CarteiraActor {
                          @ConfigProperty(name = "prospero.risco.preparacao.habilitada", defaultValue = "false")
                          boolean preparacaoHabilitada,
                          @ConfigProperty(name = "prospero.risco.preparacao.recusar-liquidacao-pendente",
-                                 defaultValue = "false") boolean recusarLiquidacaoPendente) {
+                                 defaultValue = "true") boolean recusarLiquidacaoPendente) {
         this.repositorio = repositorio;
         this.preparacaoHabilitada = preparacaoHabilitada;
         this.recusarLiquidacaoPendente = recusarLiquidacaoPendente;

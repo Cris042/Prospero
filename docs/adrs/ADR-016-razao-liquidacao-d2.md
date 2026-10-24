@@ -1,7 +1,7 @@
 # ADR-016 — Razão em partidas dobradas e liquidação D+2
 
 - Data: 2026-10-24.
-- Estado: **aceita em 2026-10-24**; RF08c integrada pelo PR #44; RF08b integrada pelo PR #45; RF08d implementada no PR #47, aguardando revisão/merge; RF08e planejada.
+- Estado: **aceita em 2026-10-24**; RF08c integrada pelo PR #44; RF08b integrada pelo PR #45; RF08d integrada pelo PR #47 (`8c3ed79`); RF08e em andamento.
 - Origem: refinamento da RF08 após merge autorizado do PR #42 (RF07).
 - Decisor: usuário, em 2026-10-24, escolhendo entre alternativas apresentadas: calendário "Seg–sex + feriados fixos", disponibilidade "Só após D+2", falhas "Sem falha simulada", legado "Exigir recriar bo-dados", plano de contas "Confirmo esse plano" após o exemplo numérico, e aceite dos defaults de histórico sem contraparte, recusa da preparação, risco PLAINTEXT e créditos ao robô. Registro no PR #43; andamento no [roadmap](../roadmap.md#rf08--razão-histórico-e-liquidação-d2).
 - Relação: complementa ADR-001/002/003/004; emenda ADR-012 (nova origem de alteração da carteira MO), ADR-013 (créditos adiados passam a D+2) e ADR-015 (transação de negócio ampliada e guarda do legado). Substitui, para a liquidação local, o desenho de claim/`DESCONHECIDO` avaliado no HLD-005.
@@ -71,7 +71,7 @@ Cada avanço liquida, em lotes limitados e retomáveis, toda pendência com data
 - expectativa ainda ausente: o evento fica guardado como liquidação aguardando negócio, por (id, hash), sem crédito; a transação que grava a expectativa aplica o aguardando idêntico e recusa os divergentes do mesmo id. Não trava a partição nem a prontidão; volume aguardando tem teto configurado e, acima dele, novos eventos sem expectativa são recusados com motivo;
 - divergência ou contrato inválido: o evento é recusado e registrado com motivo, sem crédito e sem ocupar a deduplicação; a partição segue.
 
-O consumidor usa o modo financeiro do `ConsumoKafka` (sem descarte) apenas para falhas técnicas transitórias; pendência e recusa são estados persistidos, não exceções. Métricas de aguardando, recusadas e idade da mais antiga, com labels finitos. Detalhes técnicos da RF08c: teto padrão 10000 (`MO_LIQUIDACAO_AGUARDANDO_TETO`) e a recusa da preparação atrás de `MO_RECUSAR_LIQUIDACAO_PENDENTE`, desligada até a RF08e, porque sem emissor toda negociação deixaria crédito pendente e quebraria as planilhas repetidas da CI.
+O consumidor usa o modo financeiro do `ConsumoKafka` (sem descarte) apenas para falhas técnicas transitórias; pendência e recusa são estados persistidos, não exceções. Métricas de aguardando, recusadas e idade da mais antiga, com labels finitos. Detalhes técnicos da RF08c: teto padrão 10000 (`MO_LIQUIDACAO_AGUARDANDO_TETO`) e a recusa da preparação atrás de `MO_RECUSAR_LIQUIDACAO_PENDENTE`, ativada por padrão na RF08e. A CI mantém explicitamente desligada a guarda somente na fase D0 histórica das planilhas repetidas; ao fim da negociação recria MO com guarda ativa, prova 409 sem escrita e concilia os movimentos antes/depois do avanço e recuperação. As provas D0 não comprovam a proteção de pendências.
 
 **Consultas.** `GET /api/v1/negocios` e `GET /api/v1/razao` no BO pela conta do JWT, escopo de leitura próprio, paginação por cursor opaco com limite máximo de 100, `no-store`, 503 durante bootstrap ou quarentena. O cursor não carrega a conta como autoridade; cursor inválido ou de outra conta é 400 genérico. Negócio de que a conta não participa é 404 idêntico ao inexistente. O proxy injeta o token de leitura só por rota e método exatos, como no ADR-015.
 

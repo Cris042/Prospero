@@ -1,6 +1,6 @@
 # Próspero — Angular
 
-Interface local do simulador. Apresenta mercado real do matching, boleta com acompanhamento de ordens e posições; a identidade dos quatro serviços segue disponível pelo Swagger de cada um. A RF05 integra execução, risco, Stop/Stop Limit e OCO; posições e liquidação continuam pendentes. Estado e evidências no roadmap global.
+Interface local do simulador. Apresenta mercado real do matching, boleta com acompanhamento de ordens e posições; a identidade dos quatro serviços segue disponível pelo Swagger de cada um. A RF05 integra execução, risco, Stop/Stop Limit e OCO; posições integradas na RF07; histórico e liquidação RF08e em validação. Estado e evidências no roadmap global.
 
 ## Executar e verificar
 
@@ -44,7 +44,7 @@ E2E integrado exige `PROSPERO_POSICOES_E2E_CONFIG` apontando ao arquivo privado 
 
 ## Negócios e razão — RF08b
 
-Sem tela nesta fatia (RF08e). O proxy injeta `BO_TOKEN_RAZAO` (conta demo, audiência BO, escopo `razao:leitura`) somente em GET/HEAD de `/servicos/back-office/api/v1/negocios`, `/negocios/{id}` (um segmento; o BO responde o mesmo 404 para inexistente e alheio) e `/razao`; demais extensões são recusadas e Authorization do cliente é descartado.
+Tela de histórico acrescentada na RF08e. O proxy injeta `BO_TOKEN_RAZAO` (conta demo, audiência BO, escopo `razao:leitura`) somente em GET/HEAD de `/servicos/back-office/api/v1/negocios`, `/negocios/{id}` (um segmento; o BO responde o mesmo 404 para inexistente e alheio) e `/razao`; demais extensões são recusadas e Authorization do cliente é descartado.
 
 `runner/exemplos/razao.xlsx` (gerado por `gerar-razao.mjs`, perfil `--perfil razao`) roda logo após `posicoes.xlsx`: recusas 401/403/400/404, prepara CONTA-002/003, abre 2 DELTA3 a 40,00, confere o negócio de cada lado pela ordem capturada, data de sessão e de liquidação coerentes entre os lados, detalhe, 404 para CONTA-001, as quatro partidas D0 de cada lado contra a Câmara, paginação por cursor e cursor de outra conta 400; fecha por negócio inverso, com posição/PnL zero e cotação 40. Repetível duas vezes na CI; não usar contra histórico arbitrário com outras negociações DELTA3 simultâneas. O D+2 exato é provado pelos testes com datas fixas.
 
@@ -97,3 +97,9 @@ O charset final do caminho é conservador: letras/números ASCII e `_ / ? = & . 
 `risco.xlsx` acompanha o contrato RF05b: Limit simples chega a ABERTA, Market sem contraparte termina CANCELADA e a limpeza das ofertas usa autonegociação pela API, com débito normal dos dois recursos. O cenário OCO final usa CONTA-003 e preserva sua reserva: OCO aguarda a próxima fatia da RF05c. Essa planilha exige carteiras sem reservas prévias e não pode ser repetida após o cenário OCO na mesma sessão. A API de preparação preserva reservas/histórico e recusa qualquer ATIVA/PARCIAL com 409. Saldo reservado zero e terminal no FO não garantem que o MO já consumiu o terminal: as preparações com sucesso esperado de `matching.xlsx` e `risco.xlsx` usam a espera explícita restrita acima, sem liberar recursos por timeout. A CI executa primeiro matching duas vezes, recuperação/concorrência e depois as provas que deixam Stop/OCO; não apaga livro nem reservas para contornar essa fronteira.
 
 Na raiz, `python3 scripts/mercado.py verificar-matching` usa as APIs locais para executar parte de uma oferta, reinicia somente o ME, reentrega a admissão original e executa o restante. Compara ordens e recursos e confirma ausência de oferta/débito duplicado. A prova interna de recuperação lê a outbox do MO e publica no Kafka; esse acesso não faz parte do runner XLSX. Use `--projeto prospero-ci-<run>-<attempt>` para a stack descartável da CI ou omita para a stack local, sempre com CONTA-002/003 livres. A recuperação de stops simples é verificada também pelos testes internos da RF05c.2; OCO e fechamento integrado continuam posteriores.
+
+## Histórico e liquidação — RF08e
+
+A seção Histórico e liquidação consulta negócios e razão da conta demo pelo proxy autenticado do BO, sem token no navegador. Cada seção carrega 20 itens por página, com teto de 100; Atualizar histórico volta à primeira página. Estado A liquidar ou Liquidado vem do BO e não comprova sozinho o crédito MO. Consultas têm timeout de oito segundos; falha mantém os últimos dados com aviso. A tela não avança a data de movimento.
+
+`liquidacao.xlsx` verifica estado D+2, crédito MO do robô e repetição sem alterar carteira, depois de `scripts/liquidacao.py` conciliar movimentos de todas as contas. O perfil `liquidacao` do config-runner limita os tokens a leitura CONTA-004 e administração do movimento, no processo CLI. A CI roda a planilha duas vezes ao fim das negociações, com guarda de pendência ativa; as planilhas D0 anteriores usam a exceção legada explicitamente documentada no ADR-016. Para uso local, liquidar e esperar créditos antes de preparar novamente uma carteira.

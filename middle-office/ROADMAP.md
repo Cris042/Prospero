@@ -15,7 +15,7 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | MO01 | RF03 | Validar lote, tick, túnel e preços de referência. | Lote/tick/túnel no FO (ADR-011, PR #20); MO revalida lote e quantidade máxima na RF04a |
 | MO02 | RF04 | Reservar recursos e proteger limites contra concorrência. | Concluída — PRs #21/#22 integrados |
 | MO03 | RF05 | Admitir ordens reservadas, consumir execuções e ajustar reservas; preparação recusa conta viva. | RF05b e integração de stops simples RF05c.2 em validação |
-| MO04 | RF08 | Receber efeitos de liquidação por eventos e atualizar os saldos locais. | Planejada |
+| MO04 | RF08 | Receber efeitos de liquidação por eventos e atualizar os saldos locais. | RF08c integrada pelo PR #44; RF08e valida conciliação, consulta por conta e guarda ativa |
 | MO05 | RF10 | Liberar saldo elegível com deduplicação e proteção contra corridas. | Planejada |
 | MO99 | V01 | Resiliência, métricas, rastreio e critérios não funcionais aplicáveis | Planejada |
 

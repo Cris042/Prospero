@@ -1,0 +1,130 @@
+<section class="historico" aria-labelledby="historico-titulo">
+  <div class="cabecalho">
+    <div>
+      <p class="sobretitulo">CONTA DEMO · {{ conta() }}</p>
+      <h2 id="historico-titulo">Histórico e liquidação</h2>
+    </div>
+    <button
+      type="button"
+      (click)="atualizar()"
+      [disabled]="carregandoNegocios() || carregandoRazao()"
+    >
+      Atualizar histórico
+    </button>
+  </div>
+  <p class="nota">
+    Cada negócio mostra apenas o lado da sua conta. Caixa e custódia a receber ficam disponíveis
+    após a liquidação em D+2 simulado. Use Atualizar histórico para consultar o estado mais recente.
+  </p>
+  @if (erroNegocios()) {
+    <p class="erro" role="alert">
+      Não foi possível atualizar os negócios.
+      @if (negocios().length) {
+        Os valores exibidos são da última consulta confirmada.
+      }
+    </p>
+  }
+  @if (negocios().length) {
+    <div class="rolagem" role="region" aria-label="Tabela de negócios" tabindex="0">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Negócio</th>
+            <th scope="col">Lado</th>
+            <th scope="col">Quantidade</th>
+            <th scope="col">Valor (R$)</th>
+            <th scope="col">Liquidação prevista</th>
+            <th scope="col">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (negocio of negocios(); track $index) {
+            <tr>
+              <th scope="row">{{ negocio.negocio }}</th>
+              <td>{{ negocio.lado === 'COMPRADOR' ? 'Compra' : 'Venda' }}</td>
+              <td>{{ decimal(negocio.quantidade) }}</td>
+              <td>{{ decimal(negocio.valor) }}</td>
+              <td>{{ data(negocio.dataLiquidacao) }}</td>
+              <td>{{ negocio.liquidacao === 'LIQUIDADO' ? 'Liquidado' : 'A liquidar' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (!erroNegocios()) {
+    <p>
+      {{
+        carregandoNegocios()
+          ? 'Consultando negócios…'
+          : 'Nenhum negócio registrado para esta conta.'
+      }}
+    </p>
+  }
+  <button
+    type="button"
+    (click)="maisNegocios()"
+    [disabled]="carregandoNegocios() || !haMaisNegocios()"
+  >
+    Mais negócios
+  </button>
+  @if (negocios().length >= 100) {
+    <p class="nota">
+      Limite de 100 lados nesta consulta. Atualizar histórico retorna aos mais recentes.
+    </p>
+  }
+  <h3>Razão da conta</h3>
+  <p class="nota">
+    Partidas contra a Câmara simulada. D0 registra a negociação; D+2 registra o crédito. Débitos e
+    créditos fecham por transação e unidade.
+  </p>
+  @if (erroRazao()) {
+    <p class="erro" role="alert">
+      Não foi possível atualizar a razão.
+      @if (lancamentos().length) {
+        Os valores exibidos são da última consulta confirmada.
+      }
+    </p>
+  }
+  @if (lancamentos().length) {
+    <div class="rolagem" role="region" aria-label="Tabela da razão" tabindex="0">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Negócio</th>
+            <th scope="col">Data</th>
+            <th scope="col">Momento</th>
+            <th scope="col">Conta contábil</th>
+            <th scope="col">Natureza</th>
+            <th scope="col">Unidade</th>
+            <th scope="col">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (linha of lancamentos(); track $index) {
+            <tr>
+              <th scope="row">{{ linha.negocio }}</th>
+              <td>{{ data(linha.data) }}</td>
+              <td>{{ linha.momento === 'D2' ? 'D+2' : 'D0' }}</td>
+              <td>{{ linha.contaContabil }}</td>
+              <td>{{ linha.natureza === 'DEBITO' ? 'Débito' : 'Crédito' }}</td>
+              <td>{{ linha.unidade }}</td>
+              <td>{{ decimal(linha.valor) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (!erroRazao()) {
+    <p>
+      {{
+        carregandoRazao() ? 'Consultando razão…' : 'Nenhum lançamento registrado para esta conta.'
+      }}
+    </p>
+  }
+  <button type="button" (click)="maisRazao()" [disabled]="carregandoRazao() || !haMaisRazao()">
+    Mais lançamentos
+  </button>
+  @if (lancamentos().length >= 100) {
+    <p class="nota">Limite de 100 lançamentos nesta consulta.</p>
+  }
+</section>

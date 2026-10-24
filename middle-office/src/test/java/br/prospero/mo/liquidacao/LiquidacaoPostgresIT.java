@@ -2,6 +2,7 @@ package br.prospero.mo.liquidacao;
 
 import br.prospero.mo.comum.dominio.RegraNegocioException;
 import br.prospero.mo.liquidacao.actor.AplicarLiquidacaoActor;
+import br.prospero.mo.liquidacao.actor.ConsultarCreditoActor;
 import br.prospero.mo.liquidacao.dominio.Desfecho;
 import br.prospero.mo.liquidacao.dominio.LadoLiquidacao;
 import br.prospero.mo.liquidacao.dominio.MotivoRecusa;
@@ -98,6 +99,7 @@ class LiquidacaoPostgresIT {
     @Inject AplicarLiquidacaoActor liquidacao;
     @Inject EntityManager em;
     @Inject RepositorioRiscoJpa risco;
+    @Inject ConsultarCreditoActor consultarCreditos;
 
     private record Par(UUID compra, UUID venda) { }
 
@@ -234,6 +236,39 @@ class LiquidacaoPostgresIT {
         custodia("CONTA-002", 100, 100);
         caixa("CONTA-002", "964", "904", "60");
         custodia("CONTA-003", 96, 90);
+    }
+
+    @Test
+    void consultaCreditosFiltraContaNoBancoPreservaEscalaEConfirmaAplicacao() throws Exception {
+        negocioPadrao();
+        var compra = consultarCreditos.consultar("CONTA-002", NEGOCIO);
+        var venda = consultarCreditos.consultar("CONTA-003", NEGOCIO);
+        assertEquals("CONTA-002", compra.conta());
+        assertEquals(1, compra.creditos().size());
+        assertEquals("COMPRADOR", compra.creditos().getFirst().lado());
+        assertEquals("CUSTODIA", compra.creditos().getFirst().recurso());
+        assertEquals("4", compra.creditos().getFirst().valor());
+        assertFalse(compra.creditos().getFirst().creditado());
+        assertEquals(1, venda.creditos().size());
+        assertEquals("36.00", venda.creditos().getFirst().valor());
+        assertFalse(venda.creditos().getFirst().creditado());
+        assertEquals(List.of(), consultarCreditos.consultar("CONTA-001", NEGOCIO).creditos());
+        assertEquals(List.of(), consultarCreditos.consultar("CONTA-002", "ALFA3-2026-10-18-999").creditos());
+        assertEquals(Desfecho.CREDITAR, enviar(vendedor()));
+        assertTrue(consultarCreditos.consultar("CONTA-003", NEGOCIO).creditos().getFirst().creditado());
+        assertFalse(consultarCreditos.consultar("CONTA-002", NEGOCIO).creditos().getFirst().creditado());
+    }
+
+    @Test
+    void consultaAutonegociacaoRetornaOsDoisLadosDaMesmaContaSemMisturarCreditos() throws Exception {
+        Par par = reservas("CONTA-002", "CONTA-002");
+        negocio(par, NEGOCIO, "CONTA-002", "CONTA-002");
+        var creditos = consultarCreditos.consultar("CONTA-002", NEGOCIO).creditos();
+        assertEquals(2, creditos.size());
+        assertEquals(List.of("COMPRADOR", "VENDEDOR"), creditos.stream().map(c -> c.lado()).toList());
+        assertEquals(List.of("4", "36.00"), creditos.stream().map(c -> c.valor()).toList());
+        assertTrue(creditos.stream().noneMatch(c -> c.creditado()));
+        assertEquals(List.of(), consultarCreditos.consultar("CONTA-003", NEGOCIO).creditos());
     }
 
     @Test

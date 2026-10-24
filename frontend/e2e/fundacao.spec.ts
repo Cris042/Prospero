@@ -12,7 +12,7 @@ test('apresenta a página principal sem erros, sem transbordamento e sem estado 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Próspero');
   await expect(
-    page.getByText('Liquidação ainda não implementada.', { exact: false }),
+    page.getByRole('heading', { name: 'Histórico e liquidação', exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Estado dos serviços' })).toHaveCount(0);
   await expect(

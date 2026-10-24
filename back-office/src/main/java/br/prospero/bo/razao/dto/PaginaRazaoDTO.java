@@ -12,7 +12,7 @@ public record PaginaRazaoDTO(String conta, List<LancamentoDTO> lancamentos,
     public record LancamentoDTO(@Schema(description = "Transação contábil do lado; débitos = créditos por unidade.")
                                 String transacao, String negocio, String ticker,
                                 @Schema(enumeration = {"COMPRADOR", "VENDEDOR"}) String lado,
-                                @Schema(enumeration = {"D0"}) String momento, String data,
+                                @Schema(enumeration = {"D0", "D2"}) String momento, String data,
                                 @Schema(enumeration = {"CAIXA", "CAIXA_A_RECEBER", "CUSTODIA", "CUSTODIA_A_RECEBER", "CAMARA"})
                                 String contaContabil,
                                 @Schema(enumeration = {"DEBITO", "CREDITO"}) String natureza,

@@ -36,7 +36,7 @@ describe('Painel de fundação', () => {
     await fixture.whenStable();
     const html = fixture.nativeElement as HTMLElement;
     expect(html.querySelector('h1')?.textContent).toContain('Próspero');
-    expect(html.textContent).toContain('Liquidação ainda não implementada');
+    expect(html.textContent).toContain('Histórico e liquidação D+2 simulada disponíveis');
   });
 
   it('não exibe mais o estado dos serviços na página principal', async () => {

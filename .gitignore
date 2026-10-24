@@ -13,6 +13,7 @@ __pycache__/
 .playwright/
 .slim/
 **/test-results/
+**/test-results-liquidado/
 **/playwright-report/
 .ci-evidencias/
 
