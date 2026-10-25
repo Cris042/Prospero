@@ -14,6 +14,7 @@ import {
   EMPTY,
   finalize,
   map,
+  merge,
   Observable,
   Subject,
   Subscription,
@@ -22,6 +23,9 @@ import {
   takeWhile,
   timer,
 } from 'rxjs';
+import { AtualizacoesService } from '../atualizacoes/atualizacoes.service';
+import { consultasSerializadas } from '../atualizacoes/consultas-serializadas';
+import { Trajetoria } from '../atualizacoes/trajetoria';
 import { formatarDecimal } from '../mercado/mercado.service';
 import {
   exigeGatilho,
@@ -75,10 +79,12 @@ const ROTULOS: Record<string, string> = {
   selector: 'app-boleta',
   templateUrl: './boleta.html',
   styleUrl: './boleta.css',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, Trajetoria],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Boleta implements OnInit {
+  readonly canal = inject(AtualizacoesService);
+  readonly ordemSelecionada = signal<string | null>(null);
   private readonly ordens = inject(OrdensService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(NonNullableFormBuilder);
@@ -140,19 +146,15 @@ export class Boleta implements OnInit {
     this.oco.controls.tipoStop.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tipo) => this.tipoStopAtual.set(tipo));
-    // switchMap: uma consulta antiga nunca sobrescreve a lista mais nova.
-    this.recarregar
-      .pipe(
-        switchMap(() =>
-          this.ordens.listar().pipe(
-            catchError(() => {
-              this.erroLista.set(true);
-              return EMPTY;
-            }),
-          ),
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
+    consultasSerializadas(merge(this.recarregar, this.canal.avisos$), () =>
+      this.ordens.listar().pipe(
+        catchError(() => {
+          this.erroLista.set(true);
+          return EMPTY;
+        }),
+      ),
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((pagina) => {
         this.erroLista.set(false);
         this.lista.set(pagina.ordens);

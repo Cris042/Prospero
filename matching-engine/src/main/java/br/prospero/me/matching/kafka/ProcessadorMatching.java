@@ -55,6 +55,8 @@ public class ProcessadorMatching implements HealthCheck {
     private static final Duration ESPERA = Duration.ofSeconds(5);
     private static final List<TopicPartition> PARTICOES = particoes(EnvelopeMatching.COMANDOS);
     private static final List<TopicPartition> TODAS = todasParticoes();
+    @Inject io.opentelemetry.api.OpenTelemetry telemetry;
+    @Inject io.opentelemetry.api.trace.Tracer tracer;
     private final Instance<AgroalDataSource> fonte;
     private final String servidores;
     private final boolean habilitado;
@@ -123,6 +125,7 @@ public class ProcessadorMatching implements HealthCheck {
                 Map<Integer, Long> proximos = new HashMap<>();
                 for (TopicPartition p : PARTICOES) { cliente.seek(p, 0); proximos.put(p.partition(), 0L); }
                 SessaoMatching motor = new SessaoMatching();
+                var execucao = new Execucao(posse, admin, identidades, produtor, motor, checkpoints);
                 estado = recuperado(proximos, highwater) ? "pronto" : "replay";
                 while (!parar) {
                     posse.validarPosse();
@@ -134,33 +137,7 @@ public class ProcessadorMatching implements HealthCheck {
                             if (parar) return;
                             if (registro.offset() != proximos.get(p.partition()) || registro.offset() >= 10_000)
                                 throw new IllegalStateException("Offset fora do orçamento/origem.");
-                            var comando = EnvelopeMatching.comando(registro.value(), registro.key());
-                            int destino = Utils.toPositive(Utils.murmur2(registro.key().getBytes(StandardCharsets.UTF_8))) % 3;
-                            if (destino != p.partition()) throw new IllegalArgumentException("Partição da chave divergente.");
-                            LocalDate sessaoCheckpoint = SessaoMatching.sessaoDoCheckpoint(comando, sessaoPersistida);
-                            long inicio = System.nanoTime();
-                            var resultado = motor.processar(comando);
-                            nucleo.record(System.nanoTime() - inicio, TimeUnit.NANOSECONDS);
-                            long checkpoint = checkpoints.get(p.partition());
-                            if (registro.offset() > checkpoint) {
-                                // Valida posse/conexão e identidades ANTES de qualquer publicação; erro aborta o motor inteiro.
-                                posse.validarPosse();
-                                validarIdentidade(admin, identidades);
-                                PublicacaoMatching.publicar(resultado, evento -> {
-                                    posse.validarPosse();
-                                    var saida = new ProducerRecord<String, byte[]>(EnvelopeMatching.EVENTOS, registro.key(), evento);
-                                    if (comando.traceparent() != null) {
-                                        saida.headers().add("traceparent", comando.traceparent().getBytes(StandardCharsets.UTF_8));
-                                    }
-                                    produtor.send(saida).get(15, TimeUnit.SECONDS);
-                                    eventos.increment();
-                                }, () -> {
-                                    posse.validarPosse();
-                                    posse.avancar(p.partition(), checkpoint, registro.offset(), sessaoCheckpoint);
-                                });
-                                checkpoints.put(p.partition(), registro.offset());
-                                sessaoPersistida = sessaoCheckpoint;
-                            }
+                            sessaoPersistida = processar(registro, execucao, sessaoPersistida);
                             comandos.increment();
                             proximos.put(p.partition(), registro.offset() + 1);
                         }
@@ -177,6 +154,43 @@ public class ProcessadorMatching implements HealthCheck {
             consumidor = null;
             if (parar) estado = "encerrado";
         }
+    }
+
+    private record Execucao(CheckpointMatching posse, Admin admin, Map<String, TopicDescription> identidades,
+                            KafkaProducer<String, byte[]> produtor, SessaoMatching motor, Map<Integer, Long> checkpoints) { }
+
+    private LocalDate processar(org.apache.kafka.clients.consumer.ConsumerRecord<String, byte[]> registro,
+                                Execucao execucao, LocalDate sessaoAnterior) throws Exception {
+        var comando = EnvelopeMatching.comando(registro.value(), registro.key());
+        int destino = Utils.toPositive(Utils.murmur2(registro.key().getBytes(StandardCharsets.UTF_8))) % 3;
+        if (destino != registro.partition()) throw new IllegalArgumentException("Partição da chave divergente.");
+        return new RastreioMatching(telemetry, tracer).executar(comando.traceparent(), () -> {
+            LocalDate sessaoCheckpoint = SessaoMatching.sessaoDoCheckpoint(comando, sessaoAnterior);
+            long inicio = System.nanoTime();
+            var resultado = execucao.motor().processar(comando);
+            nucleo.record(System.nanoTime() - inicio, TimeUnit.NANOSECONDS);
+            long checkpoint = execucao.checkpoints().get(registro.partition());
+            if (registro.offset() > checkpoint) {
+                // Valida posse/conexão e identidades ANTES de qualquer publicação; erro aborta o motor inteiro.
+                execucao.posse().validarPosse();
+                validarIdentidade(execucao.admin(), execucao.identidades());
+                PublicacaoMatching.publicar(resultado, evento -> {
+                    execucao.posse().validarPosse();
+                    var saida = new ProducerRecord<String, byte[]>(EnvelopeMatching.EVENTOS, registro.key(), evento);
+                    if (RastreioMatching.atual() != null) {
+                        saida.headers().add("traceparent", RastreioMatching.atual().getBytes(StandardCharsets.UTF_8));
+                    }
+                    execucao.produtor().send(saida).get(15, TimeUnit.SECONDS);
+                    eventos.increment();
+                }, () -> {
+                    execucao.posse().validarPosse();
+                    execucao.posse().avancar(registro.partition(), checkpoint, registro.offset(), sessaoCheckpoint);
+                });
+                execucao.checkpoints().put(registro.partition(), registro.offset());
+                return sessaoCheckpoint;
+            }
+            return sessaoAnterior;
+        });
     }
 
     private void bloquear(Exception erro) {

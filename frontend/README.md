@@ -30,6 +30,14 @@ No Nginx, resumo e livro compartilham limite de cinco requisições/s por IP, bu
 
 A RF06b altera apresentação e ritmo de consulta; não muda contrato ou cálculo financeiro. Conforme ADR-004, dispensa nova planilha: `cotacao.xlsx` preserva a prova financeira por APIs, complementada pelos testes de tempo controlado e E2E de atualização visual sem clique. A CI disponibiliza somente capturas PNG de `test-results` como artefato por sete dias, sem traces, configuração ou credenciais.
 
+## Trajetória e atualizações — RF09
+
+Em “Minhas ordens”, “Ver trajetória” abre os marcos confirmados FO/MO/ME/BO da ordem selecionada, incluindo instante de ocorrência e observação, motivo e identificadores técnicos em detalhes. A consulta HTTP tem páginas de20, até100 eventos na tela; ao atingir o limite, informa a visão parcial. Ordens anteriores à trajetória durável aparecem com histórico incompleto. Erro preserva a última consulta e permite tentar novamente; a interface não infere contabilização a partir da execução no ME.
+
+Um WebSocket compartilhado avisa a revisão da conta, sem carregar valores financeiros. A abertura e a reconexão provocam nova consulta HTTP; avisos durante uma consulta são agrupados em uma consulta posterior, sem sobreposição. Revisões são comparadas como inteiros textuais, inclusive acima de2⁵³. A aba oculta fecha o canal; ao voltar, reconecta com recuo1/2/4/8s e jitter. Ordens mantêm atualização manual e posições conservam consultas periódicas de2s. Falha do canal mostra aviso, sem apresentar conexão como confirmação financeira.
+
+Nginx e proxydev encaminham o upgrade somente em `/servicos/front-office/api/v1/atualizacoes`, com Origin HTTP local igual ao Host público, sem query ou subprotocolo. Injetam `FO_TOKEN_ORDENS` no servidor; o navegador não recebe a credencial. O backend exige JWT válido, conta conhecida e `ordens:leitura`, limita8 conexões/conta e32 globais e encerra a sessão no vencimento do JWT. Um envio pendente por conexão, timeout3s, mensagem máxima1024bytes e ping15s limitam o canal; clientes lentos recuperam por HTTP. Contrato completo no [ADR-017](../docs/adrs/ADR-017-trajetoria-tempo-real.md). A composição real, captura visual e trace são aceites pendentes enquanto a RF09b estiver em validação no roadmap.
+
 ## Posições e resultado — RF07
 
 A seção da conta demo mostra posição dos negócios desde o início da simulação, preço médio, realizado acumulado e não realizado. A custódia inicial e a liquidação não entram nesse cálculo. Autonegociação preserva o resultado da própria conta. Valores chegam textuais; o frontend não calcula dinheiro com `Number`.

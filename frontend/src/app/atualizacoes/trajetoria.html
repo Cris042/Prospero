@@ -1,0 +1,86 @@
+<section class="trajetoria" aria-labelledby="titulo-trajetoria">
+  <div class="cabecalho">
+    <h3 id="titulo-trajetoria">Trajetória da ordem</h3>
+    <button type="button" (click)="atualizar()">Atualizar trajetória</button>
+  </div>
+  <p class="identidade">
+    Ordem <code>{{ ordem() }}</code>
+  </p>
+  @if (canal.estado() === 'indisponivel') {
+    <p class="aviso" role="status">
+      Atualizações automáticas indisponíveis. A última consulta continua visível.
+    </p>
+  }
+  @if (erro()) {
+    <p class="aviso" role="alert">Não foi possível atualizar a trajetória. Tente novamente.</p>
+  }
+  @if (pagina(); as resumo) {
+    <p>
+      {{
+        resumo.historicoCompleto
+          ? 'Histórico completo desde o recebimento.'
+          : 'Histórico incompleto: esta ordem antecede o acompanhamento durável.'
+      }}
+    </p>
+    @if (resumo.disponivelDesde) {
+      <p class="discreto">Disponível desde {{ instante(resumo.disponivelDesde) }}.</p>
+    }
+    <p class="discreto">
+      Sequência de confirmação local; os horários dos serviços podem chegar fora de ordem.
+    </p>
+    <ol>
+      @for (evento of eventos(); track evento.sequencia) {
+        <li [attr.data-origem]="evento.origem" [attr.data-tipo]="evento.tipo">
+          <div class="marco">
+            <strong>{{ rotulo(evento.tipo) }}</strong
+            ><span class="origem">{{ evento.origem }}</span>
+          </div>
+          <p>
+            Ocorrido em
+            <time [attr.datetime]="evento.ocorridoEm">{{ instante(evento.ocorridoEm) }}</time>
+          </p>
+          <p class="discreto">Observado em {{ instante(evento.observadoEm) }}</p>
+          @if (evento.quantidade) {
+            <p>Quantidade: {{ evento.quantidade }}</p>
+          }
+          @if (evento.motivo) {
+            <p>Motivo: {{ rotulo(evento.motivo) }}</p>
+          }
+          @if (evento.negocio) {
+            <p>
+              Negócio <code>{{ evento.negocio }}</code>
+            </p>
+          }
+          <details>
+            <summary>Identificação do marco</summary>
+            <p>
+              Evento <code>{{ evento.evento }}</code>
+            </p>
+            @if (evento.causacao) {
+              <p>
+                Causação <code>{{ evento.causacao }}</code>
+              </p>
+            }
+            @if (evento.traceId) {
+              <p>
+                Trace <code>{{ evento.traceId }}</code>
+              </p>
+            }
+          </details>
+        </li>
+      } @empty {
+        <li>Nenhum marco disponível para esta ordem.</li>
+      }
+    </ol>
+    @if (podeCarregar()) {
+      <button type="button" (click)="carregarMais()" [disabled]="carregando()">
+        Carregar mais eventos
+      </button>
+    }
+    @if (eventos().length >= 100 && resumo.proximoCursor) {
+      <p class="aviso">Exibindo os primeiros 100 eventos. Há outros marcos nesta ordem.</p>
+    }
+  } @else if (!erro()) {
+    <p role="status">Consultando trajetória…</p>
+  }
+</section>

@@ -31,6 +31,8 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
     private final boolean habilitado;
     private volatile boolean ativo;
     private volatile KafkaConsumer<String, byte[]> consumidor;
+    @Inject io.opentelemetry.api.OpenTelemetry telemetry;
+    @Inject io.opentelemetry.api.trace.Tracer tracer;
     private volatile CicloPosicoes ciclo;
     private Thread linha;
     private String topicoId;
@@ -118,7 +120,7 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
             }
             topicoId = descricao.topicId().toString();
             checkpoint.iniciar(topicoId);
-            ciclo = new CicloPosicoes(c, topicoId, checkpoint::proximo, actor::aplicar);
+            ciclo = new CicloPosicoes(c, topicoId, checkpoint::proximo, actor::aplicar, new RastreioPosicoes(telemetry, tracer));
             ciclo.iniciar();
         }
         ciclo.rodada(() -> {
