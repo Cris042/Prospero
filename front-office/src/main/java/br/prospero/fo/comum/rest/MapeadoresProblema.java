@@ -15,6 +15,11 @@ import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 /** Erros viram Problem Details com ocorrência e correlação, sem refletir conteúdo enviado. */
 public class MapeadoresProblema {
     @ServerExceptionMapper
+    public Response trajetoria(br.prospero.fo.ordens.dominio.TrajetoriaIndisponivelException erro, ContainerRequestContext pedido) {
+        return Problemas.resposta(pedido, 503, "TRAJETORIA_INDISPONIVEL", "Trajetória temporariamente indisponível.");
+    }
+
+    @ServerExceptionMapper
     public Response regra(RegraNegocioException erro, ContainerRequestContext pedido) {
         return Problemas.resposta(pedido, Problemas.status(erro.categoria()), erro.codigo(), erro.getMessage(),
                 erro.detalhes());

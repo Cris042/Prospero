@@ -144,7 +144,7 @@ class EncerramentoQaPostgresIT {
                 marco(beta, beta, "ALFA3", "2026-10-18")), "causação de outro ativo");
         assertTrue(repositorio.aplicar(marco(beta, beta, "BETA3", "2026-10-18")), "marco de outro ativo é independente");
         EventoMatching conflitante = new EventoMatching(valido.id(), valido.correlacao(), valido.ticker(), valido.sessao(),
-                "outra-assinatura", valido.detalhe(), valido.causacao(), 4);
+                "outra-assinatura", valido.detalhe(), new EventoMatching.Contexto(valido.causacao(), 4, null, null));
         assertThrows(MatchingIncoerenteException.class, () -> repositorio.aplicar(conflitante), "mesmo id com bytes divergentes");
     }
 }

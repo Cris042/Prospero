@@ -6,15 +6,24 @@ import java.util.UUID;
 
 /** Fato de execução externo validado; nenhum tipo Kafka/JSON atravessa a fronteira do domínio. */
 public record EventoMatching(UUID id, UUID correlacao, String ticker, LocalDate sessao, String assinatura,
-                             Detalhe detalhe, UUID causacao, int versao) {
+                             Detalhe detalhe, Contexto contexto) {
+    /** Metadados externos podem estar ausentes nos fatos legados. */
+    public record Contexto(UUID causacao, int versao, java.time.Instant ocorridoEm, String traceparent) { }
+
     public EventoMatching(UUID id, UUID correlacao, String ticker, LocalDate sessao, String assinatura, Detalhe detalhe) {
-        this(id, correlacao, ticker, sessao, assinatura, detalhe, null);
+        this(id, correlacao, ticker, sessao, assinatura, detalhe, new Contexto(null, 1, null, null));
     }
 
     public EventoMatching(UUID id, UUID correlacao, String ticker, LocalDate sessao, String assinatura, Detalhe detalhe,
                           UUID causacao) {
-        this(id, correlacao, ticker, sessao, assinatura, detalhe, causacao, causacao == null ? 1 : 2);
+        this(id, correlacao, ticker, sessao, assinatura, detalhe, new Contexto(causacao, causacao == null ? 1 : 2, null, null));
     }
+
+    public UUID causacao() { return contexto.causacao(); }
+    public int versao() { return contexto.versao(); }
+    public java.time.Instant ocorridoEm() { return contexto.ocorridoEm(); }
+    public String traceparent() { return contexto.traceparent(); }
+
     public record Alvo(UUID ordem, UUID intencao, String conta) {
     }
 

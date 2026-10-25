@@ -50,7 +50,7 @@ class OcoProjecaoQaTest {
         return new EventoMatching(UUID.randomUUID(), UUID.randomUUID(), "ALFA3", LocalDate.of(2026, 10, 18), "h",
                 new EventoMatching.Negocio("ALFA3-2026-10-18-1", new BigDecimal(preco), quantidade,
                         new EventoMatching.Alvo(UUID.randomUUID(), UUID.randomUUID(), "CONTA-002"),
-                        new EventoMatching.Alvo(venda, GRUPO, "CONTA-003"), LadoOrdem.COMPRA), UUID.randomUUID(), 3);
+                        new EventoMatching.Alvo(venda, GRUPO, "CONTA-003"), LadoOrdem.COMPRA), new EventoMatching.Contexto(UUID.randomUUID(), 3, null, null));
     }
 
     /** ADR-013/ME: com 500 pendentes o núcleo rejeita as duas pernas com LIMITE_STOPS_PENDENTES (TP primeiro, v3). */

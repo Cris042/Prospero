@@ -30,6 +30,8 @@ import java.util.UUID;
 public class RepositorioMatchingJpa implements RepositorioMatching {
     private final Instance<EntityManager> gerenciadores;
     private final Timer boletaNegocio;
+    @Inject
+    RepositorioTrajetoriaJpa trajetoria;
 
     @Inject
     public RepositorioMatchingJpa(Instance<EntityManager> gerenciadores, MeterRegistry metricas) {
@@ -81,6 +83,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
                     .setParameter("id", n.id()).setParameter("assinatura", EnvelopeMatching.assinaturaNegocio(e, n)).executeUpdate();
         }
         registrar(e);
+        trajetoria.registrarMatching(e, entidades);
         return true;
     }
 

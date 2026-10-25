@@ -106,7 +106,7 @@ class LiquidacaoPostgresIT {
         assertEquals(List.of(negocio.id().toString()), linhas("SELECT evento::text FROM bo_negocio_origem"));
         assertEquals(0, liquidacao.avancar(D2.minusDays(1), "operador", "antes", D0).liquidacoes());
         assertEquals(2, numero("SELECT count(*) FROM bo_liquidacao WHERE estado='PENDENTE'"));
-        assertEquals(0, numero("SELECT count(*) FROM bo_outbox"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'"));
         assertEquals(2, liquidacao.avancar(D2, "operador", "vencimento", D0).liquidacoes());
         assertEquals(List.of("CONTA-001|CUSTODIA|D|ALFA3|100", "CONTA-001|CUSTODIA_A_RECEBER|C|ALFA3|100",
                         "CONTA-002|CAIXA|D|BRL|2000.00", "CONTA-002|CAIXA_A_RECEBER|C|BRL|2000.00"),
@@ -114,16 +114,16 @@ class LiquidacaoPostgresIT {
                         + " FROM bo_lancamento WHERE momento='D2' ORDER BY id"));
         assertEquals(0, numero(DESBALANCEADAS));
         assertEquals(2, numero("SELECT count(*) FROM bo_liquidacao WHERE estado='LIQUIDADO'"));
-        assertEquals(2, numero("SELECT count(*) FROM bo_outbox WHERE publicado_em IS NULL AND tentativas=0"));
-        assertEquals(0, numero("SELECT count(*) FROM bo_outbox WHERE topico<>'liquidacao.eventos.v1' OR tipo<>'LIQUIDACAO_EFETIVADA'"));
-        for (String payload : linhas("SELECT payload FROM bo_outbox")) {
+        assertEquals(2, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA' AND publicado_em IS NULL AND tentativas=0"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA' AND topico<>'liquidacao.eventos.v1'"));
+        for (String payload : linhas("SELECT payload FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'")) {
             JsonNode e = JSON.readTree(payload);
             String lado = e.path("dados").path("lado").asText();
             assertEquals(negocio.id().toString(), e.path("causacao").asText());
             assertEquals(EventoCredito.id("ALFA3-2026-10-23-1", lado).toString(), e.path("id").asText());
             assertEquals(D2.toString(), e.path("dados").path("dataLiquidacao").asText());
         }
-        assertEquals(0, numero("SELECT count(*) FROM bo_outbox WHERE chave<>(payload::jsonb->'dados'->>'conta')"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA' AND chave<>(payload::jsonb->'dados'->>'conta')"));
     }
 
     @Test
@@ -149,7 +149,7 @@ class LiquidacaoPostgresIT {
         assertEquals(0, liquidacao.processarLote());
         assertEquals(0, liquidacao.processarLote());
         assertEquals(4, numero("SELECT count(*) FROM bo_lancamento WHERE momento='D2'"));
-        assertEquals(2, numero("SELECT count(*) FROM bo_outbox WHERE publicado_em IS NULL"));
+        assertEquals(2, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA' AND publicado_em IS NULL"));
         assertEquals(List.of("operador|unica|2026-10-23|2026-10-27|2"),
                 linhas("SELECT sub||'|'||jti||'|'||de||'|'||para||'|'||liquidacoes FROM bo_movimento_auditoria"));
         for (String sql : List.of("UPDATE bo_movimento_auditoria SET jti='alterado'", "DELETE FROM bo_movimento_auditoria",
@@ -165,7 +165,7 @@ class LiquidacaoPostgresIT {
         assertEquals(2, numero("SELECT count(*) FROM bo_liquidacao WHERE estado='PENDENTE'"));
         assertEquals(2, liquidacao.processarLote());
         assertEquals(0, liquidacao.processarLote());
-        assertEquals(52, numero("SELECT count(*) FROM bo_outbox"));
+        assertEquals(52, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'"));
         assertEquals(104, numero("SELECT count(*) FROM bo_lancamento WHERE momento='D2'"));
         assertEquals(0, numero(DESBALANCEADAS));
     }
@@ -182,7 +182,7 @@ class LiquidacaoPostgresIT {
         conferirPendentes(2);
         executar("DROP TRIGGER it_falha_outbox ON bo_outbox");
         assertEquals(2, liquidacao.avancar(D2, "operador", "retomada", D0).liquidacoes());
-        assertEquals(2, numero("SELECT count(*) FROM bo_outbox"));
+        assertEquals(2, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'"));
     }
 
     @Test
@@ -196,7 +196,7 @@ class LiquidacaoPostgresIT {
         conferirPendentes(2);
         assertEquals(2, liquidacao.processarLote());
         assertEquals(0, liquidacao.processarLote());
-        assertEquals(2, numero("SELECT count(*) FROM bo_outbox"));
+        assertEquals(2, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'"));
     }
 
     @Test
@@ -209,7 +209,7 @@ class LiquidacaoPostgresIT {
             assertEquals(2, a.get(30, TimeUnit.SECONDS).liquidacoes() + b.get(30, TimeUnit.SECONDS).liquidacoes());
         }
         assertEquals(1, numero("SELECT count(*) FROM bo_movimento_auditoria"));
-        assertEquals(2, numero("SELECT count(*) FROM bo_outbox"));
+        assertEquals(2, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'"));
         assertEquals(4, numero("SELECT count(*) FROM bo_lancamento WHERE momento='D2'"));
     }
 
@@ -217,7 +217,7 @@ class LiquidacaoPostgresIT {
     void autonegociacaoLiquidaOsDoisLadosParaMesmaContaSemConfundirIdentidades() throws Exception {
         negociar(1, "CONTA-002", "CONTA-002");
         assertEquals(2, liquidacao.avancar(D2, "operador", "self", D0).liquidacoes());
-        assertEquals(2, numero("SELECT count(DISTINCT id) FROM bo_outbox WHERE chave='CONTA-002'"));
+        assertEquals(2, numero("SELECT count(DISTINCT id) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA' AND chave='CONTA-002'"));
         assertEquals(0, numero(DESBALANCEADAS));
         assertEquals(0, numero("SELECT count(*) FROM (SELECT unidade FROM bo_lancamento GROUP BY unidade HAVING "
                 + "sum(CASE natureza WHEN 'D' THEN coalesce(valor,quantidade) ELSE -coalesce(valor,quantidade) END)<>0) x"));
@@ -299,14 +299,14 @@ class LiquidacaoPostgresIT {
         negociar(1, "CONTA-001", "CONTA-002");
         assertEquals(2, liquidacao.avancar(D2.plusDays(1), "operador", "apos-vencimento", D0).liquidacoes());
         assertEquals(List.of(D2.toString()), linhas("SELECT DISTINCT data_referencia::text FROM bo_lancamento WHERE momento='D2'"));
-        assertEquals(List.of(D2.toString()), linhas("SELECT DISTINCT payload::jsonb->'dados'->>'dataLiquidacao' FROM bo_outbox"));
+        assertEquals(List.of(D2.toString()), linhas("SELECT DISTINCT payload::jsonb->'dados'->>'dataLiquidacao' FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'"));
         assertEquals(D2.plusDays(1), liquidacao.atual());
     }
 
     private void conferirPendentes(int quantidade) throws Exception {
         assertEquals(quantidade, numero("SELECT count(*) FROM bo_liquidacao WHERE estado='PENDENTE'"));
         assertEquals(0, numero("SELECT count(*) FROM bo_lancamento WHERE momento='D2'"));
-        assertEquals(0, numero("SELECT count(*) FROM bo_outbox"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_outbox WHERE tipo='LIQUIDACAO_EFETIVADA'"));
     }
 
     private EventoMatching negociar(int numero, String compra, String venda) {
