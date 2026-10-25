@@ -8,6 +8,7 @@ test('negócios reais atualizam posição e resultado sem atualizar a página', 
   context,
 }, testInfo) => {
   const ressinc: string[] = [];
+  const atualizacoes: string[] = [];
   const autorizacoesWs: boolean[] = [];
   const upgrades: number[] = [];
   const canais = new Set<string>();
@@ -33,6 +34,8 @@ test('negócios reais atualizam posição e resultado sem atualizar a página', 
       try {
         const frame = JSON.parse(String(payload));
         if (frame.tipo === 'RESSINCRONIZAR') ressinc.push(frame.revisao);
+        if (frame.tipo === 'ATUALIZACAO' && typeof frame.revisao === 'string')
+          atualizacoes.push(frame.revisao);
       } catch {
         // Quadros de controle não são avisos de invalidação JSON.
       }
@@ -146,6 +149,7 @@ test('negócios reais atualizam posição e resultado sem atualizar a página', 
     return recebida.json();
   }
   await repousar('VENDA');
+  const antesAtualizacoes = atualizacoes.length;
   const parcial = await negociar('COMPRA', 2);
   await expect.poll(async () => (await posicao())?.quantidade, { timeout: 20000 }).toBe('1');
   await expect(linha.getByRole('cell').nth(0)).toContainText('Comprada');
@@ -173,6 +177,20 @@ test('negócios reais atualizam posição e resultado sem atualizar a página', 
     });
   }
   await expect(trajetoria.locator('li[data-tipo="NEGOCIO_CONTABILIZADO"]')).toHaveCount(1);
+  const confirmada = await request.get(
+    `/servicos/front-office/api/v1/ordens/${parcial.id}/trajetoria`,
+  );
+  expect(confirmada.status()).toBe(200);
+  const revisaoConfirmada = (await confirmada.json()).revisao;
+  expect(typeof revisaoConfirmada).toBe('string');
+  // Exige publicação WS de uma revisão que já contém o marco BO confirmado, além dos GETs de fallback.
+  await expect
+    .poll(
+      () =>
+        atualizacoes.slice(antesAtualizacoes).some((r) => BigInt(r) >= BigInt(revisaoConfirmada)),
+      { timeout: 20000 },
+    )
+    .toBe(true);
   const antesRessinc = ressinc.length;
   const antesConsultas = consultasTrajetoria;
   await page.evaluate(() =>
