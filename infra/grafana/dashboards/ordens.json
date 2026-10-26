@@ -1,0 +1,395 @@
+{
+  "uid": "prospero-ordens",
+  "title": "Próspero — Fluxo de ordens",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "tags": [
+    "prospero",
+    "negocio",
+    "v01a"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "panels": [
+    {
+      "title": "Escopo, fontes e limites",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "FO: recebimentos por resultado, aplicação de risco/matching, outbox e canal de atualização. NOVA/REPETIDA contam envios (OCO possui duas pernas), não estoque de ordens únicas. p99 mede recebimento→projeção do primeiro negócio da agressora; inclui limites de Stop/rollback do HLD-004. Aproximação por buckets e população não controlada: não comprova RNF04. Meta preservada: 50 ms; ensaio registrado: 447 ms no p99, indicativo.\n\n**Sem série significa sem dados.** Scrape a cada 15 s; taxas/percentis/janelas de 5 min. Contadores observam processamento e podem incluir reentrega ou anteceder commit: não substituem APIs/fatos financeiros. Alertas locais ficam na UI do Prometheus; não enviam notificações externas."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "title": "Recebimentos por resultado e tipo",
+      "type": "timeseries",
+      "description": "Fonte: EnviarOrdemActor. NOVA, REPETIDA e recusas; contador operacional por envio.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(resultado,tipo) (rate(prospero_ordens_recebidas_total{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "{{tipo}} · {{resultado}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Resultados de risco observados pelo FO",
+      "type": "timeseries",
+      "description": "Fonte: AplicarRiscoActor. aplicado=false inclui repetição ou ordem já avançada; não é recusa financeira.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(estado,aplicado) (rate(prospero_ordens_risco_total{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "{{estado}} · aplicado={{aplicado}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Aplicações de eventos matching no FO",
+      "type": "timeseries",
+      "description": "Fonte: AplicarMatchingActor. Eventos de progresso, não negócios únicos.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(aplicado) (rate(prospero_ordens_matching_total{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "aplicado={{aplicado}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Pendências observadas na outbox FO",
+      "type": "timeseries",
+      "description": "Fonte: RelayOutbox. Gauge amostrado na manutenção; valor pode estar antigo após erro.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_outbox_pendentes{job=\"prospero\",servico=\"front-office\"}",
+          "legendFormat": "{{servico}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "p99 boleta → primeiro negócio (5min)",
+      "type": "timeseries",
+      "description": "Fonte: RepositorioMatchingJpa. Primeiro negócio da agressora; aproximação por buckets, não ensaio RNF04. Meta: 50 ms.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le,servico) (rate(prospero_ordens_boleta_negocio_seconds_bucket{job=\"prospero\",servico=\"front-office\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Observações do timer FO (5min)",
+      "type": "timeseries",
+      "description": "Denominador do histograma, incluindo particularidades de rollback e Stop; sem amostras não há percentil válido.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(servico) (increase(prospero_ordens_boleta_negocio_seconds_count{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "observações"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Conexões WebSocket abertas",
+      "type": "timeseries",
+      "description": "Fonte: PublicarAtualizacoesActor. Conexão aberta não comprova prontidão financeira.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_atualizacoes_conexoes{job=\"prospero\",servico=\"front-office\"}",
+          "legendFormat": "conexões"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Avisos WebSocket enviados",
+      "type": "timeseries",
+      "description": "Fonte: PublicarAtualizacoesActor. Avisos invalidam snapshot; HTTP recupera estado confirmado.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(tipo) (rate(prospero_atualizacoes_enviados_total{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "{{tipo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    }
+  ]
+}

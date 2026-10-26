@@ -561,6 +561,7 @@ services:
     - --storage.tsdb.retention.time=3d
     volumes:
     - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - ./infra/prometheus/alertas.yml:/etc/prometheus/alertas.yml:ro
     - prometheus-dados:/prometheus
     networks:
     - telemetria

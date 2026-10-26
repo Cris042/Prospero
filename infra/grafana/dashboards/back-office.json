@@ -1,0 +1,413 @@
+{
+  "uid": "prospero-back-office",
+  "title": "Próspero — Back office e liquidação",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "tags": [
+    "prospero",
+    "negocio",
+    "v01a"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "panels": [
+    {
+      "title": "Escopo, fontes e limites",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "BO: integridade/prontidão de posições e transporte da outbox. MO: observações downstream de crédito. Não há contadores de lançamentos D0/D2 ou liquidações concluídas no BO nesta fatia; os gráficos não comprovam razão balanceada ou conciliação financeira. Gauges de pendências podem estar antigos após falha de atualização. Consultar APIs de negócios/razão/liquidação para fatos confirmados.\n\n**Sem série significa sem dados.** Scrape a cada 15 s; taxas/percentis/janelas de 5 min. Contadores observam processamento e podem incluir reentrega ou anteceder commit: não substituem APIs/fatos financeiros. Alertas locais ficam na UI do Prometheus; não enviam notificações externas."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "title": "Projeção de posições BO em dia",
+      "type": "stat",
+      "description": "Fonte: ConsumidorPosicoes. Checkpoint/consumo em dia; não contagem de negócios ou posições.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_posicoes_em_dia{job=\"prospero\",servico=\"back-office\"}",
+          "legendFormat": "{{servico}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Sem prontidão"
+                },
+                "1": {
+                  "text": "Pronto"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Falhas de projeção BO (5min)",
+      "type": "timeseries",
+      "description": "Fonte: ConsumidorPosicoes. Ocorrências, sem inferir perda financeira.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(prospero_posicoes_falhas_total{job=\"prospero\",servico=\"back-office\"}[5m])",
+          "legendFormat": "falhas"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Quarentenas BO acumuladas no processo",
+      "type": "timeseries",
+      "description": "Fonte: ConsumidorPosicoes. Counter observado desde início do processo, pode nascer em 1; reinicia com o processo e não comprova bloqueio ou recuperação.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_posicoes_quarentena_total{job=\"prospero\",servico=\"back-office\"}",
+          "legendFormat": "ocorrências"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Pendências observadas na outbox BO",
+      "type": "timeseries",
+      "description": "Fonte: RelayOutbox BO. Confirmação D0 e crédito D2 usam a outbox; gauge não distingue volumes financeiros nem garante frescor.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_outbox_pendentes{job=\"prospero\",servico=\"back-office\"}",
+          "legendFormat": "pendências"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Publicações BO observadas",
+      "type": "timeseries",
+      "description": "Fonte: RelayOutbox BO. Pode incluir reentrega; não total de lançamentos/liquidações únicos.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(prospero_outbox_publicados_total{job=\"prospero\",servico=\"back-office\"}[5m])",
+          "legendFormat": "publicações"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Créditos aguardando no MO",
+      "type": "timeseries",
+      "description": "Fonte downstream: ConsumidorLiquidacao MO. Não é total de liquidações pendentes BO.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_liquidacao_aguardando{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "aguardando MO"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Idade observada de espera no MO",
+      "type": "timeseries",
+      "description": "Fonte downstream MO. Último resumo pode estar antigo; sem indicador de frescor nesta fatia.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_liquidacao_aguardando_idade_segundos{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "idade MO"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Recusas persistidas de crédito no MO",
+      "type": "timeseries",
+      "description": "Gauge por motivo enumerado, último resumo do MO; não taxa de counter nem conciliação BO.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_liquidacao_recusadas{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "{{motivo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    }
+  ]
+}

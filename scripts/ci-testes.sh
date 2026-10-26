@@ -4,6 +4,13 @@ for value in "${GITHUB_RUN_ID:-}" "${GITHUB_RUN_ATTEMPT:-}"; do
   case "$value" in ''|*[!0-9]*) echo 'Identidade numérica de execução ausente.' >&2; exit 2;; esac
 done
 python3 scripts/ci-preflight.py
+# V01a: comportamento das regras com relógio/séries sintéticos, sem subir telemetria adicional.
+promtool=(docker run --rm --network=none --read-only --tmpfs /tmp:rw,size=67108864
+  --memory=256m --cpus=1 --pids-limit=64 --entrypoint /bin/promtool
+  -v "$PWD/infra/prometheus:/etc/prometheus:ro" -w /etc/prometheus prom/prometheus:v3.15.0)
+"${promtool[@]}" check config /etc/prometheus/prometheus.yml
+"${promtool[@]}" check rules /etc/prometheus/alertas.yml
+"${promtool[@]}" test rules /etc/prometheus/alertas.test.yml
 # Registra disco e uso Docker para diagnosticar falta de espaço no runner efêmero.
 df -h / "${RUNNER_TEMP:-/tmp}" || true
 docker system df || true
@@ -129,6 +136,9 @@ python3 scripts/mercado.py config-runner "$runner_cfg/posicoes-e2e.json" --perfi
   --origem "$fo_origem" --origem-mo "$mo_origem" --origem-bo "$bo_origem"
 chmod 600 "$runner_cfg/posicoes-e2e.json"
 export PROSPERO_POSICOES_E2E_CONFIG="$runner_cfg/posicoes-e2e.json"
+# Consultas/regras/provisionamento reais; credencial Grafana somente em arquivo privado temporário.
+python3 scripts/verificar-observabilidade.py --projeto "$project" --config-e2e "$runner_cfg/grafana.json"
+export PROSPERO_GRAFANA_E2E_CONFIG="$runner_cfg/grafana.json"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
 playwright_deps=()

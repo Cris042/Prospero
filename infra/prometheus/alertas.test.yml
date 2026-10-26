@@ -1,0 +1,978 @@
+# Evidência comportamental V01a; relógio e séries inteiramente sintéticos.
+rule_files:
+- alertas.yml
+evaluation_interval: 15s
+tests:
+- name: 'scrape: normal, pendente, disparado e recuperado'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 1x3 0x7 1x12
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoSemScrape",alertstate="firing"}) or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoSemScrape",alertstate="pending"}) or vector(0)
+    eval_time: 1m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoSemScrape",alertstate="firing"}) or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoSemScrape",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'prontidão front-office: persistência e recuperação'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 1x30
+  - series: prospero_cotacao_em_dia{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 1x3 0x11 1x15
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="pending"})
+      or vector(0)
+    eval_time: 2m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 4m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'prontidão matching-engine: persistência e recuperação'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 1x30
+  - series: prospero_matching_pronto{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 1x3 0x11 1x15
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="pending"})
+      or vector(0)
+    eval_time: 2m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 4m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'prontidão back-office: persistência e recuperação'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: 1x30
+  - series: prospero_posicoes_em_dia{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: 1x3 0x11 1x15
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="pending"})
+      or vector(0)
+    eval_time: 2m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoProcessamentoIndisponivel",alertstate="firing"})
+      or vector(0)
+    eval_time: 4m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'série ausente front-office: dispara com scrape saudável'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 1x30
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="pending",servico="front-office"})
+      or vector(0)
+    eval_time: 1m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="front-office"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'série ausente front-office: retorno da série recupera'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 1x30
+  - series: prospero_cotacao_em_dia{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: _x11 1x18
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="front-office"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="front-office"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'scrape falho front-office: ausência não acusa prontidão'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: '0x30'
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="front-office"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'série ausente matching-engine: dispara com scrape saudável'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 1x30
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="pending",servico="matching-engine"})
+      or vector(0)
+    eval_time: 1m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="matching-engine"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'série ausente matching-engine: retorno da série recupera'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 1x30
+  - series: prospero_matching_pronto{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: _x11 1x18
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="matching-engine"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="matching-engine"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'scrape falho matching-engine: ausência não acusa prontidão'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: '0x30'
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="matching-engine"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'série ausente back-office: dispara com scrape saudável'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: 1x30
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="pending",servico="back-office"})
+      or vector(0)
+    eval_time: 1m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="back-office"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'série ausente back-office: retorno da série recupera'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: 1x30
+  - series: prospero_posicoes_em_dia{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: _x11 1x18
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="back-office"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="back-office"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'scrape falho back-office: ausência não acusa prontidão'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: '0x30'
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="back-office"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'série ausente middle-office: dispara com scrape saudável'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: 1x30
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="pending",servico="middle-office"})
+      or vector(0)
+    eval_time: 1m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="middle-office"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'série ausente middle-office: retorno da série recupera'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: 1x30
+  - series: prospero_liquidacao_aguardando{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: _x11 1x18
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="middle-office"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="middle-office"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'scrape falho middle-office: ausência não acusa prontidão'
+  interval: 15s
+  input_series:
+  - series: up{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: '0x30'
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMetricaProntidaoAusente",alertstate="firing",servico="middle-office"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'quarentena recente prospero_matching_quarentena_total: janela termina sem
+    prometer reparo'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'reset prospero_matching_quarentena_total: reinício sem novo evento não dispara'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 10x7 0x22
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'quarentena recente prospero_cotacao_quarentena_total: janela termina sem
+    prometer reparo'
+  interval: 15s
+  input_series:
+  - series: prospero_cotacao_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'reset prospero_cotacao_quarentena_total: reinício sem novo evento não dispara'
+  interval: 15s
+  input_series:
+  - series: prospero_cotacao_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 10x7 0x22
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'quarentena recente prospero_contabilizacao_quarentena_total: janela termina
+    sem prometer reparo'
+  interval: 15s
+  input_series:
+  - series: prospero_contabilizacao_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'reset prospero_contabilizacao_quarentena_total: reinício sem novo evento
+    não dispara'
+  interval: 15s
+  input_series:
+  - series: prospero_contabilizacao_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 10x7 0x22
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'quarentena recente prospero_posicoes_quarentena_total: janela termina sem
+    prometer reparo'
+  interval: 15s
+  input_series:
+  - series: prospero_posicoes_quarentena_total{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: 0x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'reset prospero_posicoes_quarentena_total: reinício sem novo evento não dispara'
+  interval: 15s
+  input_series:
+  - series: prospero_posicoes_quarentena_total{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: 10x7 0x22
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'outbox: zero, persistência e recuperação'
+  interval: 15s
+  input_series:
+  - series: prospero_outbox_pendentes{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0x3 1x11 0x15
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoOutboxPendente",alertstate="firing"}) or
+      vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoOutboxPendente",alertstate="pending"}) or
+      vector(0)
+    eval_time: 2m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoOutboxPendente",alertstate="firing"}) or
+      vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoOutboxPendente",alertstate="firing"}) or
+      vector(0)
+    eval_time: 4m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'crédito: contagem positiva e idade acima de 120 persistentes'
+  interval: 15s
+  input_series:
+  - series: prospero_liquidacao_aguardando{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: 1x30
+  - series: prospero_liquidacao_aguardando_idade_segundos{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: 120x3 121x11 0x15
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoCreditoAguardando",alertstate="firing"})
+      or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoCreditoAguardando",alertstate="pending"})
+      or vector(0)
+    eval_time: 2m45s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoCreditoAguardando",alertstate="firing"})
+      or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoCreditoAguardando",alertstate="firing"})
+      or vector(0)
+    eval_time: 4m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'crédito: idade antiga sem pendência não dispara'
+  interval: 15s
+  input_series:
+  - series: prospero_liquidacao_aguardando{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: '0x30'
+  - series: prospero_liquidacao_aguardando_idade_segundos{job="prospero",instance="alvo:8080",servico="middle-office"}
+    values: 999x30
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoCreditoAguardando",alertstate="firing"})
+      or vector(0)
+    eval_time: 4m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência front-office: p99 alto com amostras, pending e firing'
+  interval: 15s
+  input_series:
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.05"}
+    values: '0x61'
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.1"}
+    values: 0+6x60
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="+Inf"}
+    values: 0+6x60
+  - series: prospero_ordens_boleta_negocio_seconds_count{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0+6x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 15s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="pending"})
+      or vector(0)
+    eval_time: 4m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 6m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'latência front-office: amostras insuficientes'
+  interval: 15s
+  input_series:
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.05"}
+    values: '0x61'
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.1"}
+    values: 0+4x60
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="+Inf"}
+    values: 0+4x60
+  - series: prospero_ordens_boleta_negocio_seconds_count{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0+4x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência front-office: ociosidade'
+  interval: 15s
+  input_series:
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.05"}
+    values: '0x61'
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.1"}
+    values: 0+0x60
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="+Inf"}
+    values: 0+0x60
+  - series: prospero_ordens_boleta_negocio_seconds_count{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0+0x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência front-office: p99 baixo'
+  interval: 15s
+  input_series:
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.05"}
+    values: 0+6x60
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.1"}
+    values: 0+6x60
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="+Inf"}
+    values: 0+6x60
+  - series: prospero_ordens_boleta_negocio_seconds_count{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0+6x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência front-office: recuperação após janela saudável'
+  interval: 15s
+  input_series:
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.05"}
+    values: 0x24 6+6x36
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.1"}
+    values: 0+6x60
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="+Inf"}
+    values: 0+6x60
+  - series: prospero_ordens_boleta_negocio_seconds_count{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0+6x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 6m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 12m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência matching-engine: p99 alto com amostras, pending e firing'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.001"}
+    values: '0x61'
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.002"}
+    values: 0+6x60
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="+Inf"}
+    values: 0+6x60
+  - series: prospero_matching_comando_seconds_count{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 0+6x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 15s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="pending"})
+      or vector(0)
+    eval_time: 4m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 6m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'latência matching-engine: amostras insuficientes'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.001"}
+    values: '0x61'
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.002"}
+    values: 0+4x60
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="+Inf"}
+    values: 0+4x60
+  - series: prospero_matching_comando_seconds_count{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 0+4x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência matching-engine: ociosidade'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.001"}
+    values: '0x61'
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.002"}
+    values: 0+0x60
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="+Inf"}
+    values: 0+0x60
+  - series: prospero_matching_comando_seconds_count{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 0+0x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência matching-engine: p99 baixo'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.001"}
+    values: 0+6x60
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.002"}
+    values: 0+6x60
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="+Inf"}
+    values: 0+6x60
+  - series: prospero_matching_comando_seconds_count{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 0+6x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência matching-engine: recuperação após janela saudável'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.001"}
+    values: 0x24 6+6x36
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.002"}
+    values: 0+6x60
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="+Inf"}
+    values: 0+6x60
+  - series: prospero_matching_comando_seconds_count{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 0+6x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 6m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 12m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'todas as fontes ausentes: nenhuma ausência vira zero saudável'
+  interval: 15s
+  input_series: []
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoOutboxPendente",alertstate="firing"}) or
+      vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoCreditoAguardando",alertstate="firing"})
+      or vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'latência front-office: exatamente cem amostras admitem diagnóstico'
+  interval: 15s
+  input_series:
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.05"}
+    values: '0x61'
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="0.1"}
+    values: 0+5x60
+  - series: prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",instance="alvo:8080",servico="front-office",le="+Inf"}
+    values: 0+5x60
+  - series: prospero_ordens_boleta_negocio_seconds_count{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0+5x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoBoletaNegocioP99Alto",alertstate="firing"})
+      or vector(0)
+    eval_time: 8m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'latência matching-engine: exatamente cem amostras admitem diagnóstico'
+  interval: 15s
+  input_series:
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.001"}
+    values: '0x61'
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="0.002"}
+    values: 0+5x60
+  - series: prospero_matching_comando_seconds_bucket{job="prospero",instance="alvo:8080",servico="matching-engine",le="+Inf"}
+    values: 0+5x60
+  - series: prospero_matching_comando_seconds_count{job="prospero",instance="alvo:8080",servico="matching-engine"}
+    values: 0+5x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoMatchingP99Alto",alertstate="firing"}) or
+      vector(0)
+    eval_time: 8m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: primeira ocorrência sem baseline prospero_matching_quarentena_total
+  interval: 15s
+  input_series:
+  - series: prospero_matching_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: _x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 30s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: primeira ocorrência sem baseline prospero_cotacao_quarentena_total
+  interval: 15s
+  input_series:
+  - series: prospero_cotacao_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: _x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 30s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: primeira ocorrência sem baseline prospero_contabilizacao_quarentena_total
+  interval: 15s
+  input_series:
+  - series: prospero_contabilizacao_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: _x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 30s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: primeira ocorrência sem baseline prospero_posicoes_quarentena_total
+  interval: 15s
+  input_series:
+  - series: prospero_posicoes_quarentena_total{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: _x3 1x28
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 30s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: nova família no mesmo serviço não fica escondida por contador antigo
+  interval: 15s
+  input_series:
+  - series: prospero_matching_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office",exported_servico="front-office"}
+    values: 10x60
+  - series: prospero_cotacao_quarentena_total{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: _x23 1x36
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 5m30s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 6m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 12m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: retorno de série após gap longo renova suspeita sem garantir recuperação
+  interval: 15s
+  input_series:
+  - series: prospero_posicoes_quarentena_total{job="prospero",instance="alvo:8080",servico="back-office"}
+    values: 1x3 stale _x39 1x35
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 1m15s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 11m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaRecente",alertstate="firing"})
+      or vector(0)
+    eval_time: 17m
+    exp_samples:
+    - labels: '{}'
+      value: 0
