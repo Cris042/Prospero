@@ -125,5 +125,36 @@ class FronteiraCompose(unittest.TestCase):
                     observabilidade.origem_compose("prospero-ci-123-1", "prometheus", 9090)
 
 
+class SaudeDoDatasource(unittest.TestCase):
+    def test_backend_grafana_com_erro_reprova_mesmo_com_prometheus_e_modelos_validos(self):
+        saude = {"status": "OK"}
+        modelos = {
+            uid: json.loads((observabilidade.ROOT / "infra/grafana/dashboards" / (nome + ".json")).read_text())
+            for nome, uid in observabilidade.PAINEIS.items()
+        }
+
+        def responder(url, cabecalhos=None):
+            if url.endswith("/api/datasources/uid/prometheus/health"):
+                return saude
+            if "/api/v1/rules?" in url:
+                return {"data": {"groups": [{"name": "prospero-operacao", "rules": [
+                    {"name": nome, "health": "ok"} for nome in observabilidade.ALERTAS
+                ]}]}}
+            if "/api/v1/query?" in url:
+                return {"status": "success", "data": {"resultType": "vector", "result": [
+                    {"metric": {}, "value": [0, "1"]}
+                ]}}
+            if "/api/dashboards/uid/" in url:
+                return {"meta": {"provisioned": True}, "dashboard": modelos[url.rsplit("/", 1)[1]]}
+            raise AssertionError("Requisição não prevista pelo teste de fronteira.")
+
+        with patch.object(observabilidade, "ler_json", side_effect=responder):
+            # Controle positivo comprova que as respostas das demais fronteiras são suficientes.
+            self.assertTrue(observabilidade.conferir("http://127.0.0.1:9090", "http://127.0.0.1:3000", {})["sucesso"])
+            saude["status"] = "ERROR"
+            with self.assertRaises(ValueError):
+                observabilidade.conferir("http://127.0.0.1:9090", "http://127.0.0.1:3000", {})
+
+
 if __name__ == "__main__":
     unittest.main()

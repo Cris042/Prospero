@@ -79,6 +79,10 @@ def consultar(prometheus, expr):
 
 
 def conferir(prometheus, grafana, headers):
+    # Modelo provisionado e consulta direta ao Prometheus não comprovam que o plugin Grafana responde.
+    saude = ler_json(grafana + '/api/datasources/uid/prometheus/health', headers)
+    if saude.get('status') != 'OK':
+        raise ValueError('datasource Grafana indisponivel')
     grupos = ler_json(prometheus + '/api/v1/rules?type=alert').get('data', {}).get('groups', [])
     regras = [r for g in grupos if g.get('name') == 'prospero-operacao' for r in g.get('rules', [])]
     if {r.get('name') for r in regras} != ALERTAS or any(r.get('health') != 'ok' for r in regras):

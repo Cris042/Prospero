@@ -81,6 +81,8 @@ Prometheus coleta a ferramenta a cada 2 s; o [painel técnico](../../infra/grafa
 
 ### Painéis e alertas operacionais — V01a
 
+Grafana usa somente os plugins de fontes incluídos na imagem 13.2.4: Prometheus 13.2.3, Loki 13.2.2 e Jaeger 13.0.5. Preinstall/atualização automática e administração de plugins na UI ficam desabilitados; cópias baixadas no volume são preservadas e ignoradas pela seleção de caminho. O orçamento é 384 MiB, após OOM reproduzida com 256 MiB. Validação e limites no inventário/roadmap; não inferir capacidade de uma inicialização saudável.
+
 Os quatro dashboards provisionados usam o datasource Prometheus existente e labels finitas de serviço, tipo, resultado, motivo ou tópico. Fontes: FO recebe/aplica ordens e mede boleta→primeiro negócio; MO decide risco e expõe pendências de crédito; ME conta comandos/eventos e mede processamento sem I/O; BO expõe prontidão/falhas/quarentena de posições e transporte por outbox. O painel de mercado agrega a projeção de cotação do FO ao processamento ME.
 
 Os contadores são observações operacionais, podem incluir reentrega ou anteceder o commit; não são razão financeira de efeitos únicos. Decisão RESERVADA não mede estoque/valor reservado. Eventos ME não equivalem a negócios. O BO não possui contadores de lançamentos D0/D2 ou liquidações concluídas nesta fatia; pendências de crédito exibidas são do MO. Gauges MO e de outbox podem conservar o último valor após erro de atualização: scrape saudável não comprova frescor ou conciliação. Séries ausentes permanecem sem dados, sem conversão artificial em zero.

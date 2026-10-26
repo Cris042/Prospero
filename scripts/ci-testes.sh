@@ -26,6 +26,10 @@ cleanup() {
   trap - EXIT INT TERM
   if [ "$code" -ne 0 ]; then
     "${compose[@]}" logs --no-color --tail=80 > .ci-evidencias/compose.log 2>&1 || true
+    grafana_cid="$("${compose[@]}" ps -a -q grafana 2>/dev/null || true)"
+    if [[ "$grafana_cid" =~ ^[0-9a-f]{12,64}$ ]]; then
+      docker inspect --format 'Grafana: estado={{.State.Status}} OOM={{.State.OOMKilled}} saida={{.State.ExitCode}}' "$grafana_cid" || true
+    fi
   fi
   "${compose_robo[@]}" down --volumes --remove-orphans || true
   rm -rf -- "${runner_cfg:-}"
