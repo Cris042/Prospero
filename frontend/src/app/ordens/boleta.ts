@@ -18,7 +18,6 @@ import {
   Observable,
   Subject,
   Subscription,
-  switchMap,
   take,
   takeWhile,
   timer,
@@ -158,6 +157,11 @@ export class Boleta implements OnInit {
       .subscribe((pagina) => {
         this.erroLista.set(false);
         this.lista.set(pagina.ordens);
+        const registro = this.registro();
+        if (registro) {
+          const atuais = pagina.ordens.filter((o) => registro.some((r) => r.id === o.id));
+          if (atuais.length === registro.length) this.registro.set(atuais);
+        }
       });
     this.atualizarLista();
   }
@@ -196,7 +200,7 @@ export class Boleta implements OnInit {
           this.pendente = null;
           this.registro.set(ordens);
           this.atualizarLista();
-          this.acompanharRisco(ordens.map((o) => o.id));
+          this.acompanharRisco();
         },
         error: (falha) => {
           const { texto, repetivel } = mensagemErro(falha);
@@ -220,27 +224,16 @@ export class Boleta implements OnInit {
   /**
    * O risco do MO responde de forma assíncrona: consulta a lista a cada 500 ms (até 10 s) enquanto as ordens do
    * envio estiverem RECEBIDA. Sem resposta, a ordem continua Recebida — não há liberação por timeout.
+   * O timer só solicita recarga: acompanhamento, WebSocket e ação manual compartilham o mesmo GET.
    */
-  private acompanharRisco(ids: readonly string[]): void {
+  private acompanharRisco(): void {
     this.acompanhamento = timer(500, 500)
       .pipe(
         take(20),
-        switchMap(() => this.ordens.listar().pipe(catchError(() => EMPTY))),
-        map((pagina) => {
-          this.lista.set(pagina.ordens);
-          return pagina.ordens.filter((o) => ids.includes(o.id));
-        }),
-        takeWhile(
-          (atuais) => atuais.length === 0 || atuais.some((o) => o.estado === 'RECEBIDA'),
-          true,
-        ),
+        takeWhile(() => this.registro()?.some((o) => o.estado === 'RECEBIDA') ?? false),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((atuais) => {
-        if (atuais.length === ids.length && this.registro()?.every((o) => ids.includes(o.id))) {
-          this.registro.set(atuais);
-        }
-      });
+      .subscribe(() => this.atualizarLista());
   }
 
   private enviarSimples(chave: string): Observable<readonly Ordem[]> {

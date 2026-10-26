@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { Subject } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { AtualizacoesService } from './atualizacoes.service';
 import { Boleta } from '../ordens/boleta';
 import { Ordem, OrdensService, Pagina } from '../ordens/ordens.service';
@@ -47,6 +47,7 @@ describe('Avisos integrados às consultas da tela', () => {
         {
           provide: OrdensService,
           useValue: {
+            enviar: () => of(ORDEM),
             listar: () => {
               const pedido = new Subject<Pagina>();
               pedidos.push(pedido);
@@ -104,6 +105,89 @@ describe('Avisos integrados às consultas da tela', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Histórico incompleto');
     fixture.destroy();
     http.verify({ ignoreCancelled: true });
+  });
+
+  it('serializa acompanhamento do envio com avisos e mantém o estado mais recente', () => {
+    vi.useFakeTimers();
+    const { fixture, avisos, pedidos } = configurarBoleta();
+    const boleta = fixture.componentInstance;
+    pedidos[0].next({ ordens: [], proximoCursor: null });
+    pedidos[0].complete();
+    boleta.simples.patchValue({ precoLimite: '10.00' });
+    boleta.enviar();
+    pedidos[1].next({ ordens: [ORDEM], proximoCursor: null });
+    pedidos[1].complete();
+    vi.advanceTimersByTime(500);
+    expect(pedidos).toHaveLength(3);
+
+    // A consulta do acompanhamento iniciou antes da execução da ordem.
+    const acompanhamentoAntigo = pedidos[2];
+    avisos.next();
+    boleta.atualizarLista();
+    const consultaParalela = pedidos[3];
+    // Na implementação com corrida, o aviso consulta em paralelo e termina primeiro.
+    if (consultaParalela) {
+      consultaParalela.next({ ordens: [{ ...ORDEM, estado: 'EXECUTADA' }], proximoCursor: null });
+      consultaParalela.complete();
+    }
+    acompanhamentoAntigo.next({ ordens: [{ ...ORDEM, estado: 'ABERTA' }], proximoCursor: null });
+    acompanhamentoAntigo.complete();
+    // Com consultas serializadas, o aviso pendente consulta depois da resposta antiga.
+    if (!consultaParalela && pedidos[3]) {
+      pedidos[3].next({ ordens: [{ ...ORDEM, estado: 'EXECUTADA' }], proximoCursor: null });
+      pedidos[3].complete();
+    }
+    fixture.destroy();
+    expect(boleta.lista().map((o) => o.estado)).toEqual(['EXECUTADA']);
+    expect(boleta.registro()?.map((o) => o.estado)).toEqual(['EXECUTADA']);
+  });
+
+  it('não sobrepõe consultas e encerra o timer ao sair de Recebida', () => {
+    vi.useFakeTimers();
+    const { fixture, avisos, pedidos } = configurarBoleta();
+    const boleta = fixture.componentInstance;
+    pedidos[0].next({ ordens: [], proximoCursor: null });
+    pedidos[0].complete();
+    boleta.simples.patchValue({ precoLimite: '10.00' });
+    boleta.enviar();
+    pedidos[1].next({ ordens: [ORDEM], proximoCursor: null });
+    pedidos[1].complete();
+    vi.advanceTimersByTime(500);
+    avisos.next();
+    boleta.atualizarLista();
+    vi.advanceTimersByTime(1000);
+    expect(pedidos).toHaveLength(3);
+    pedidos[2].next({ ordens: [{ ...ORDEM, estado: 'ABERTA' }], proximoCursor: null });
+    pedidos[2].complete();
+    expect(pedidos).toHaveLength(4);
+    pedidos[3].next({ ordens: [{ ...ORDEM, estado: 'EXECUTADA' }], proximoCursor: null });
+    pedidos[3].complete();
+    vi.advanceTimersByTime(10_000);
+    expect(pedidos).toHaveLength(4);
+    expect(boleta.registro()?.[0].estado).toBe('EXECUTADA');
+    fixture.destroy();
+  });
+
+  it('limita acompanhamento sem resposta do risco a vinte consultas em dez segundos', () => {
+    vi.useFakeTimers();
+    const { fixture, pedidos } = configurarBoleta();
+    const boleta = fixture.componentInstance;
+    pedidos[0].next({ ordens: [], proximoCursor: null });
+    pedidos[0].complete();
+    boleta.simples.patchValue({ precoLimite: '10.00' });
+    boleta.enviar();
+    pedidos[1].next({ ordens: [ORDEM], proximoCursor: null });
+    pedidos[1].complete();
+    for (let i = 0; i < 20; i++) {
+      vi.advanceTimersByTime(500);
+      expect(pedidos).toHaveLength(i + 3);
+      pedidos[i + 2].next({ ordens: [ORDEM], proximoCursor: null });
+      pedidos[i + 2].complete();
+    }
+    vi.advanceTimersByTime(10_000);
+    expect(pedidos).toHaveLength(22);
+    expect(boleta.registro()?.[0].estado).toBe('RECEBIDA');
+    fixture.destroy();
   });
 
   it('Posições agrega aviso durante GET e atualiza assim que a consulta termina', () => {
