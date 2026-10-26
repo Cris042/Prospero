@@ -146,7 +146,10 @@ test('negócios reais atualizam posição e resultado sem atualizar a página', 
     await boleta.getByRole('button', { name: 'Registrar ordem', exact: true }).click();
     const recebida = await resposta;
     expect(recebida.status()).toBe(202);
-    return recebida.json();
+    // Location é o identificador contratado pelo 202; não depende do buffer de corpos do CDP móvel.
+    const id = recebida.headers()['location']?.match(/\/api\/v1\/ordens\/([0-9a-f-]{36})$/)?.[1];
+    expect(id).toBeDefined();
+    return { id: id! };
   }
   await repousar('VENDA');
   const antesAtualizacoes = atualizacoes.length;
