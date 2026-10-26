@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Implementa consulta de mercado, registro/consulta idempotente de ordens, validação lote/tick/túnel e SAGA de risco FO ↔ MO. A RF05b acrescenta o consumidor de execuções e a projeção de progresso das ordens; a RF06a acrescenta a projeção real de mercado (integrada no PR #37); trajetória completa e WebSocket permanecem futuros. Estado de validação/PR no roadmap.
+Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Implementa consulta de mercado, registro/consulta idempotente de ordens, validação lote/tick/túnel e SAGA de risco FO ↔ MO. A RF05b acrescenta o consumidor de execuções e a projeção de progresso das ordens; a RF06a acrescenta a projeção real de mercado (integrada no PR #37). Trajetória durável e WebSocket estão implementados nas fatias RF09a/RF09b, ainda em validação nos PRs #49/#50. Estado de validação/PR no roadmap.
 
 Futuro: receber/consultar ordens, persistir estados, orquestrar validação/reserva/execução e expor projeções. Risco pertence ao MO; livro ao ME; contabilidade ao BO. Angular apresenta estados sem coordenar SAGA.
 
