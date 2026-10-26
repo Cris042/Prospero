@@ -100,13 +100,45 @@ rodar_workbook matching risco
 rodar_workbook matching risco
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
 mo_origem="http://$("${compose[@]}" port middle-office 8080)"
-# RF05d: primeira medição RNF04, informativa (runner hospedado, ruidoso): nunca é gate de latência.
+# V01b: comparação pareada na mesma imagem/infra, preservando dados e o teto de ordens.
 me_origem="http://$("${compose[@]}" port matching-engine 8080)"
-mkdir -p .ci-evidencias
-# Falha funcional (ordem que não executa) falha o gate; latência acima da meta, nunca.
-timeout 600 python3 scripts/medir-rnf04.py --origem "$fo_origem" --origem-mo "$mo_origem" --origem-me "$me_origem" \
-  --contexto ci-hospedado --amostras 150 --aquecimento 30 > .ci-evidencias/rnf04.json
-cat .ci-evidencias/rnf04.json
+amostrar_recursos_rnf04() {
+  local variante="$1" servico recurso_cid amostra
+  local -a recipientes=()
+  case "$variante" in baseline|candidato) ;; *) return 2;; esac
+  for servico in front-office middle-office postgres-front-office postgres-middle-office; do
+    recurso_cid="$("${compose[@]}" ps -q "$servico")"
+    [[ "$recurso_cid" =~ ^[0-9a-f]{12,64}$ ]] || return 2
+    recipientes+=("$recurso_cid")
+  done
+  # Três snapshots de CPU/memória/I/O após o tráfego, enquanto o gerador está parado.
+  # Não medem consultas SQL, nem representam ensaio de capacidade ou repouso prolongado.
+  for amostra in 1 2 3; do
+    docker stats --no-stream --format '{{json .}}' "${recipientes[@]}" \
+      >> ".ci-evidencias/rnf04-$variante-recursos.jsonl"
+  done
+  cat ".ci-evidencias/rnf04-$variante-recursos.jsonl"
+}
+for variante in baseline candidato; do
+  urgencia=false
+  [ "$variante" = candidato ] && urgencia=true
+  export PROSPERO_OUTBOX_URGENCIA="$urgencia"
+  "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 front-office middle-office
+  for servico in front-office middle-office; do
+    valor_real="$("${compose[@]}" exec -T "$servico" sh -c 'printf "%s" "$PROSPERO_OUTBOX_URGENCIA"')"
+    [ "$valor_real" = "$urgencia" ] || { echo 'Flag da variante RNF04 divergente.' >&2; exit 2; }
+  done
+  fo_origem="http://$("${compose[@]}" port front-office 8080)"
+  mo_origem="http://$("${compose[@]}" port middle-office 8080)"
+  # Falha funcional/margem insuficiente reprova; resultado de latência hospedada permanece indicativo.
+  timeout 600 python3 scripts/medir-rnf04.py --origem "$fo_origem" --origem-mo "$mo_origem" --origem-me "$me_origem" \
+    --contexto ci-hospedado --variante "$variante" --amostras 150 --aquecimento 30 \
+    > ".ci-evidencias/rnf04-$variante.json"
+  cat ".ci-evidencias/rnf04-$variante.json"
+  amostrar_recursos_rnf04 "$variante"
+done
+# Mantém o nome tradicional para consulta; o baseline também permanece no log e saída temporária.
+cp .ci-evidencias/rnf04-candidato.json .ci-evidencias/rnf04.json
 python3 scripts/mercado.py verificar-matching --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"
 python3 scripts/mercado.py verificar-concorrencia --origem-mo "$mo_origem" --projeto "$project"
 python3 scripts/mercado.py verificar-recuperacao --origem "$fo_origem" --origem-mo "$mo_origem" --projeto "$project"

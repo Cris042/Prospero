@@ -42,6 +42,7 @@ services:
       # Preparação sintética da RF01 existe somente neste ambiente local.
       FO_PREPARACAO_HABILITADA: 'true'
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PROSPERO_OUTBOX_URGENCIA: ${PROSPERO_OUTBOX_URGENCIA:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       postgres-front-office:
@@ -128,6 +129,7 @@ services:
       # RF05c.4: encerramento manual de sessão por API administrativa, somente neste ambiente local.
       MO_ENCERRAMENTO_HABILITADO: 'true'
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PROSPERO_OUTBOX_URGENCIA: ${PROSPERO_OUTBOX_URGENCIA:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       postgres-middle-office:
