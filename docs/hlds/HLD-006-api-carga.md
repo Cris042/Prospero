@@ -4,7 +4,7 @@ Data: 2026-10-17. Requisito: [P06](../roadmap.md#p06--api-de-carga-progressiva-e
 
 ## Objetivo e estado
 
-Controlar execuções locais de carga por API, com rampas, cancelamento, resultados reproduzíveis e recursos do gerador observáveis separadamente dos quatro serviços medidos. **Go foi aprovado pelo usuário.** A etapa A está implementada e em validação na branch P06: módulo `ferramentas/carga`, biblioteca padrão, controlador+gerador no mesmo processo, Compose opt-in e painel técnico. As seções de pesquisa abaixo preservam a comparação anterior à implementação; a decisão técnica executada está no ADR-006 e o contrato efetivo está na seção final. Etapa B e fontes detalhadas de host/disco/rede/DB/Kafka permanecem futuras; isso limita a conclusão integral da P06.
+Controlar execuções locais de carga por API, com rampas, cancelamento, resultados reproduzíveis e recursos do gerador observáveis separadamente dos quatro serviços medidos. **Go foi aprovado pelo usuário.** A etapa A foi integrada pelo PR #16: módulo `ferramentas/carga`, biblioteca padrão, controlador+gerador no mesmo processo, Compose opt-in e painel técnico. As seções de pesquisa abaixo preservam a comparação anterior à implementação; a decisão técnica executada está no ADR-006 e o contrato efetivo está na seção final. Etapa B e fontes detalhadas de host/disco/rede/DB/Kafka permanecem futuras; isso limita a conclusão integral da P06.
 
 Etapa A mede endpoints técnicos existentes, inicialmente `GET /api/v1/sistema` dos quatro serviços. Etapa B incorpora cenários financeiros depois das RFs/P03, com preparação e limpeza exclusivamente por APIs. Identidade HTTP não mede boleta → negócio ou matching; não comprova RNF04. O desenho complementa os quatro dashboards financeiros da V01, sem substituí-los ou reduzir o aceite da P06.
 
@@ -158,7 +158,7 @@ Kafka normalmente usa page cache e flush do sistema operacional, sem fsync por m
 
 Perfil **proposto para ensaiar replicação**, sujeito a orçamento/topologia: três brokers, tópicos de negócio com fator 3, `min.insync.replicas=2`, produtor com `acks=all` e `enable.idempotence=true`, configurações compatíveis de retries/ordenação e eleição não limpa desabilitada. `acks=all` aguarda as réplicas atualmente em ISR; mínimo 2 impede novas confirmações quando ISR cai abaixo de 2. Com RF3, perder um broker pode preservar escrita com dois em ISR; duas cópias vivas isoladamente não bastam sem líder/quórum/rede operacionais. Confirmar também topologia dos controllers. [Produtor](https://kafka.apache.org/41/configuration/producer-configs/), [tópicos](https://kafka.apache.org/41/configuration/topic-configs/).
 
-**Hoje:** Compose usa um broker/controller KRaft e replicação interna/mínimo de ISR transacional 1; não há tópicos/produtores de negócio implementados nem evidência de configuração `acks=all`/idempotência de negócio. Aplicar mínimo 2 ao broker único impediria produção, sem criar redundância. Perfil replicado exige decisão e infraestrutura futuras; bancos separados não são réplicas. Outbox/deduplicação continuam necessários mesmo nesse perfil.
+**Hoje:** Compose usa um broker/controller KRaft e replicação interna/mínimo de ISR transacional 1. Desde RF04/RF05 há tópicos de negócio e produtores outbox com confirmação/idempotência; as garantias e evidências estão nos ADR-012/013 e no roadmap. Isso não cria redundância ou exactly-once entre Kafka e bancos. Aplicar mínimo 2 ao broker único impediria produção, sem criar redundância. Perfil replicado exige decisão e infraestrutura futuras; bancos separados não são réplicas. Outbox/deduplicação continuam necessários mesmo nesse perfil.
 
 ### Alocação e pausas Java
 
@@ -213,8 +213,29 @@ Controle JWT HS256 usa chave aleatória ≥32 bytes, emissor `prospero-local`, a
 
 Latências usam microssegundos inteiros e quantis por nearest rank sobre todas as chamadas finalizadas de ofertas programadas depois do aquecimento, incluindo erros/timeouts/cancelamentos. Sem amostras, quantis são ausentes; atraso do agendador e categorias de falha são expostos separadamente. Janela por estágio e fase; limites de chamadas permitem reter no máximo 6000 durações por execução. Retenção volátil de 20 resultados/20 minutos e teto de 4 MiB serializados; ativo nunca expira. Cancelamento/shutdown abortam contexto e aguardam trabalhadores; terminal exige `emVoo=0`.
 
-O atestado também pode ser fornecido no header `X-Prospero-Preflight` pela configuração externa do runner XLSX; presença simultânea no corpo e header é recusada com `400`. Nenhuma credencial entra no workbook. Chaves em `.carga-local/` ficam num diretório `0700`; apenas os dois arquivos de secret são `0444` para leitura pelo UID não privilegiado do container via bind individual. Nenhum diretório privado é montado. Rotação remove/substitui as chaves privadamente e recria a instância, invalidando tokens/atestados anteriores.
+O atestado também pode ser fornecido no header `X-Prospero-Preflight` pela configuração externa do runner XLSX; presença simultânea no corpo e header é recusada com `400`. Nenhuma credencial entra no workbook. Chaves em `.carga-local/` ficam num diretório `0700`; os arquivos individuais de secret são `0444` para leitura pelo UID não privilegiado do container via bind individual. Nenhum diretório privado é montado. Rotação remove/substitui as chaves privadamente e recria a instância, invalidando tokens/atestados anteriores.
 
 Modo fechado usa oportunidades globais de início limitadas pelo calendário RPS; VUs limitam iterações ocupadas simultaneamente. Quando todos estão ocupados, nenhuma nova oferta é contada naquela oportunidade. Não há fila nem rajada de recuperação. Modo aberto preserva ofertas do calendário e contabiliza perdas por atraso/capacidade. `ofertasPrevistas` conserva o total do calendário aberto, inclusive fases não iniciadas por cancelamento/teto; no fechado é null. Janelas informam início/duração planejados da interseção estágio/fase e `duracaoObservadaMs` até consulta/término, limitados à duração planejada.
 
 A população de medição usa o instante **programado da oferta** no calendário monotônico, também para descartes; não reclassifica backlog de aquecimento como tráfego medido. O atraso real de agendamento é exposto separadamente. Sob saturação, backlog é descartado até o próximo instante futuro, sem deslocar fases/estágios nem produzir janelas negativas.
+
+## P06B1 — catálogo de leituras financeiras
+
+Primeira fatia da etapa B, sem escrita/preparação/limpeza financeira. O plano acrescenta `cenario` opcional; ausente/vazio ou `IDENTIDADE` mantém o GET técnico e o hash anterior quando o campo está omitido. Cenários e serviço são combinados por catálogo fechado, sem URL, conta, headers, corpo ou identificador livre.
+
+| Cenário | Serviço e GET fixo | Escopo do token servidor |
+| --- | --- | --- |
+| ATIVOS | FO `/api/v1/ativos` | `mercado:leitura` |
+| ORDENS | FO `/api/v1/ordens?limite=20` | `ordens:leitura` |
+| CARTEIRA | MO `/api/v1/risco/carteira` | `risco:leitura` |
+| POSICOES | BO `/api/v1/posicoes` | `posicoes:leitura` |
+| NEGOCIOS | BO `/api/v1/negocios?limite=20` | `razao:leitura` |
+| RAZAO | BO `/api/v1/razao?limite=20` | `razao:leitura` |
+
+Cada oferta continua uma chamada HTTP, com limites e populações da etapa A. Listas consultam somente a primeira página de20; a medição informa latência HTTP da consulta, sem alegar negócio concluído ou precisão financeira. Métricas acrescentam cenário finito, sem conta/ordem/execução nas labels; plano técnico usa rótulo efetivo IDENTIDADE.
+
+Tokens curtos por audiência/conta são emitidos pelo operador, em processo externo ao Go; chave HS256 financeira não é montada no gerador. Cinco arquivos individuais de leitura (mercado, ordens, risco, posições e razão) são montados somente para leitura, sem diretório privado inteiro. Ausência/arquivo vazio desabilita o cenário financeiro e mantém a etapa A. Preparação técnica cria placeholders vazios sem exigir configuração financeira; provisionamento financeiro é opt-in e não imprime valores.
+
+Antes da admissão, o Go inspeciona metadados limitados do bearer configurado: algoritmo/issuer/audiência/escopo mínimo, conta conhecida quando aplicável e validade que cubra calendário, drain e margem. Esse filtro detecta configuração incompatível; não autentica assinatura. O serviço alvo continua autoridade JWT. Token ausente/inválido/expirado ou insuficiente para o plano recusa422 sem tráfego, com erro controlado sem refletir token/claims. Nenhum token de controle/preflight é enviado ao alvo.
+
+Preparação e tráfego mutantes permanecem fora desta fatia. Antes deles, especificar orçamento HTTP global incluindo observação, margem persistente do log/ordens, isolamento de contas/ativo e manifesto recuperável de identidades. Preparação de carteira recusa ATIVA/PARCIAL e D+2 pendente sob lock; ela redefine patrimônio sintético e não desfaz negócios. Fechamento/data global não constituem limpeza por execução. RF10 e recuperação financeira continuam dependências das fatias correspondentes, sem assumir as regras de produto ainda pendentes.

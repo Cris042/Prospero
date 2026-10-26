@@ -355,7 +355,7 @@ Saída JSON no stdout; códigos de saída: `0` sucesso, `1` cenário falhou, `2`
 
 ### API de carga técnica — P06, etapa A
 
-A ferramenta em `ferramentas/carga` usa Go 1.27.3, `net/http` e executor nativo, com [OpenAPI](ferramentas/carga/openapi.json) explícito. Oferece carga apenas sobre `GET /api/v1/sistema` dos quatro MS, uma execução global, até cinco estágios, 60 s, 100 RPS, 16 VUs, 32 chamadas em voo e 6000 chamadas. No modo fechado, RPS limita oportunidades globais e VUs limita ocupação; se os VUs estiverem bloqueados, a vazão diminui. VUs não comprovam usuários autenticados. O relatório separa oferta prevista/percorrida, contagens, quantis e janelas com duração planejada e observada; aquecimento e medição não se sobrepõem. [Decisão e experimento](docs/adrs/ADR-006-api-carga.md), [contrato completo](docs/hlds/HLD-006-api-carga.md).
+A ferramenta em `ferramentas/carga` usa Go 1.27.3, `net/http` e executor nativo, com [OpenAPI](ferramentas/carga/openapi.json) explícito. A etapa A oferece carga sobre `GET /api/v1/sistema` dos quatro MS, uma execução global, até cinco estágios, 60 s, 100 RPS, 16 VUs, 32 chamadas em voo e 6000 chamadas. No modo fechado, RPS limita oportunidades globais e VUs limita ocupação; se os VUs estiverem bloqueados, a vazão diminui. VUs não comprovam usuários autenticados. O relatório separa oferta prevista/percorrida, contagens, quantis e janelas com duração planejada e observada; aquecimento e medição não se sobrepõem. [Decisão e experimento](docs/adrs/ADR-006-api-carga.md), [contrato completo](docs/hlds/HLD-006-api-carga.md).
 
 Com a stack local já disponível, preparar as chaves e iniciar somente a ferramenta:
 
@@ -366,11 +366,24 @@ docker compose -f docker-compose.yml -f docker-compose.carga.yml --profile carga
 python3 scripts/carga.py baseline
 ```
 
-A API fica em `127.0.0.1:8090`; o listener de métricas `9091` é interno, sem publicação no host. O perfil `carga` é opt-in e não inicia no Compose padrão nem executa carga na CI. O container usa 384 MiB/1 CPU, usuário 65532, filesystem somente leitura e nenhum socket Docker/banco. `.carga-local/` guarda artefatos privados com diretório `0700`; as duas chaves ficam `0444` dentro dele para os binds individuais do UID 65532. Demais artefatos permanecem privados; não versionar esse diretório.
+A primeira fatia da etapa B acrescenta somente leituras financeiras: `ATIVOS`/`ORDENS` no FO, `CARTEIRA` no MO e `POSICOES`/`NEGOCIOS`/`RAZAO` no BO. O campo opcional `cenario` vem de catálogo fechado; listas consultam a primeira página de20. Omitir o campo mantém identidade técnica e o hash anterior. Cada oferta ainda é uma chamada HTTP; estes cenários não enviam ordens, preparam carteiras ou comprovam negócios concluídos.
+
+Para habilitar leitura financeira, com a configuração local já existente, emita tokens de leitura e recrie a ferramenta fora de uma execução ativa:
+
+```bash
+python3 scripts/carga.py preparar
+python3 scripts/carga.py preparar-financeiro --conta CONTA-002 --validade 3600
+docker compose -f docker-compose.yml -f docker-compose.carga.yml --profile carga up -d --no-deps --force-recreate api-carga
+python3 scripts/carga.py iniciar --plano ferramentas/carga/plano-leitura-carteira.json
+```
+
+A chave financeira permanece no processo operador. Cinco arquivos individuais contêm apenas bearers curtos de leitura, montados no Go sem entrar em plano, relatório, métricas ou stdout. `preparar` cria arquivos vazios sem exigir configuração financeira; isso mantém os cenários financeiros desabilitados e preserva a etapa A. Validade precisa cobrir calendário, timeout e margem de5s. Tokens são carregados ao iniciar: após renovar arquivos, recrie a API para atualizar os binds. `baseline` continua reservado a IDENTIDADE.
+
+A API fica em `127.0.0.1:8090`; o listener de métricas `9091` é interno, sem publicação no host. O perfil `carga` é opt-in e não inicia no Compose padrão nem executa carga na CI. O container usa 384 MiB/1 CPU, usuário 65532, filesystem somente leitura e nenhum socket Docker/banco. `.carga-local/` guarda artefatos privados com diretório `0700`; as chaves e os cinco arquivos opcionais de leitura ficam `0444` para os binds individuais do UID 65532, sem montar o diretório inteiro. Demais artefatos permanecem privados; não versionar esse diretório.
 
 O script no host verifica orçamento e saúde de Prometheus (`/-/ready`), Grafana (`/api/health`) e Collector (`/`) nos endpoints próprios de leitura antes de emitir atestado HS256 de até 30 s, vinculado à instância e ao plano, com nonce de uso único e `telemetria:true`. O atestado não reserva recursos. Enviá-lo em `X-Prospero-Preflight` ou `autorizacao` do corpo; ambos juntos resultam em `400`. Chaves de controle e preflight são distintas. O [painel técnico](infra/grafana/dashboards/carga.json) usa métricas reais do processo Go e JVM; API e gerador compartilham o processo. Fontes detalhadas de host/cgroups, disco/rede, DB/Kafka/outbox continuam ausentes e não aparecem como zero. Esta etapa não mede negociação nem comprova RNF04.
 
-O teste futuro combinará rampas abertas/fechadas, saturação e queda/retorno de MS. Medirá oferta, admissão durável e conclusão separadamente, além de backlog, tempo de recuperação e reconciliação dos IDs/quantidades/reservas/negócios/lançamentos. Outbox e deduplicação atômicas com os efeitos, SAGA persistida e replay controlado são a estratégia planejada; timeout não autoriza liberar reserva ou declarar sucesso. O harness externo controla as falhas; a API de carga não recebe shell/socket Docker. Os cenários financeiros dependem das RFs e ainda não foram executados. [Matriz de falhas e consistência](docs/hlds/HLD-006-api-carga.md#desempenho-com-falhas-e-consistência-entre-serviços).
+O teste futuro combinará rampas abertas/fechadas, saturação e queda/retorno de MS. Medirá oferta, admissão durável e conclusão separadamente, além de backlog, tempo de recuperação e reconciliação dos IDs/quantidades/reservas/negócios/lançamentos. Outbox e deduplicação atômicas com os efeitos, SAGA persistida e replay controlado são a estratégia planejada; timeout não autoriza liberar reserva ou declarar sucesso. O harness externo controla as falhas; a API de carga não recebe shell/socket Docker. Os cenários com escrita financeira dependem das RFs, isolamento, orçamento persistente e reconciliação; permanecem futuros. A fatia de leituras não conclui P06 ou V01. [Matriz de falhas e consistência](docs/hlds/HLD-006-api-carga.md#desempenho-com-falhas-e-consistência-entre-serviços).
 
 O controle da ferramenta usa JWT com **HS256 fixado pelo servidor**: rejeita `none`, algoritmo divergente e assinatura/claims inválidas antes de admitir execução. O token não escolhe a política. Exemplo de biblioteca mal configurada pertence apenas à demonstração isolada/teste negativo, sem opção de bypass na API. [Contrato de segurança](docs/hlds/HLD-006-api-carga.md#segurança-implantação-e-orçamento), [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html).
 

@@ -389,7 +389,7 @@ func TestXMetricas(t *testing.T) {
 	w := httptest.NewRecorder()
 	s.MetricsHandler().ServeHTTP(w, httptest.NewRequest("GET", "/metrics", nil))
 	b := w.Body.String()
-	for _, k := range []string{`carga_oferecidas_total{servico="front-office"} 2`, "carga_execucao_ativa 0", `carga_duracao_seconds_count{servico="front-office"} 2`} {
+	for _, k := range []string{`carga_oferecidas_total{servico="front-office",cenario="IDENTIDADE"} 2`, "carga_execucao_ativa 0", `carga_duracao_seconds_count{servico="front-office",cenario="IDENTIDADE"} 2`} {
 		if !strings.Contains(b, k) {
 			t.Errorf("métrica ausente: %s", k)
 		}
@@ -418,13 +418,24 @@ func TestXOpenAPIAderenteAoPlano(t *testing.T) {
 		schema := doc.Components.Schemas[name]
 		typ := reflect.TypeOf(value)
 		var fields []string
+		var properties []string
 		for i := range typ.NumField() {
-			fields = append(fields, strings.Split(typ.Field(i).Tag.Get("json"), ",")[0])
+			tag := typ.Field(i).Tag.Get("json")
+			field := strings.Split(tag, ",")[0]
+			properties = append(properties, field)
+			if !strings.Contains(tag, ",omitempty") {
+				fields = append(fields, field)
+			}
+		}
+		for _, field := range properties {
+			if _, ok := schema.Properties[field]; !ok {
+				t.Fatalf("%s: propriedade %s ausente", name, field)
+			}
 		}
 		sort.Strings(fields)
 		required := append([]string(nil), schema.Required...)
 		sort.Strings(required)
-		if !reflect.DeepEqual(fields, required) || len(schema.Properties) != len(fields) {
+		if !reflect.DeepEqual(fields, required) || len(schema.Properties) != len(properties) {
 			t.Fatalf("%s: OpenAPI %v diverge dos campos obrigatórios %v", name, required, fields)
 		}
 	}

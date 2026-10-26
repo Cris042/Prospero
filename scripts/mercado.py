@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from importlib import import_module
 
 ambiente = import_module("preparar-ambiente")
-ESCOPOS = {"leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "mercado:preparacao"],
+ESCOPOS = {"ordens-leitura": ["ordens:leitura"], "leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "mercado:preparacao"],
            "ordens": ["mercado:leitura", "ordens:enviar", "ordens:leitura"],
            "risco": ["risco:leitura"], "risco-preparacao": ["risco:preparacao"], "sessao": ["sessao:encerrar"], "posicoes": ["posicoes:leitura"],
            "razao": ["razao:leitura"], "liquidacao": ["liquidacao:administrar"]}
@@ -32,7 +32,7 @@ ESCOPOS = {"leitura": ["mercado:leitura"], "preparacao": ["mercado:leitura", "me
 AUDIENCIAS = {"risco": "prospero-middle-office", "risco-preparacao": "prospero-middle-office",
               "sessao": "prospero-middle-office", "posicoes": "prospero-back-office",
               "razao": "prospero-back-office", "liquidacao": "prospero-back-office"}
-POR_CONTA = {"ordens", "risco", "posicoes", "razao"}
+POR_CONTA = {"ordens-leitura", "ordens", "risco", "posicoes", "razao"}
 ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
 CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"}
 VALIDADE_MAXIMA = 3600

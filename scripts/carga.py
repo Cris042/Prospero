@@ -11,6 +11,7 @@ import secrets
 import shutil
 import sys
 import time
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -26,6 +27,45 @@ def private_write(path, data):
     os.fchmod(fd, 0o600)
     with os.fdopen(fd, 'w') as stream:
         stream.write(data)
+
+
+FINANCIAL_FILES = {
+    'mercado.token': 'leitura', 'ordens.token': 'ordens-leitura', 'risco.token': 'risco',
+    'posicoes.token': 'posicoes', 'razao.token': 'razao',
+}
+
+
+def ensure_private_file(path):
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError('arquivo privado invalido')
+    if not path.exists():
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o444)
+        os.close(fd)
+        path.chmod(0o444)
+
+
+def financial_credentials(conta, validade):
+    if conta not in {'CONTA-002', 'CONTA-003'} or not 1 <= validade <= 3600:
+        raise ValueError('conta ou validade invalida')
+    from mercado import token
+    # A chave financeira permanece neste processo operador; somente bearers de leitura são gravados.
+    tokens = {name: token(scope, validade, None if scope == 'leitura' else conta)
+              for name, scope in FINANCIAL_FILES.items()}
+    for name, value in tokens.items():
+        target = PRIVATE / name
+        if target.is_symlink() or (target.exists() and not target.is_file()):
+            raise ValueError('arquivo privado invalido')
+        fd, temporary = tempfile.mkstemp(prefix='.leitura-', dir=PRIVATE)
+        try:
+            with os.fdopen(fd, 'w') as stream:
+                stream.write(value)
+                stream.flush()
+                os.fchmod(stream.fileno(), 0o444)
+            os.replace(temporary, target)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    print('Credenciais de leitura gravadas em arquivos individuais; validade ' + str(validade) + ' segundos. Valores omitidos.')
 
 
 def key(name):
@@ -97,7 +137,10 @@ def host_budget():
 def authorization(plan, instance):
     budget = host_budget()
     now = int(time.time())
-    digest = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(',', ':'),
+    canonical = dict(plan)
+    if canonical.get('cenario') == '':
+        canonical.pop('cenario')
+    digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(',', ':'),
                                       ensure_ascii=False).encode()).hexdigest()
     return jwt(dict(budget, iss='prospero-preflight', aud=instance, iat=now, exp=now + 30,
                     nonce=secrets.token_hex(16), plano=digest), key('preflight.key'))
@@ -121,8 +164,10 @@ def begin(plan):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('acao', choices=['preparar', 'token', 'preflight', 'iniciar', 'consultar', 'cancelar', 'baseline'])
+    parser.add_argument('acao', choices=['preparar', 'preparar-financeiro', 'token', 'preflight', 'iniciar', 'consultar', 'cancelar', 'baseline'])
     parser.add_argument('--plano', type=Path, default=ROOT / 'ferramentas/carga/plano-exemplo.json')
+    parser.add_argument('--conta', choices=['CONTA-002', 'CONTA-003'], default='CONTA-002')
+    parser.add_argument('--validade', type=int, default=600)
     parser.add_argument('--id')
     parser.add_argument('--saida', type=Path)
     args = parser.parse_args()
@@ -133,12 +178,19 @@ def main():
     if args.acao == 'preparar':
         for name in ('controle.key', 'preflight.key'):
             path = PRIVATE / name
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise ValueError('arquivo privado invalido')
             if not path.exists():
                 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o444)
                 with os.fdopen(fd, 'w') as stream:
                     stream.write(secrets.token_hex(32))
                 path.chmod(0o444)
-        print('Chaves locais preparadas; valores omitidos. Nunca versionar .carga-local/.')
+        for name in FINANCIAL_FILES:
+            ensure_private_file(PRIVATE / name)
+        print('Chaves e arquivos financeiros opcionais preparados; valores omitidos. Nunca versionar .carga-local/.')
+        return
+    if args.acao == 'preparar-financeiro':
+        financial_credentials(args.conta, args.validade)
         return
     if args.acao == 'token':
         private_write(args.saida or PRIVATE / 'token.txt', control_token())
@@ -152,6 +204,8 @@ def main():
                          'POST' if suffix else 'GET')
     else:
         plan = json.loads(args.plano.read_text())
+        if args.acao == 'baseline' and plan.get('cenario', 'IDENTIDADE') not in ('', 'IDENTIDADE'):
+            raise ValueError('baseline exige cenario tecnico')
         if args.acao == 'preflight':
             instance = request('/api/v1/sistema')['instancia']
             private_write(args.saida or PRIVATE / 'requisicao.json', json.dumps(

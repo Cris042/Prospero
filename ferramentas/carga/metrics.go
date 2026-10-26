@@ -50,23 +50,24 @@ func (s *Server) MetricsHandler() http.Handler {
 			fmt.Fprintf(w, "# TYPE carga_%s_total counter\n", name)
 		}
 		fmt.Fprintln(w, "# TYPE carga_duracao_seconds histogram")
-		for _, service := range []string{"front-office", "middle-office", "matching-engine", "back-office"} {
-			c, exists := totals[service]
+		for _, plano := range planosMetricas() {
+			service, cenario := plano.Servico, plano.Cenario
+			c, exists := totals[plano.chaveMetrica()]
 			if !exists {
 				continue
 			}
 			values := []int64{int64(c.Oferecidas), int64(c.Iniciadas), int64(c.Finalizadas), int64(c.Descartadas), int64(c.ErrosHTTP), int64(c.Timeouts), c.BytesLidos, int64(c.FalhasTransporte), int64(c.CanceladasEmVoo), int64(c.LimitesResposta)}
 			for i, n := range names {
-				fmt.Fprintf(w, "carga_%s_total{servico=%q} %d\n", n, service, values[i])
+				fmt.Fprintf(w, "carga_%s_total{servico=%q,cenario=%q} %d\n", n, service, cenario, values[i])
 			}
-			h := hist[service]
+			h := hist[plano.chaveMetrica()]
 			if h == nil {
 				continue
 			}
 			for i, b := range latencyBuckets {
-				fmt.Fprintf(w, "carga_duracao_seconds_bucket{servico=%q,le=%q} %d\n", service, strconv.FormatFloat(float64(b)/1e6, 'f', -1, 64), h[i])
+				fmt.Fprintf(w, "carga_duracao_seconds_bucket{servico=%q,cenario=%q,le=%q} %d\n", service, cenario, strconv.FormatFloat(float64(b)/1e6, 'f', -1, 64), h[i])
 			}
-			fmt.Fprintf(w, "carga_duracao_seconds_bucket{servico=%q,le=\"+Inf\"} %d\ncarga_duracao_seconds_count{servico=%q} %d\ncarga_duracao_seconds_sum{servico=%q} %.6f\n", service, h[len(latencyBuckets)], service, h[len(latencyBuckets)], service, float64(h[len(latencyBuckets)+1])/1e6)
+			fmt.Fprintf(w, "carga_duracao_seconds_bucket{servico=%q,cenario=%q,le=\"+Inf\"} %d\ncarga_duracao_seconds_count{servico=%q,cenario=%q} %d\ncarga_duracao_seconds_sum{servico=%q,cenario=%q} %.6f\n", service, cenario, h[len(latencyBuckets)], service, cenario, h[len(latencyBuckets)], service, cenario, float64(h[len(latencyBuckets)+1])/1e6)
 		}
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
