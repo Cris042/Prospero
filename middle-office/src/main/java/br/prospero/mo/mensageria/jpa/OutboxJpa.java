@@ -1,6 +1,7 @@
 package br.prospero.mo.mensageria.jpa;
 
 import br.prospero.mo.mensageria.dominio.MensagemSaida;
+import br.prospero.mo.mensageria.kafka.AvisoOutbox;
 import br.prospero.mo.mensageria.dominio.Outbox;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -14,6 +15,7 @@ import java.time.ZoneOffset;
 @ApplicationScoped
 public class OutboxJpa implements Outbox {
     private final EntityManager em;
+    @Inject AvisoOutbox avisoOutbox;
 
     @Inject
     public OutboxJpa(EntityManager em) {
@@ -32,5 +34,6 @@ public class OutboxJpa implements Outbox {
                 .setParameter("tipo", m.tipo()).setParameter("payload", m.payload())
                 .setParameter("trace", m.traceparent(), String.class)
                 .setParameter("criado", OffsetDateTime.ofInstant(m.criadaEm(), ZoneOffset.UTC)).executeUpdate();
+        avisoOutbox.registrar();
     }
 }

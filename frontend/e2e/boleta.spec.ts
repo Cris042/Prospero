@@ -1,5 +1,125 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
+function caminhoSemConsulta(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return '(sem URL)';
+  }
+}
+
+const POSICOES = '/servicos/back-office/api/v1/posicoes';
+const ERRO_RECURSO_503 =
+  'Failed to load resource: the server responded with a status of 503 (Service Unavailable)';
+
+function posicoesDaPagina(url: string, page: Page): boolean {
+  try {
+    const destino = new URL(url);
+    return (
+      destino.origin === new URL(page.url()).origin &&
+      destino.pathname === POSICOES &&
+      destino.search === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Aceita somente indisponibilidade contratada de posições, seguida de recuperação observável. */
+function observarRecuperacao(page: Page) {
+  const erros: string[] = [];
+  const respostasComErro: { metodo: string; caminho: string; status: number }[] = [];
+  const pendentes = new Set<Promise<void>>();
+  let sequencia = 0;
+  let ultimaFalha = 0;
+  let ultimoSucesso = 0;
+  let indisponibilidades = 0;
+  let mensagens503 = 0;
+  page.on('pageerror', (erro) => erros.push(erro.message));
+  page.on('console', (mensagem) => {
+    if (mensagem.type() !== 'error') return;
+    const caminho = caminhoSemConsulta(mensagem.location().url);
+    if (posicoesDaPagina(mensagem.location().url, page) && mensagem.text() === ERRO_RECURSO_503)
+      mensagens503++;
+    else erros.push(`${caminho}: ${mensagem.text()}`);
+  });
+  page.on('response', (resposta) => {
+    const ordem = ++sequencia;
+    const caminho = caminhoSemConsulta(resposta.url());
+    const metodo = resposta.request().method();
+    const posicoes = metodo === 'GET' && posicoesDaPagina(resposta.url(), page);
+    if (posicoes && resposta.status() === 200) {
+      const conclusao = resposta.finished().then((falha) => {
+        if (falha) erros.push('Resposta 200 de posições não foi concluída');
+        else ultimoSucesso = Math.max(ultimoSucesso, ordem);
+      });
+      pendentes.add(conclusao);
+      void conclusao.finally(() => pendentes.delete(conclusao));
+    }
+    if (resposta.status() < 400) return;
+    if (respostasComErro.length >= 20) {
+      if (!erros.includes('Mais de 20 respostas HTTP com erro'))
+        erros.push('Mais de 20 respostas HTTP com erro');
+      return;
+    }
+    // Somente metadados: nunca registrar headers, query strings ou corpos com credenciais.
+    respostasComErro.push({ metodo, caminho, status: resposta.status() });
+    if (!posicoes || resposta.status() !== 503) {
+      erros.push(`HTTP ${resposta.status()} ${metodo} ${caminho}`);
+      return;
+    }
+    ultimaFalha = ordem;
+    const verificacao = (async () => {
+      try {
+        const problema: unknown = await resposta.json();
+        if (
+          resposta.headers()['content-type']?.split(';')[0] === 'application/problem+json' &&
+          problema !== null &&
+          typeof problema === 'object' &&
+          'status' in problema &&
+          problema.status === 503 &&
+          'codigo' in problema &&
+          problema.codigo === 'POSICOES_INDISPONIVEIS'
+        ) {
+          indisponibilidades++;
+          return;
+        }
+      } catch {
+        // Corpo inválido também reprova, sem expor seu conteúdo no diagnóstico.
+      }
+      erros.push('503 de posições fora do contrato POSICOES_INDISPONIVEIS');
+    })();
+    pendentes.add(verificacao);
+    void verificacao.finally(() => pendentes.delete(verificacao));
+  });
+  return async (timeout = 15000) => {
+    await expect
+      .poll(
+        async () => {
+          return {
+            erros,
+            respostasPendentes: pendentes.size,
+            console503Correlacionado: mensagens503 <= indisponibilidades,
+            recuperou: ultimoSucesso > ultimaFalha,
+            tabelaVisivel: await page
+              .getByRole('region', { name: 'Tabela de posições' })
+              .isVisible(),
+            alertas: await page.locator('app-posicoes').getByRole('alert').count(),
+          };
+        },
+        { timeout, message: JSON.stringify(respostasComErro) },
+      )
+      .toEqual({
+        erros: [],
+        respostasPendentes: 0,
+        console503Correlacionado: true,
+        recuperou: true,
+        tabelaVisivel: true,
+        alertas: 0,
+      });
+  };
+}
+
 function registroDaBoleta(page: Page) {
   return page
     .locator('app-boleta')
@@ -51,11 +171,7 @@ async function consultarAlfa(request: APIRequestContext): Promise<CotacaoAlfa> {
 test('registra ordem Limit pela boleta, sem credencial no navegador nem envio duplicado', async ({
   page,
 }, testInfo) => {
-  const erros: string[] = [];
-  page.on('pageerror', (erro) => erros.push(erro.message));
-  page.on('console', (mensagem) => {
-    if (mensagem.type() === 'error') erros.push(mensagem.text());
-  });
+  const verificarRecuperacao = observarRecuperacao(page);
   const posts: { autorizacao?: string; chave?: string }[] = [];
   page.on('request', (pedido) => {
     if (pedido.method() === 'POST' && pedido.url().endsWith('/api/v1/ordens')) {
@@ -122,12 +238,101 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   expect(posts[0].autorizacao).toBeUndefined();
   expect(posts[0].chave).toMatch(/^[0-9a-f-]{36}$/);
   await expect(status).not.toContainText('Executada');
-  expect(erros).toEqual([]);
+  await verificarRecuperacao();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
   await page.getByRole('heading', { name: 'Boleta' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('boleta.png'), fullPage: true });
+});
+
+test('recupera posições após um 503 contratado sem esconder erros da boleta', async ({ page }) => {
+  const verificarRecuperacao = observarRecuperacao(page);
+  const liberacao = Promise.withResolvers<void>();
+  let primeira = true;
+  await page.route(`**${POSICOES}`, async (rota) => {
+    if (primeira) {
+      primeira = false;
+      await rota.fulfill({
+        status: 503,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({ status: 503, codigo: 'POSICOES_INDISPONIVEIS' }),
+      });
+      return;
+    }
+    await liberacao.promise;
+    await rota.fallback();
+  });
+  try {
+    await page.goto('/');
+    await expect(page.locator('app-posicoes').getByRole('alert')).toContainText(
+      'Tentaremos novamente automaticamente',
+    );
+  } finally {
+    liberacao.resolve();
+  }
+  // A resposta posterior passa pela API real; nenhum clique em Atualizar posições.
+  await verificarRecuperacao();
+});
+
+for (const falha of [
+  {
+    nome: '503 contratado persistente',
+    status: 503,
+    codigo: 'POSICOES_INDISPONIVEIS',
+    persistente: true,
+  },
+  { nome: '500 de posições', status: 500, codigo: 'POSICOES_INDISPONIVEIS', persistente: false },
+  { nome: '503 com código inesperado', status: 503, codigo: 'ERRO_HTTP', persistente: false },
+]) {
+  test(`reprova verificação da boleta com ${falha.nome}`, async ({ page }) => {
+    const verificarRecuperacao = observarRecuperacao(page);
+    const liberacao = Promise.withResolvers<void>();
+    let primeira = true;
+    await page.route(`**${POSICOES}`, async (rota) => {
+      if (primeira || falha.persistente) {
+        primeira = false;
+        await rota.fulfill({
+          status: falha.status,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({ status: falha.status, codigo: falha.codigo }),
+        });
+        return;
+      }
+      await liberacao.promise;
+      await rota.fallback();
+    });
+    try {
+      await page.goto('/');
+      await expect(page.locator('app-posicoes').getByRole('alert')).toBeVisible();
+    } finally {
+      liberacao.resolve();
+    }
+    if (!falha.persistente) {
+      await expect(page.getByRole('region', { name: 'Tabela de posições' })).toBeVisible({
+        timeout: 15000,
+      });
+      await expect(page.locator('app-posicoes').getByRole('alert')).toHaveCount(0);
+    }
+    // Mesmo após a UI recuperar, 500 e código inesperado continuam reprovando.
+    await expect(verificarRecuperacao(250)).rejects.toThrow();
+  });
+}
+
+test('reprova verificação da boleta com erro JavaScript mesmo após posições recuperarem', async ({
+  page,
+}) => {
+  const verificarRecuperacao = observarRecuperacao(page);
+  await page.goto('/');
+  await verificarRecuperacao();
+  const erro = page.waitForEvent('pageerror');
+  await page.evaluate(() => {
+    setTimeout(() => {
+      throw new Error('Falha JavaScript de controle QA');
+    }, 0);
+  });
+  await erro;
+  await expect(verificarRecuperacao(250)).rejects.toThrow();
 });
 
 test('mostra recusa do backend de forma acessível e registra OCO', async ({ page }) => {
