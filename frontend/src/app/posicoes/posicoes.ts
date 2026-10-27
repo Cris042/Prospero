@@ -12,7 +12,6 @@ import {
   defer,
   distinctUntilChanged,
   EMPTY,
-  exhaustMap,
   finalize,
   fromEvent,
   map,
@@ -22,6 +21,8 @@ import {
   switchMap,
   timer,
 } from 'rxjs';
+import { AtualizacoesService } from '../atualizacoes/atualizacoes.service';
+import { consultasSerializadas } from '../atualizacoes/consultas-serializadas';
 import { formatarData, formatarDecimal } from '../mercado/mercado.service';
 import { PosicoesResumo, PosicoesService } from './posicoes.service';
 
@@ -32,9 +33,11 @@ import { PosicoesResumo, PosicoesService } from './posicoes.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Posicoes implements OnInit {
+  readonly canal = inject(AtualizacoesService);
   private readonly servico = inject(PosicoesService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly pedidos = new Subject<void>();
+  private geracaoConsulta = 0;
   readonly resumo = signal<PosicoesResumo | null>(null);
   readonly carregando = signal(false);
   readonly erro = signal(false);
@@ -49,7 +52,9 @@ export class Posicoes implements OnInit {
         distinctUntilChanged(),
         switchMap((visivel) =>
           visivel
-            ? merge(timer(0, 2000), this.pedidos).pipe(exhaustMap(() => this.consultar()))
+            ? consultasSerializadas(merge(timer(0, 2000), this.pedidos, this.canal.avisos$), () =>
+                this.consultar(),
+              )
             : EMPTY,
         ),
         takeUntilDestroyed(this.destroyRef),
@@ -66,13 +71,16 @@ export class Posicoes implements OnInit {
 
   private consultar() {
     return defer(() => {
+      const geracao = ++this.geracaoConsulta;
       this.carregando.set(true);
       return this.servico.consultar().pipe(
         catchError(() => {
           this.erro.set(true);
           return EMPTY;
         }),
-        finalize(() => this.carregando.set(false)),
+        finalize(() => {
+          if (geracao === this.geracaoConsulta) this.carregando.set(false);
+        }),
       );
     });
   }

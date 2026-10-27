@@ -3,6 +3,12 @@ package br.prospero.bo.posicoes;
 import br.prospero.bo.posicoes.dominio.ProjecaoIncoerenteException;
 import br.prospero.bo.posicoes.helper.EnvelopeMatching;
 import br.prospero.bo.posicoes.kafka.CicloPosicoes;
+import br.prospero.bo.posicoes.kafka.RastreioPosicoes;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import org.apache.kafka.clients.consumer.CommitFailedException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
@@ -27,6 +33,38 @@ class CicloPosicoesTest {
     private static final TopicPartition P1 = new TopicPartition(TOPICO, 1);
     private static final TopicPartition P2 = new TopicPartition(TOPICO, 2);
     private static final List<TopicPartition> PARTICOES = List.of(P0, P1, P2);
+
+    @Test
+    void headerDoMatchingGeraContextoBoSemMudarBytesOuAssinaturaDoEvento() {
+        String trace = "0123456789abcdef0123456789abcdef";
+        String pai = "00-" + trace + "-0123456789abcdef-01";
+        try (var provider = SdkTracerProvider.builder().build();
+             var c = configurar(new MockConsumer<String, byte[]>("earliest"), 1)) {
+            var otel = OpenTelemetrySdk.builder().setTracerProvider(provider)
+                    .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance())).build();
+            var rastreio = new RastreioPosicoes(otel, otel.getTracer("back-office"));
+            var registro = registro(0);
+            byte[] bytes = registro.value().clone();
+            String assinatura = EnvelopeMatching.evento(bytes, registro.key()).assinatura();
+            registro.headers().add("traceparent", pai.getBytes(StandardCharsets.UTF_8));
+            AtomicLong banco = new AtomicLong();
+            var ciclo = new CicloPosicoes(c, ID, p -> p == 0 ? banco.get() : 0, (coordenada, evento) -> {
+                assertEquals(trace, Span.current().getSpanContext().getTraceId());
+                assertEquals(RastreioPosicoes.atual(), evento.traceparent());
+                assertTrue(evento.traceparent().startsWith("00-" + trace + "-"));
+                assertNotEquals(pai, evento.traceparent(), "o BO registra seu próprio span filho");
+                assertEquals(assinatura, evento.assinatura());
+                assertArrayEquals(bytes, registro.value());
+                banco.incrementAndGet();
+            }, rastreio);
+            ciclo.iniciar(); c.rebalance(PARTICOES);
+            c.addRecord(registro);
+            ciclo.rodada(() -> { });
+            assertEquals(1, banco.get());
+            assertEquals(1, c.committed(Set.of(P0)).get(P0).offset());
+            assertFalse(Span.current().getSpanContext().isValid());
+        }
+    }
 
     private static <T extends MockConsumer<String, byte[]>> T configurar(T consumidor, long fim0) {
         consumidor.updateBeginningOffsets(Map.of(P0, 0L, P1, 0L, P2, 0L));

@@ -1,4 +1,15 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+
+function registroDaBoleta(page: Page) {
+  return page
+    .locator('app-boleta')
+    .getByRole('status')
+    .filter({ hasText: /registrad/ });
+}
+
+function erroDaBoleta(page: Page, texto: string) {
+  return page.locator('app-boleta').getByRole('alert').filter({ hasText: texto });
+}
 
 interface CotacaoAlfa {
   ticker: string;
@@ -85,7 +96,7 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   }
   const respostaRegistro = await resposta;
   expect(respostaRegistro.status()).toBe(202);
-  const status = page.getByRole('status');
+  const status = registroDaBoleta(page);
   await expect(status).toContainText(/Ordem registrada — estado (Recebida|Reservada|Aberta)\./);
   // A boleta acompanha o risco; o ME pode já ter aberto a ordem antes dessa consulta.
   await expect(status).toContainText(/Ordem registrada — estado (Reservada|Aberta)\./, {
@@ -124,7 +135,7 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
   const boleta = page.getByRole('form', { name: 'Ordem simples' });
   await boleta.getByLabel('Preço limite (R$)').fill('1e3');
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
-  await expect(page.getByRole('alert')).toContainText('Preço inválido');
+  await expect(erroDaBoleta(page, 'Preço inválido')).toContainText('Preço inválido');
   const faixa = faixaAtual(await consultarAlfa(page.request));
   await boleta.getByLabel('Preço limite (R$)').fill(decimal(faixa.maximo + faixa.tick));
   let corpoRecusa!: unknown;
@@ -157,7 +168,7 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
     codigo: 'PRECO_FORA_DO_TUNEL',
     detalhes: { minimo: decimal(faixa.minimo), maximo: decimal(faixa.maximo) },
   });
-  await expect(page.getByRole('alert')).toContainText(
+  await expect(erroDaBoleta(page, 'Faixa aceita:')).toContainText(
     `Faixa aceita: ${decimal(faixa.minimo).replace('.', ',')} a ${decimal(faixa.maximo).replace('.', ',')}.`,
   );
 
@@ -187,8 +198,8 @@ test('mostra recusa do backend de forma acessível e registra OCO', async ({ pag
       { timeout: 15000 },
     )
     .toBe('ABERTA');
-  await expect(page.getByRole('status')).toContainText('Take Profit: Venda 100 ALFA3');
-  await expect(page.getByRole('status')).toContainText('Stop Loss: Venda 100 ALFA3');
+  await expect(registroDaBoleta(page)).toContainText('Take Profit: Venda 100 ALFA3');
+  await expect(registroDaBoleta(page)).toContainText('Stop Loss: Venda 100 ALFA3');
   await expect(page).toHaveURL(urlInicial);
   expect(navegacoes).toEqual([]);
 });
@@ -235,7 +246,7 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
   const registroMarket = await respostaMarket;
   expect(registroMarket.status()).toBe(202);
   expect(market).toBeDefined();
-  await expect(page.getByRole('status')).toContainText('Mercado');
+  await expect(registroDaBoleta(page)).toContainText('Mercado');
   // Consumidores de ordens e cotação são distintos: esperar ambos antes de derivar o próximo preço.
   await expect
     .poll(
@@ -271,7 +282,9 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
     return rota.fallback();
   });
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
-  await expect(page.getByRole('alert')).toContainText('o reenvio não duplica a ordem');
+  await expect(erroDaBoleta(page, 'o reenvio não duplica a ordem')).toContainText(
+    'o reenvio não duplica a ordem',
+  );
   const respostaStopLimit = page.waitForResponse(
     (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
   );
@@ -283,7 +296,7 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
     precoLimite: decimal(faixa.gatilho + faixa.tick),
     precoGatilho: decimal(faixa.gatilho),
   });
-  await expect(page.getByRole('status')).toContainText('Stop Limit');
+  await expect(registroDaBoleta(page)).toContainText('Stop Limit');
   expect(chaves).toHaveLength(3);
   expect(chaves[2]).toBe(chaves[1]);
   expect(chaves[1]).not.toBe(chaves[0]);

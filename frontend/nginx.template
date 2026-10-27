@@ -10,6 +10,12 @@ map $request_method $ordens_limite { POST $binary_remote_addr; default ""; }
 limit_req_zone $ordens_limite zone=ordens:1m rate=10r/s;
 # Resumo e livro compartilham a cota por IP; inclui outras abas da mesma origem local.
 limit_req_zone $binary_remote_addr zone=mercado:1m rate=5r/s;
+# RF09b: upgrade somente da mesma autoridade HTTP local, incluindo a porta pública.
+map $http_origin $ws_autoridade {
+  default "";
+  "~^http://(localhost|127\.0\.0\.1)(:[0-9]{1,5})?$" "$1$2";
+}
+map $http_upgrade $ws_upgrade { default 0; "~*^websocket$" 1; }
   server {
     listen 8080;
     root /usr/share/nginx/html;
@@ -40,6 +46,36 @@ limit_req_zone $binary_remote_addr zone=mercado:1m rate=5r/s;
       proxy_set_header Host $host;
       proxy_set_header X-Request-ID $request_id;
       proxy_set_header Authorization "Bearer ${FO_TOKEN_LEITURA}";
+    }
+    location = /servicos/front-office/api/v1/atualizacoes {
+      if ($request_method != GET) { return 405; }
+      if ($ws_autoridade = "") { return 403; }
+      if ($ws_autoridade != $http_host) { return 403; }
+      if ($ws_upgrade = 0) { return 403; }
+      if ($args != "") { return 403; }
+      if ($http_sec_websocket_protocol != "") { return 403; }
+      set $backend front-office:8080;
+      rewrite ^/servicos/front-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_http_version 1.1;
+      proxy_set_header Host $http_host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Sec-WebSocket-Extensions "";
+      proxy_set_header Authorization "Bearer ${FO_TOKEN_ORDENS}";
+      proxy_buffering off;
+      proxy_read_timeout 45s;
+      proxy_send_timeout 3s;
+      send_timeout 3s;
+    }
+    location ~ "^/servicos/front-office/api/v1/ordens/[0-9a-f-]{36}/trajetoria$" {
+      limit_except GET { deny all; }
+      set $backend front-office:8080;
+      rewrite ^/servicos/front-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+      proxy_set_header Authorization "Bearer ${FO_TOKEN_ORDENS}";
     }
     # Regex exata: o token de escrita só alcança as rotas revisadas de ordens, nunca prefixos futuros.
     location ~ "^/servicos/front-office/api/v1/ordens(-oco)?(/[0-9a-f-]{36})?$" {

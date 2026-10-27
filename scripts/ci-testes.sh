@@ -80,6 +80,18 @@ rodar_workbook razao razao
 # RF09a: recebimento, risco rejeitado, cursor e isolamento; duas execuções sem reconstruir fatos.
 rodar_workbook trajetoria risco
 rodar_workbook trajetoria risco
+# RF09b: recuperação com os mesmos bancos/logs, spans de processamento e queda limitada do coletor.
+fo_origem="http://$("${compose[@]}" port front-office 8080)"
+mo_origem="http://$("${compose[@]}" port middle-office 8080)"
+bo_origem="http://$("${compose[@]}" port back-office 8080)"
+jaeger_origem="http://$("${compose[@]}" port jaeger 16686)"
+timeout 600 python3 scripts/testar-trajetoria.py --projeto "$project" --origem "$fo_origem" \
+  --origem-mo "$mo_origem" --origem-bo "$bo_origem" --origem-jaeger "$jaeger_origem" \
+  > .ci-evidencias/trajetoria.json
+cat .ci-evidencias/trajetoria.json
+# Reinício/recriação pode renovar portas; o harness restaura worker=false antes de retornar.
+fo_origem="http://$("${compose[@]}" port front-office 8080)"
+bo_origem="http://$("${compose[@]}" port back-office 8080)"
 # RF06a: livro real, VWAP e repetição sem zerar acumuladores ou reservas.
 rodar_workbook cotacao risco
 rodar_workbook cotacao risco
@@ -109,6 +121,9 @@ rodar_workbook validacao ordens
 python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"
 python3 scripts/mercado.py preparar-demo --origem "$fo_origem"
 bo_origem="http://$("${compose[@]}" port back-office 8080)"
+# RF09b: relay ativo durante os E2E confirma contabilização; restaura false antes da prova RF08e.
+PROSPERO_CI_WORKER_LIQUIDACAO=true "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 back-office
+bo_origem="http://$("${compose[@]}" port back-office 8080)"
 # Credenciais ficam no arquivo privado temporário, acessível só ao processo Node do teste.
 python3 scripts/mercado.py config-runner "$runner_cfg/posicoes-e2e.json" --perfil posicoes \
   --origem "$fo_origem" --origem-mo "$mo_origem" --origem-bo "$bo_origem"
@@ -119,6 +134,8 @@ export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 playwright_deps=()
 [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
 (cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium && npm run test:e2e)
+PROSPERO_CI_WORKER_LIQUIDACAO=false "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 back-office
+bo_origem="http://$("${compose[@]}" port back-office 8080)"
 # RF05d.2: robô em DELTA3, que nenhuma prova seguinte usa; para ao fim, com as ofertas DIA vivas (o encerramento é só GAMA3).
 "${compose_robo[@]}" build robo-formador
 python3 scripts/mercado.py verificar-robo --origem "$fo_origem" --projeto "$project"

@@ -12,6 +12,11 @@
     Resultado dos negócios desde o início da simulação. A custódia inicial e a liquidação não entram
     neste cálculo. Autonegociação não altera o resultado da própria conta.
   </p>
+  @if (canal.estado() === 'indisponivel') {
+    <p class="nota" role="status">
+      Atualizações em tempo real indisponíveis. As consultas periódicas continuam.
+    </p>
+  }
   @if (erro()) {
     <p class="erro" role="alert">
       Não foi possível atualizar as posições. Tentaremos novamente automaticamente.

@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Implementa consulta de mercado, registro/consulta idempotente de ordens, validação lote/tick/túnel e SAGA de risco FO ↔ MO. A RF05b acrescenta o consumidor de execuções e a projeção de progresso das ordens; a RF06a acrescenta a projeção real de mercado (integrada no PR #37); trajetória completa e WebSocket permanecem futuros. Estado de validação/PR no roadmap.
+Contexto de negociação/entrada do investidor: RF01/RF02, participação em RF06/RF09/RF10 e coordenação da RF04/RF05. Implementa consulta de mercado, registro/consulta idempotente de ordens, validação lote/tick/túnel e SAGA de risco FO ↔ MO. A RF05b acrescenta o consumidor de execuções e a projeção de progresso das ordens; a RF06a acrescenta a projeção real de mercado (integrada no PR #37). Trajetória durável e WebSocket estão implementados nas fatias RF09a/RF09b, ainda em validação nos PRs #49/#50. Estado de validação/PR no roadmap.
 
 Futuro: receber/consultar ordens, persistir estados, orquestrar validação/reserva/execução e expor projeções. Risco pertence ao MO; livro ao ME; contabilidade ao BO. Angular apresenta estados sem coordenar SAGA.
 
@@ -118,3 +118,5 @@ Nginx limita `/ativos` a 5 requisições/s por IP, burst 10, compartilhado entre
 ## RF09 — acompanhamento durável e atualização
 
 O [ADR-017](../adrs/ADR-017-trajetoria-tempo-real.md) propõe a implementação da RF09 dentro das fronteiras aceitas. O FO grava marcos de recebimento/risco/matching na transação da projeção e consome confirmação BO recuperável. Revisão por conta serializada pelo commit sustenta paginação crescente e avisos WebSocket; API por ordem/conta é a fonte de recuperação, sem contraparte. Ordens anteriores preservam estado e declaram histórico incompleto. WS não altera finanças; proxy injeta credencial somente na rota exata e valida Origin/Host. Reconexão força nova leitura HTTP e preserva snapshot com aviso em falha. Contratos, limites, legado e critérios no ADR; execução/estado no roadmap.
+
+O canal RF09b usa WebSockets Next; dois executores separam consultas JDBC de timers de expiração, evitando que consulta bloqueada prolongue JWT. A consulta compartilhada lê as quatro revisões uma vez por segundo somente com sessões abertas. Angular compartilha um socket entre ordens, posições e trajetória; avisos agrupados preservam uma consulta ativa e uma pendente. Páginas da trajetória são relidas até o prefixo já carregado, com publicação atômica do snapshot e teto100 na tela. Limites de evidência e status no roadmap.

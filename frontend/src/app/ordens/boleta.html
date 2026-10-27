@@ -141,6 +141,11 @@
     <h3 id="minhas-ordens">Minhas ordens</h3>
     <button type="button" (click)="atualizarLista()">Atualizar ordens</button>
   </div>
+  @if (canal.estado() === 'indisponivel') {
+    <p class="dica" role="status">
+      Atualizações em tempo real indisponíveis. Use Atualizar ordens.
+    </p>
+  }
   @if (erroLista()) {
     <p class="alerta" role="alert">Não foi possível consultar as ordens.</p>
   }
@@ -159,6 +164,7 @@
           <th scope="col">Limite</th>
           <th scope="col">Disparo</th>
           <th scope="col">Estado</th>
+          <th scope="col">Trajetória</th>
         </tr>
       </thead>
       <tbody>
@@ -182,13 +188,25 @@
                   : ''
               }}
             </td>
+            <td>
+              <button
+                type="button"
+                (click)="ordemSelecionada.set(o.id)"
+                [attr.aria-label]="'Ver trajetória da ordem ' + o.id"
+              >
+                Ver trajetória
+              </button>
+            </td>
           </tr>
         } @empty {
           <tr>
-            <td colspan="8">Nenhuma ordem registrada.</td>
+            <td colspan="9">Nenhuma ordem registrada.</td>
           </tr>
         }
       </tbody>
     </table>
   </div>
+  @if (ordemSelecionada(); as ordem) {
+    <app-trajetoria [ordem]="ordem" />
+  }
 </section>

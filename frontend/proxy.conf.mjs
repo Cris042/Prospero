@@ -17,7 +17,9 @@ const token = tokenDoAmbiente('FO_TOKEN_LEITURA');
 const tokenOrdens = tokenDoAmbiente('FO_TOKEN_ORDENS');
 const tokenPosicoes = tokenDoAmbiente('BO_TOKEN_POSICOES');
 const tokenRazao = tokenDoAmbiente('BO_TOKEN_RAZAO');
-const ROTA_ORDENS = /^\/servicos\/front-office\/api\/v1\/ordens(-oco)?(\/[0-9a-f-]{36})?(\?.*)?$/;
+const ROTA_ORDENS =
+  /^\/servicos\/front-office\/api\/v1\/(?:ordens(?:\/[0-9a-f-]{36}(?:\/trajetoria)?)?|ordens-oco(?:\/[0-9a-f-]{36})?)(?:\?.*)?$/;
+const ROTA_ATUALIZACOES = '/servicos/front-office/api/v1/atualizacoes';
 const ORIGEM_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/;
 
 // Espelha o Nginx (ADR-010): GET/POST apenas; POST exige Origin local; Host local contra DNS rebinding.
@@ -25,7 +27,10 @@ function ordensPermitidas(req, res) {
   const host = (req.headers.host ?? '').replace(/:[0-9]+$/, '');
   const origemOk = req.method === 'GET' || ORIGEM_LOCAL.test(req.headers.origin ?? '');
   if (
+    !ROTA_ORDENS.test(req.url ?? '') ||
     !['GET', 'POST'].includes(req.method) ||
+    (req.url?.includes('/trajetoria') && req.method !== 'GET') ||
+    req.headers.upgrade ||
     !['localhost', '127.0.0.1'].includes(host) ||
     !origemOk
   ) {
@@ -33,8 +38,31 @@ function ordensPermitidas(req, res) {
     res.end('{"erro":"Origem não permitida para ordens"}');
     return false;
   }
+  delete req.headers.authorization;
   return undefined;
 }
+// Vite chama bypass de upgrade sem ServerResponse; false encerra a conexão antes do proxy.
+function atualizacoesPermitidas(req, res) {
+  delete req.headers.authorization;
+  const host = req.headers.host ?? '';
+  const origem = req.headers.origin ?? '';
+  const permitido =
+    req.method === 'GET' &&
+    req.url === ROTA_ATUALIZACOES &&
+    /^(localhost|127\.0\.0\.1)(:[0-9]{1,5})?$/.test(host) &&
+    origem === `http://${host}` &&
+    req.headers.upgrade?.toLowerCase() === 'websocket' &&
+    !req.headers['sec-websocket-protocol'];
+  if (!permitido) {
+    if (res) {
+      res.statusCode = 403;
+      res.end('{"erro":"Upgrade não permitido"}');
+    }
+    return false;
+  }
+  return undefined;
+}
+
 function posicoesPermitidas(req, res) {
   if (!/^\/servicos\/back-office\/api\/v1\/posicoes(?:\?.*)?$/.test(req.url ?? '')) {
     res.statusCode = 403;
@@ -78,6 +106,14 @@ function ativosPermitidos(req, res) {
 
 // Rotas genéricas do FO e do MO: bloqueiam preparação mesmo codificada e descartam Authorization do cliente.
 function semPreparacao(req, res) {
+  delete req.headers.authorization;
+  if (req.headers.upgrade) {
+    if (res) {
+      res.statusCode = 403;
+      res.end('{"erro":"Upgrade não permitido"}');
+    }
+    return false;
+  }
   let caminho = req.url ?? '';
   try {
     caminho = decodeURIComponent(caminho);
@@ -102,6 +138,13 @@ export default {
       res.end('{"erro":"Preparação indisponível pelo navegador"}');
       return false;
     },
+  },
+  [ROTA_ATUALIZACOES]: {
+    ...servico(8081),
+    ws: true,
+    pathRewrite: { '^/servicos/front-office': '' },
+    headers: tokenOrdens ? { Authorization: `Bearer ${tokenOrdens}` } : {},
+    bypass: atualizacoesPermitidas,
   },
   '/servicos/front-office/api/v1/ordens': {
     ...servico(8081),
@@ -128,6 +171,7 @@ export default {
   '/servicos/matching-engine': {
     ...servico(8083),
     pathRewrite: { '^/servicos/matching-engine': '' },
+    bypass: semPreparacao,
   },
   '/servicos/back-office/api/v1/posicoes': {
     ...servico(8084),

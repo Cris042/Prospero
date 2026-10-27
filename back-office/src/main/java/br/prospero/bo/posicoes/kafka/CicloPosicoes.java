@@ -16,6 +16,7 @@ public final class CicloPosicoes {
     private final String topicoId;
     private final IntToLongFunction proximo;
     private final BiConsumer<Coordenada, EventoMatching> aplicar;
+    private final RastreioPosicoes rastreio;
     private volatile boolean emDia;
     private volatile long verificadoEm;
     private int particaoFalha = -1;
@@ -23,6 +24,12 @@ public final class CicloPosicoes {
 
     public CicloPosicoes(Consumer<String, byte[]> consumidor, String topicoId, IntToLongFunction proximo,
                          BiConsumer<Coordenada, EventoMatching> aplicar) {
+        this(consumidor, topicoId, proximo, aplicar, null);
+    }
+
+    public CicloPosicoes(Consumer<String, byte[]> consumidor, String topicoId, IntToLongFunction proximo,
+                         BiConsumer<Coordenada, EventoMatching> aplicar, RastreioPosicoes rastreio) {
+        this.rastreio = rastreio;
         this.consumidor = consumidor;
         this.topicoId = topicoId;
         this.proximo = proximo;
@@ -85,13 +92,28 @@ public final class CicloPosicoes {
             if (destino != r.partition()) throw incoerente("PARTICAO_DA_CHAVE_DIVERGENTE");
             String hash = EnvelopeMatching.assinatura((r.key().length() + ":" + r.key() + ":" + evento.assinatura())
                     .getBytes(StandardCharsets.UTF_8));
-            aplicar.accept(new Coordenada(topicoId, r.partition(), r.offset(), hash), evento);
+            aplicarRastreado(r, new Coordenada(topicoId, r.partition(), r.offset(), hash), evento);
             if (proximo.applyAsLong(r.partition()) < Math.addExact(r.offset(), 1)) throw incoerente("CHECKPOINT_NAO_CONFIRMADO");
             consumidor.commitSync(Map.of(particao, new OffsetAndMetadata(Math.addExact(r.offset(), 1))));
         } catch (RuntimeException erro) {
             if (consumidor.assignment().contains(particao)) consumidor.seek(particao, r.offset());
             throw erro;
         }
+    }
+
+    private void aplicarRastreado(ConsumerRecord<String, byte[]> registro, Coordenada coordenada, EventoMatching evento) {
+        if (rastreio == null) {
+            aplicar.accept(coordenada, evento);
+            return;
+        }
+        var header = registro.headers().lastHeader("traceparent");
+        String pai = header == null ? evento.traceparent() : new String(header.value(), StandardCharsets.UTF_8);
+        rastreio.executar(pai, () -> {
+            var contexto = new EventoMatching.Contexto(evento.causacao(), evento.versao(), evento.ocorridoEm(),
+                    RastreioPosicoes.atual());
+            aplicar.accept(coordenada, new EventoMatching(evento.id(), evento.correlacao(), evento.ticker(),
+                    evento.sessao(), evento.assinatura(), evento.detalhe(), contexto));
+        });
     }
 
     private void conferirFim() {

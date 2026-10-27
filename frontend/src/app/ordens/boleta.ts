@@ -14,14 +14,17 @@ import {
   EMPTY,
   finalize,
   map,
+  merge,
   Observable,
   Subject,
   Subscription,
-  switchMap,
   take,
   takeWhile,
   timer,
 } from 'rxjs';
+import { AtualizacoesService } from '../atualizacoes/atualizacoes.service';
+import { consultasSerializadas } from '../atualizacoes/consultas-serializadas';
+import { Trajetoria } from '../atualizacoes/trajetoria';
 import { formatarDecimal } from '../mercado/mercado.service';
 import {
   exigeGatilho,
@@ -75,10 +78,12 @@ const ROTULOS: Record<string, string> = {
   selector: 'app-boleta',
   templateUrl: './boleta.html',
   styleUrl: './boleta.css',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, Trajetoria],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Boleta implements OnInit {
+  readonly canal = inject(AtualizacoesService);
+  readonly ordemSelecionada = signal<string | null>(null);
   private readonly ordens = inject(OrdensService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(NonNullableFormBuilder);
@@ -140,22 +145,23 @@ export class Boleta implements OnInit {
     this.oco.controls.tipoStop.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tipo) => this.tipoStopAtual.set(tipo));
-    // switchMap: uma consulta antiga nunca sobrescreve a lista mais nova.
-    this.recarregar
-      .pipe(
-        switchMap(() =>
-          this.ordens.listar().pipe(
-            catchError(() => {
-              this.erroLista.set(true);
-              return EMPTY;
-            }),
-          ),
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
+    consultasSerializadas(merge(this.recarregar, this.canal.avisos$), () =>
+      this.ordens.listar().pipe(
+        catchError(() => {
+          this.erroLista.set(true);
+          return EMPTY;
+        }),
+      ),
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((pagina) => {
         this.erroLista.set(false);
         this.lista.set(pagina.ordens);
+        const registro = this.registro();
+        if (registro) {
+          const atuais = pagina.ordens.filter((o) => registro.some((r) => r.id === o.id));
+          if (atuais.length === registro.length) this.registro.set(atuais);
+        }
       });
     this.atualizarLista();
   }
@@ -194,7 +200,7 @@ export class Boleta implements OnInit {
           this.pendente = null;
           this.registro.set(ordens);
           this.atualizarLista();
-          this.acompanharRisco(ordens.map((o) => o.id));
+          this.acompanharRisco();
         },
         error: (falha) => {
           const { texto, repetivel } = mensagemErro(falha);
@@ -218,27 +224,16 @@ export class Boleta implements OnInit {
   /**
    * O risco do MO responde de forma assíncrona: consulta a lista a cada 500 ms (até 10 s) enquanto as ordens do
    * envio estiverem RECEBIDA. Sem resposta, a ordem continua Recebida — não há liberação por timeout.
+   * O timer só solicita recarga: acompanhamento, WebSocket e ação manual compartilham o mesmo GET.
    */
-  private acompanharRisco(ids: readonly string[]): void {
+  private acompanharRisco(): void {
     this.acompanhamento = timer(500, 500)
       .pipe(
         take(20),
-        switchMap(() => this.ordens.listar().pipe(catchError(() => EMPTY))),
-        map((pagina) => {
-          this.lista.set(pagina.ordens);
-          return pagina.ordens.filter((o) => ids.includes(o.id));
-        }),
-        takeWhile(
-          (atuais) => atuais.length === 0 || atuais.some((o) => o.estado === 'RECEBIDA'),
-          true,
-        ),
+        takeWhile(() => this.registro()?.some((o) => o.estado === 'RECEBIDA') ?? false),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((atuais) => {
-        if (atuais.length === ids.length && this.registro()?.every((o) => ids.includes(o.id))) {
-          this.registro.set(atuais);
-        }
-      });
+      .subscribe(() => this.atualizarLista());
   }
 
   private enviarSimples(chave: string): Observable<readonly Ordem[]> {

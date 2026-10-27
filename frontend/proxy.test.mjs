@@ -194,3 +194,61 @@ test('data de movimento descarta Authorization e nunca recebe token administrati
     assert.doesNotMatch(fonte, /liquidacao:administrar/);
   }
 });
+
+const ATUALIZACOES = '/servicos/front-office/api/v1/atualizacoes';
+function upgradeAtualizacoes(opcoes = {}) {
+  const req = {
+    method: 'GET',
+    url: ATUALIZACOES,
+    headers: {
+      host: 'localhost:4200',
+      origin: 'http://localhost:4200',
+      upgrade: 'websocket',
+      authorization: 'Bearer cliente-nao-confiavel',
+      ...opcoes.headers,
+    },
+    ...opcoes,
+  };
+  const res = { statusCode: 200, end() {} };
+  return { req, res, resultado: proxy[ATUALIZACOES].bypass(req, res) };
+}
+
+test('WS atualizações usa rota exata e token de ordens do servidor descartando Authorization cliente', () => {
+  assert.ok(proxy[ATUALIZACOES]);
+  assert.equal(proxy[ATUALIZACOES].ws, true);
+  assert.equal(proxy[ATUALIZACOES].headers.Authorization, 'Bearer token-ficticio-ordens');
+  const { req, res, resultado } = upgradeAtualizacoes();
+  assert.equal(resultado, undefined);
+  assert.equal(res.statusCode, 200);
+  assert.equal(req.headers.authorization, undefined);
+});
+
+test('WS atualizações recusa método rota query Origin e Host divergentes antes do upgrade', () => {
+  for (const opcoes of [
+    { method: 'POST' },
+    { method: 'HEAD' },
+    { url: `${ATUALIZACOES}/admin` },
+    { url: `${ATUALIZACOES}-extra` },
+    { url: `${ATUALIZACOES}?token=cliente` },
+    { headers: { host: 'localhost:4200', origin: 'http://localhost:4201', upgrade: 'websocket' } },
+    { headers: { host: 'localhost:4200', origin: 'http://127.0.0.1:4200', upgrade: 'websocket' } },
+    { headers: { host: 'evil.example', origin: 'http://evil.example', upgrade: 'websocket' } },
+    { headers: { host: 'localhost:4200', upgrade: 'websocket' } },
+    { headers: { host: 'localhost:4200', origin: 'null', upgrade: 'websocket' } },
+    { headers: { host: 'localhost:4200', origin: 'http://localhost:4200' } },
+  ]) {
+    const { res, resultado } = upgradeAtualizacoes(opcoes);
+    assert.equal(resultado, false);
+    assert.ok(res.statusCode >= 400);
+  }
+});
+
+test('rotas genéricas não encaminham upgrade autenticado', () => {
+  for (const rota of ['/servicos/front-office', '/servicos/middle-office', '/servicos/back-office']) {
+    assert.notEqual(proxy[rota].ws, true);
+    const req = { method: 'GET', url: `${rota}/api/v1/atualizacoes`, headers: { upgrade: 'websocket' } };
+    const res = { statusCode: 200, end() {} };
+    assert.equal(proxy[rota].bypass(req, res), false);
+    assert.ok(res.statusCode >= 400);
+  }
+});
