@@ -54,7 +54,7 @@ As substituições frente à proposta de origem estão no [índice de ADRs](../a
 | RF07 | Calcular posição comprada/vendida dos negócios desde a origem do log, preço médio e resultados realizados/não realizados; visão distinta da custódia inicial sem custo histórico. |
 | RF08 | Registrar negócios, razão em partidas dobradas e histórico; liquidar caixa e custódia em D+2 simulado. |
 | RF09 | Exibir estados em tempo real e a linha do tempo da ordem pelos quatro serviços. |
-| RF10 | Cancelar saldo elegível de Limit ou stop não acionado e liberar a reserva correta. |
+| RF10 | Cancelar saldo elegível de Limit, stop não acionado ou Stop Limit acionado com saldo remanescente e liberar a reserva correta. |
 
 Os cinco ativos, calendários, estados detalhados, escalas, arredondamento, reservas por tipo e casos de corrida serão definidos antes das tarefas que os implementam. O roadmap registra essas dependências; não são funcionalidades presumidas.
 
@@ -82,6 +82,8 @@ Prioridade preço-tempo e preço passivo, conservação de quantidade, reserva a
 Ainda pendentes: cinco ativos e parâmetros; escalas/ticks/lotes/arredondamento; calendário e feriados; estados e combinações de ordens; reserva por tipo; corridas de cancelamento e timeout. As regras da RF07 estão definidas abaixo. Não preencher esses pontos com o comportamento do projeto doador.
 
 A RF07 foi definida pelo usuário em 2026-10-23: médio ponderado nas ampliações; médio preservado na redução e resultado sobre a quantidade encerrada; virada ao preço do negócio; zeragem conserva realizado acumulado. Acumuladores exatos, exibição em quatro casas HALF_EVEN; autonegociação neutra na posição/PnL da conta. A visão começa em zero na origem do log, separada da custódia inicial. A venda descoberta continua bloqueada no risco atual. [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
+
+A RF10 foi parcialmente definida pelo usuário em 2026-10-27: saldo de Stop Limit já acionado pode ser cancelado; pedir cancelamento em uma perna OCO não deve encerrar o grupo inteiro. Continua pendente escolher entre cancelar somente a perna solicitada ou impedir cancelamento manual de OCO; a resposta negativa sobre o grupo não decide essa alternativa. Decisão ainda não implementada, conforme [ADR-013](../adrs/ADR-013-matching-execucao.md).
 
 ## Critérios de aceite e métricas de sucesso
 

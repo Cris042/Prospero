@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho vigente e planejado do contexto, sem nova decisão de 
 
 ## Responsabilidade e estado
 
-Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. RF05a ([ADR-013](../adrs/ADR-013-matching-execucao.md)) implementou o núcleo puro `livro/dominio/MotorMatching`: livro por ativo, FIFO, Limit/Market, DIA/IOC/FOK, preço passivo, faixa/reserva e IDs determinísticos. A RF05b acrescenta adaptador Kafka, posse e replay; RF05c.1a/1b acrescentam encerramento e Stop/Stop Limit no núcleo, em validação/revisão. RF05c.2 integra stops simples em validação; fechamento integrado e OCO seguem futuros. Estado das evidências no roadmap; metas RNF04 continuam sem medição financeira final.
+Contexto de execução: RF05, publicação de mercado RF06 e cancelamento RF10. A RF05 integrada até o PR #36 implementa núcleo puro, Market/Limit/Stop/Stop Limit, DIA/IOC/FOK, preço-tempo, OCO, fechamento de sessão, adaptação Kafka, posse e replay, conforme [ADR-013](../adrs/ADR-013-matching-execucao.md). A RF06 integrada publica ofertas/negócios para projeção do mercado. RF10 está em refinamento; cancelamento manual ainda não é implementado. Evidências e estado das fatias no roadmap; metas RNF04 continuam para validação final na V01.
 
 Desenho de integração: um escritor por ativo, sequenciado pela partição Kafka; no núcleo atual, um escritor por instância de `MotorMatching`, mesmo quando contém vários ativos. O núcleo puro recebe comando e produz eventos. Não consulta JPA/banco por ordem nem decide poder de compra. Stops ficam no ME como simplificação já descrita no domínio; risco e reservas precedem admissão ao matching.
 
@@ -12,7 +12,7 @@ Desenho de integração: um escritor por ativo, sequenciado pela partição Kafk
 
 Java 26, Quarkus 3.40.1, Maven Wrapper, REST Jackson/Bean Validation, JPA/Hibernate, PostgreSQL 16 e Flyway; cliente Kafka, SmallRye OpenAPI, Health, Micrometer e OpenTelemetry. Versões resolvidas/imagens e overrides: [libs](../libs.md) e ADR-005. Build e imagem próprios, sem artefato compartilhado entre serviços. Não há dependência de implementação de outro contexto.
 
-Organização por funcionalidade sob `br.prospero.me`: REST → Actor; Actor coordena domínio/Helpers puros e repositórios JPA separados. Adaptadores Kafka futuros chamam casos de uso sem passar pelo REST. Entidades JPA não são DTOs nem domínio. Pacotes vazios não são componentes de negócio implementados.
+Organização por funcionalidade sob `br.prospero.me`: REST → Actor; Actor coordena domínio/Helpers puros e repositórios JPA separados. Adaptadores Kafka chamam o núcleo ou Actors sem passar pelo REST. Entidades JPA não são DTOs nem domínio. Pacotes vazios não são componentes de negócio implementados.
 
 ## Interfaces e implantação atuais
 
@@ -20,23 +20,23 @@ Organização por funcionalidade sob `br.prospero.me`: REST → Actor; Actor coo
 
 `V1__identificar_schema.sql` identifica o schema. `V2__checkpoint_matching.sql` guarda identidade dos tópicos, sessão e último comando integralmente publicado por partição, sem persistir livro por ordem. Build com JDK26: `./mvnw verify` no diretório do serviço; operação pela skill subir-sistema. Prontidão inclui posse/replay; processo vivo não equivale a fluxo financeiro disponível.
 
-## Livro e processamento planejados
+## Livro e processamento
 
 `Livro` usa `TreeMap` por preço, `ArrayDeque` FIFO por nível e índice por ID. Desde a RF05c.1b, a contagem única de ativas pertence ao estado do ativo no motor e inclui livro, pendentes, agressor e selecionadas aguardando na fila. `MotorMatching` recebe `Admissao` e devolve records de `Evento`; RF05b acrescenta processador de partição e RF05c.1b acrescenta stops somente ao núcleo. Não prometer cancelamento O(1) sem definir fila/índice; medir antes de otimizar.
 
-Comando autorizado → prioridade preço-tempo → negócios a preço passivo, parciais e eventos de estado → publicação recuperável. Market/Limit/Stop/Stop Limit, Dia/IOC/FOK, verificação integral FOK, falta de liquidez e cascatas seguem ADR-013, com integração dos stops simples na RF05c.2. OCO após parciais continua futuro. Inserção e cancelamento sem negócio também alterarão bid/ask/profundidade na RF06/RF10.
+Comando autorizado → prioridade preço-tempo → negócios a preço passivo, parciais e eventos de estado → publicação recuperável. Market/Limit/Stop/Stop Limit, Dia/IOC/FOK, verificação integral FOK, falta de liquidez e cascatas seguem ADR-013, com integração dos stops simples na RF05c.2. OCO após parciais e publicação de ofertas estão implementados. A RF10 acrescentará retirada manual de saldo sem inventar negócio, último preço ou VWAP.
 
 ## Persistência, recuperação e pendências
 
-O núcleo atual mantém o livro apenas em memória. Na RF05b, o log Kafka permitirá reconstrução e o PostgreSQL próprio guardará o último offset publicado, conforme ADR-013. Snapshots ficam adiados até haver necessidade medida. Não compartilhar banco/entidade e não criar tabela do livro no caminho crítico.
+O núcleo atual mantém o livro apenas em memória. Desde a RF05b, o log Kafka permite reconstrução e o PostgreSQL próprio guarda o último offset publicado, conforme ADR-013. Snapshots ficam adiados até haver necessidade medida. Não compartilhar banco/entidade e não criar tabela do livro no caminho crítico.
 
-Na RF05b, comprovar retenção suficiente, replay e rebalanceamento com posse exclusiva dos livros, sem transações Kafka. Publicação interrompida exige reconstrução e deduplicação com IDs determinísticos antes de declarar recuperação segura. Relógio, desempate e IDs não podem mudar negócios no replay.
+O adaptador mantém assign manual das três partições e posse exclusiva, sem escala horizontal/rebalanceamento nem transações Kafka; retenção e replay preservam a origem zero do log. Publicação interrompida exige reconstrução e deduplicação com IDs determinísticos antes de declarar recuperação segura. Relógio, desempate e IDs não podem mudar negócios no replay.
 
 Na RF05a, reentregas de IDs já decididos não geram eventos, inclusive quando o ID reaparece em outro ativo. FOK verifica a execução integral dentro do teto de 256 negócios antes de tocar o livro. A Market distingue corte pelo túnel de corte pelo preço reservado. A RF05c.1a acrescenta encerramento explícito ao núcleo puro: expiração de ofertas DIA, recusa de admissão na sessão encerrada e bloqueio da troca de data enquanto a anterior estiver aberta. Após o fechamento, uma nova sessão do núcleo reinicia base e sequências. O adaptador mantém uma sessão por log: este comportamento interno não implementa virada diária operacional. Deduplicação histórica permanece preservada; descarte depende de contrato de retenção/replay próprio.
 
 Cada instância de `MotorMatching` exige um único escritor, inclusive se contiver mais de um ativo; seus mapas e a deduplicação não suportam chamadas paralelas. A integração deve preservar essa posse. O conjunto de IDs cresce com os comandos da sessão, mesmo rejeitados: orçamento e retenção coerentes com replay precisam ser resolvidos antes da operação contínua. Preços e parâmetros têm guarda de representação (até 15 dígitos, escala entre −6 e 8) antes de aritmética; preços continuam positivos, até 1.000.000,00, com até duas casas significativas e múltiplos do tick. A guarda recusa extremos sem arredondar valores.
 
-Catálogo de comandos/eventos, chaves e passagem para ordenação por conta precisam de desenho conjunto. Testes futuros: mesma sequência/mesmos negócios, conservação, preço passivo, livro não cruzado ao final do processamento, stops/OCO, corrida cancelamento/execução e falhas em publicação/rebalanceamento. A referência histórica de ordem `0,10` atravessando três níveis não fornecia preços/quantidades suficientes. O [exemplo didático do README](../../README.md#impacto-de-mercado-uma-ordem-pequena-atravessa-o-livro) agora explicita um conjunto hipotético; não é teste de aceite executado nem definição de lote/tick/escala financeira.
+O catálogo vigente de comandos/eventos e suas chaves está no ADR-013; a RF10 exige extensão coordenada. Testes de determinismo, conservação, preço passivo, livro não cruzado, stops/OCO e recuperação estão registrados no roadmap. Corridas de cancelamento/execução permanecem pendentes da RF10. A referência histórica de ordem `0,10` atravessando três níveis não fornecia preços/quantidades suficientes. O [exemplo didático do README](../../README.md#impacto-de-mercado-uma-ordem-pequena-atravessa-o-livro) agora explicita um conjunto hipotético; não é teste de aceite executado nem definição de lote/tick/escala financeira.
 
 Ativo quente limita throughput de sua sequência; partições/GC/alocação exigem medição. JFR/JMH/async-profiler, ZGC e bibliotecas de propriedades são alternativas não adotadas por este HLD. [Roadmap ME](../../matching-engine/ROADMAP.md); RNF01–RNF04/RNF06–RNF08.
 
@@ -133,3 +133,11 @@ Contrato técnico definido no [ADR-013](../adrs/ADR-013-matching-execucao.md#con
 A implantação é coordenada: pausar processamento, aplicar expansões FO/MO e atualizar consumidores/produtores compatíveis antes de retomar v2. Replay misto deve preservar bytes/IDs antigos e repetir cascatas após publicação parcial. Retorno ao binário antigo após efeitos novos é inseguro; recuperação para frente ou restauração consistente, sem apagar dados. Uma sessão/log, posse, retenção e limites operacionais da RF05b permanecem. Evidência prevista: contratos/guardas RED→GREEN, PostgreSQL real para transação/ativação/dedup, planilha por APIs repetida e recuperação do ME; resultados no PR/roadmap. Sem medição RNF04 presumida.
 
 Na RF09b, o consumidor cria span próprio a partir do contexto W3C do comando e propaga o contexto ativo nos headers Kafka dos eventos publicados. O payload serializado pelo núcleo permanece determinístico, inclusive em replay; spans não participam de IDs, hashes, regras de negócio ou checkpoint. Falhas encerram o escopo com status de erro sem registrar payload na telemetria.
+
+## Proveniência viva — preparação RF10a
+
+O núcleo conserva, junto à contagem de ordens ativas, tipo original, intenção, conta, ativo, sessão e vínculo TP/SL original. A conversão de Stop Limit e a dissolução do par operacional não apagam esses dados. O índice é somente das ordens vivas: termina com elas, é limpo no fechamento e reconstruído pelo replay existente, sem banco/snapshot/histórico adicional. A identidade do terminal deve corresponder à conta registrada antes da baixa. Esta fatia interna não acrescenta comando, parser, evento, API, regra de elegibilidade ou liberação de reserva. Contrato proposto e decisões ainda pendentes no [ADR-013](../adrs/ADR-013-matching-execucao.md#preparação-interna-independente--rf10a-2026-10-26); estado e evidências no roadmap.
+
+## Elegibilidade manual RF10 — decisão parcial
+
+Em 2026-10-27 o usuário permitiu cancelar o saldo vivo de Stop Limit já acionado, preservando o tipo original e todos os negócios anteriores ao corte. O pedido manual em uma perna OCO não deve cancelar o grupo inteiro; ainda falta decidir entre retirar somente a perna e impedir cancelamento manual de OCO. Não inferir dissolução do vínculo ou liberação de reserva enquanto essa política não estiver definida. As regras automáticas anteriores são preservadas. Decisão parcial no [ADR-013](../adrs/ADR-013-matching-execucao.md#decisões-parciais-de-cancelamento-manual--rf10-2026-10-27); implementação dependente permanece futura.
