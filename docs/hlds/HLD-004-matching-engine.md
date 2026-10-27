@@ -157,3 +157,7 @@ Em 2026-10-27 o usuário permitiu cancelar o saldo vivo de Stop Limit já aciona
 ## Retirada manual no núcleo — RF10b1
 
 A decisão final do usuário proíbe cancelamento manual de qualquer origem OCO, inclusive sobrevivente após dissolução; substitui a dúvida registrada anteriormente. RF10b1 valida alvo imutável por ordem/intenção/conta/ativo/sessão e devolve decisão própria com no máximo um `SaldoCanceladoManual`, separado do catálogo `Evento`. Só saldo vivo de ordens simples é retirado; não abrir sessão nem consumir identidade de alvo desconhecido. Livro/pendentes/origem/contagem são conferidos antes da remoção. Negócios, último preço, sequências, FIFO e regras automáticas OCO são preservados. Repetição não produz novo efeito; recuperação da mesma decisão durável ainda não existe. Contrato e alternativa no [ADR-013](../adrs/ADR-013-matching-execucao.md#regra-final-oco-e-contrato-interno-rf10b1-2026-10-27). Sem alteração de transporte/API ou liberação no MO; provas integradas pertencem às próximas fatias.
+
+## Comando e eventos de cancelamento — RF10c2
+
+O adaptador aceita `CANCELAR_ORDEM` v1 do MO e despacha para `cancelarManual`. Responde com `ORDEM_ENCERRADA CANCELADA_MANUAL` (apenas em `APLICADO`) e `CANCELAMENTO_DECIDIDO`, último evento do comando, no envelope v5 do [ADR-013](../adrs/ADR-013-matching-execucao.md#catálogo-v5-e-leitores-de-cancelamento--rf10c2-2026-10-27). O id do comando é deduplicado por um mapa limitado a 30.000 entradas, reconstruído pelo replay; v1–v4 permanecem byte a byte. Ninguém produz o comando ainda.
