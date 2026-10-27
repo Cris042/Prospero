@@ -17,6 +17,8 @@ public class AplicarPosicoesActor {
     private final CheckpointPosicoesJpa checkpoint;
     private final CarteiraPosicoesJpa carteiras;
     private final RazaoJpa razao;
+    @Inject
+    br.prospero.bo.acompanhamento.jpa.OutboxContabilizacaoJpa acompanhamento;
     @Inject public AplicarPosicoesActor(CheckpointPosicoesJpa checkpoint, CarteiraPosicoesJpa carteiras, RazaoJpa razao) {
         this.checkpoint = checkpoint;
         this.carteiras = carteiras;
@@ -36,7 +38,7 @@ public class AplicarPosicoesActor {
     private void aplicarNegocio(EventoMatching evento, EventoMatching.Negocio negocio) {
         FatoNegocio fato = FatoNegocio.de(evento, negocio, razao.calendario());
         razao.registrar(fato, PlanoDeContas.d0(fato));
-        razao.registrarOrigem(fato.negocio(), evento.id());
+        razao.registrarOrigem(fato.negocio(), evento.id(), evento.traceparent());
         // A mesma conta nos dois lados não realiza resultado nem altera médio; cotação continua sendo fato de mercado.
         if (!negocio.compra().conta().equals(negocio.venda().conta())) {
             var deltas = new TreeMap<String, Long>();
@@ -48,5 +50,6 @@ public class AplicarPosicoesActor {
             });
         }
         carteiras.cotar(evento, negocio);
+        acompanhamento.registrar(evento);
     }
 }

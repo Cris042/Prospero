@@ -4,7 +4,7 @@ Data: 2026-10-17. Desenho baseado no [PRD-001](../prds/PRD-001-simulador-prosper
 
 ## Objetivo técnico e estado atual
 
-Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam mercado, ordens/validação e SAGA de risco/reserva FO ↔ MO; RF05 integra MO → ME → MO/FO, Stop/Stop Limit, OCO, encerramento e robô. RF06 integrada projeta cotação real/VWAP e atualiza a tela. RF07 em validação acrescenta projeção idempotente de posições/PnL no BO e consulta Angular. Razão, liquidação, WebSocket e cancelamento permanecem planejados nas RFs seguintes. O roadmap registra PRs/evidências.
+Separar quatro contextos financeiros, demonstrar comunicação assíncrona e permitir operação/testes/observabilidade locais com custo financeiro zero. A fundação contém quatro projetos Quarkus/Java26 e quatro PostgreSQL, Angular, Kafka, Redis e telemetria. RF01–RF04 implementam mercado, ordens/validação e SAGA de risco/reserva FO ↔ MO; RF05 integra MO → ME → MO/FO, Stop/Stop Limit, OCO, encerramento e robô. RF06 integrada projeta cotação real/VWAP e atualiza a tela. RF07 integrada acrescenta projeção idempotente de posições/PnL no BO e consulta Angular. RF08 integrada acrescenta razão/liquidação/histórico e créditos D+2; RF09 em implementação acrescenta trajetória e WebSocket; cancelamento RF10 permanece planejado. O roadmap registra PRs/evidências.
 
 A P05 adicionou a conversão decimal técnica pura no MO, integrada pelo PR #3. Validação financeira, risco e reservas vieram depois, nas RF03–RF04 (ADR-011 e ADR-012).
 

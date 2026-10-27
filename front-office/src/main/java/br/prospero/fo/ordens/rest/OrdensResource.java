@@ -3,6 +3,7 @@ package br.prospero.fo.ordens.rest;
 import br.prospero.fo.comum.dto.ProblemaDTO;
 import br.prospero.fo.comum.rest.Problemas;
 import br.prospero.fo.ordens.actor.ConsultarOrdensActor;
+import br.prospero.fo.ordens.actor.ConsultarTrajetoriaActor;
 import br.prospero.fo.ordens.actor.EnviarOrdemActor;
 import br.prospero.fo.ordens.dto.OrdemRequestDTO;
 import br.prospero.fo.ordens.dto.OrdemResponseDTO;
@@ -40,12 +41,14 @@ public class OrdensResource {
     private final EnviarOrdemActor enviar;
     private final ConsultarOrdensActor consultar;
     private final JsonWebToken token;
+    private final ConsultarTrajetoriaActor trajetoria;
 
     @Inject
-    public OrdensResource(EnviarOrdemActor enviar, ConsultarOrdensActor consultar, JsonWebToken token) {
+    public OrdensResource(EnviarOrdemActor enviar, ConsultarOrdensActor consultar, JsonWebToken token, ConsultarTrajetoriaActor trajetoria) {
         this.enviar = enviar;
         this.consultar = consultar;
         this.token = token;
+        this.trajetoria = trajetoria;
     }
 
     @POST
@@ -89,6 +92,23 @@ public class OrdensResource {
     public Response buscar(@PathParam("id") String id) {
         return Response.ok(consultar.buscar(token.getSubject(), RequisicaoOrdem.id(id, "ORDEM_NAO_ENCONTRADA")))
                 .header("Cache-Control", "no-store").build();
+    }
+
+    @GET
+    @Path("/{id}/trajetoria")
+    @RolesAllowed("ordens:leitura")
+    @Operation(summary = "Consultar trajetória durável da própria ordem", description = "Fatos observados em ordem de confirmação local; legado pode ter histórico incompleto.")
+    @APIResponse(responseCode = "200", description = "Trajetória paginada.",
+            content = @Content(schema = @Schema(implementation = br.prospero.fo.ordens.dto.PaginaTrajetoriaDTO.class)))
+    @APIResponse(responseCode = "400", description = "Cursor ou limite inválido.")
+    @APIResponse(responseCode = "401", description = "Token ausente ou inválido.")
+    @APIResponse(responseCode = "403", description = "Sem escopo ou conta conhecida.")
+    @APIResponse(responseCode = "404", description = "Ordem inexistente ou de outra conta.")
+    @APIResponse(responseCode = "503", description = "Projeção em quarentena.")
+    public Response trajetoria(@PathParam("id") String id, @QueryParam("cursor") String cursor,
+                               @QueryParam("limite") String limite) {
+        return Response.ok(trajetoria.consultar(token.getSubject(), RequisicaoOrdem.id(id, "ORDEM_NAO_ENCONTRADA"),
+                cursor, RequisicaoOrdem.limite(limite))).header("Cache-Control", "no-store").build();
     }
 
     @GET

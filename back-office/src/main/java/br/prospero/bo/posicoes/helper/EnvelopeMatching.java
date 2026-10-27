@@ -60,7 +60,8 @@ public final class EnvelopeMatching {
         }
         EventoMatching.Detalhe detalhe = detalhe(texto(r, "tipo"), d, ticker, sessao, versao);
         return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe,
-                v2 ? uuid(r, "causacao") : null, versao);
+                new EventoMatching.Contexto(v2 ? uuid(r, "causacao") : null, versao, Instant.parse(texto(r, "ocorridoEm")),
+                        r.get("traceparent").isNull() ? null : texto(r, "traceparent")));
     }
 
     private static JsonNode ler(byte[] bytes) {

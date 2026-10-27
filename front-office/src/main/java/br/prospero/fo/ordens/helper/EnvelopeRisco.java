@@ -118,7 +118,9 @@ public final class EnvelopeRisco {
         }
         exigirReservaCoerente(dados, estado);
         try {
-            return new ResultadoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, estado, motivo);
+            return new ResultadoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, estado, motivo,
+                    Instant.parse(texto(raiz, "ocorridoEm")), raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent"),
+                    EnvelopeMatching.assinatura(bytes));
         } catch (IllegalArgumentException erro) {
             throw new MensagemInvalidaException("motivo do resultado");
         }

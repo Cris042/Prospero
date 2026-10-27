@@ -11,7 +11,9 @@ import java.util.UUID;
 /** Contrato v1 do ADR-016; nenhuma classe do MO é importada. Serialização estável persistida antes do relay. */
 public final class EventoCredito {
     private static final ObjectMapper JSON = new ObjectMapper();
-    public record Origem(UUID causacao, Instant instante) { }
+    public record Origem(UUID causacao, Instant instante, String traceparent) {
+        public Origem(UUID causacao, Instant instante) { this(causacao, instante, null); }
+    }
     private EventoCredito() { }
     public static UUID id(String negocio, String lado) {
         if (!"COMPRADOR".equals(lado) && !"VENDEDOR".equals(lado)) throw new IllegalArgumentException("Lado inválido");
@@ -26,7 +28,7 @@ public final class EventoCredito {
         envelope.put("origem","back-office");
         envelope.put("causacao",origem.causacao().toString());
         envelope.put("ocorridoEm",origem.instante().toString());
-        envelope.put("traceparent",null);
+        envelope.put("traceparent",origem.traceparent());
         envelope.put("dados",Map.of("negocio",negocio,"lado",lado,"conta",conta,"ticker",ticker,"valor",valor,
                 "recurso",lado.equals("COMPRADOR") ? "CUSTODIA" : "CAIXA","dataLiquidacao",data.toString()));
         try { return JSON.writeValueAsString(envelope); }

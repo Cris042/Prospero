@@ -341,7 +341,7 @@ services:
       done
       # RF05b: replay exige preservar o início integral da única sessão do laboratório.
       # RF08c (ADR-016): liquidacao.eventos.v1 também tem retenção integral; o alter corrige volumes antigos.
-      for topico in matching.comandos.v1 matching.eventos.v1 liquidacao.eventos.v1; do
+      for topico in matching.comandos.v1 matching.eventos.v1 liquidacao.eventos.v1 acompanhamento.eventos.v1; do
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
           --topic "$$topico" --partitions 3 --replication-factor 1 \
           --config retention.ms=-1 --config retention.bytes=-1 --config cleanup.policy=delete

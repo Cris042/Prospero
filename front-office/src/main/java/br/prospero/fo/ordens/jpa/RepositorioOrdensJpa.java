@@ -37,6 +37,8 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
     static final int MAX_ORDENS_SESSAO = 1000;
     private static final int EXPURGO_LOTE = 100;
     private final EntityManager em;
+    @Inject
+    RepositorioTrajetoriaJpa trajetoria;
 
     @Inject
     public RepositorioOrdensJpa(EntityManager em) {
@@ -128,6 +130,7 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
                 .setParameter("trace", comandoRisco.traceparent(), String.class)
                 .setParameter("criado", OffsetDateTime.ofInstant(comandoRisco.criadaEm(), ZoneOffset.UTC))
                 .executeUpdate();
+        trajetoria.registrarRecebimento(ordens, comandoRisco);
         return new ResultadoRegistro.Novo(ordens);
     }
 
@@ -135,13 +138,15 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
     @Transactional
     public int aplicarRisco(ResultadoRisco r) {
         // Condicional: só ordens RECEBIDA da conta e intenção do resultado; repetição não altera nada.
-        return em.createNativeQuery("""
+        int alteradas = em.createNativeQuery("""
                         UPDATE ordem SET estado = :e, motivo_rejeicao = :m, versao = versao + 1
                         WHERE conta = :c AND grupo_envio = :g AND estado = 'RECEBIDA'""")
                 .unwrap(NativeQuery.class)
                 .setParameter("e", r.estado().name())
                 .setParameter("m", r.motivo() == null ? null : r.motivo().name(), String.class)
                 .setParameter("c", r.conta()).setParameter("g", r.grupoEnvio()).executeUpdate();
+        trajetoria.registrarRisco(r);
+        return alteradas;
     }
 
     @Override

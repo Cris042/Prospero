@@ -132,7 +132,7 @@ class CotacaoPostgresIT {
         repositorio().aplicar(n);
         var antes = repositorio().sessao("ALFA3", dia).orElseThrow();
         var conflitante = new EventoMatching(n.id(), n.correlacao(), n.ticker(), n.sessao(),
-                "b".repeat(64), n.detalhe(), n.causacao(), n.versao());
+                "b".repeat(64), n.detalhe(), new EventoMatching.Contexto(n.causacao(), n.versao(), null, null));
         assertThrows(MatchingIncoerenteException.class, () -> repositorio().aplicar(conflitante));
         assertEquals(antes, repositorio().sessao("ALFA3", dia).orElseThrow());
     }
@@ -200,7 +200,7 @@ class CotacaoPostgresIT {
         long expiradas = 1;
         UUID id = UUID.nameUUIDFromBytes(("matching:" + raiz + ":" + expiradas).getBytes(StandardCharsets.UTF_8));
         var encerramento = new EventoMatching(id, raiz, "GAMA3", dia, "c".repeat(64),
-                new EventoMatching.SessaoEncerrada(expiradas), raiz, 4);
+                new EventoMatching.SessaoEncerrada(expiradas), new EventoMatching.Contexto(raiz, 4, null, null));
         assertTrue(repositorio().aplicar(encerramento));
         assertFalse(repositorio().aplicar(encerramento));
         var livro = repositorio().livro("GAMA3").orElseThrow();

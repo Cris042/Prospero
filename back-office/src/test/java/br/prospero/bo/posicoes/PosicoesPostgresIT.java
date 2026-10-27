@@ -63,7 +63,7 @@ class PosicoesPostgresIT {
     void prepararSomenteSchemaDaExecucao() throws Exception {
         try (var c = conexao(); var s = c.createStatement()) {
             // V3: fatos, liquidações e razão referenciam bo_negocio (TRUNCATE não aciona os gatilhos append-only).
-            s.execute("TRUNCATE bo_negocio_origem,bo_lancamento,bo_liquidacao,bo_negocio_fato,bo_transporte,bo_evento,bo_negocio,bo_checkpoint,bo_log");
+            s.execute("TRUNCATE bo_outbox,bo_negocio_origem,bo_lancamento,bo_liquidacao,bo_negocio_fato,bo_transporte,bo_evento,bo_negocio,bo_checkpoint,bo_log");
             s.execute("UPDATE bo_posicao SET quantidade=0,medio_n=null,medio_d=null,realizado_n='0',realizado_d='1'");
             s.execute("UPDATE bo_cotacao SET preco=null,sessao=null,encerrada=false,revisao=0,atualizada_em=null");
         }
@@ -101,6 +101,8 @@ class PosicoesPostgresIT {
         assertEquals(3, numero("SELECT count(*) FROM bo_transporte"));
         assertEquals(2, numero("SELECT count(*) FROM bo_evento"));
         assertEquals(1, numero("SELECT count(*) FROM bo_negocio"));
+        assertEquals(1, numero("SELECT count(*) FROM bo_outbox WHERE tipo='NEGOCIO_CONTABILIZADO'"));
+        assertEquals(1, numero("SELECT count(*) FROM bo_outbox WHERE topico='acompanhamento.eventos.v1' AND chave='ALFA3'"));
         assertEquals(1, numero("SELECT revisao FROM bo_cotacao WHERE ticker='ALFA3'"));
     }
 
@@ -134,6 +136,32 @@ class PosicoesPostgresIT {
         assertEquals(0, posicao("CONTA-002").quantidade());
         assertEquals(-Long.MAX_VALUE, posicao("CONTA-003").quantidade());
         conferirRollbackIntegral();
+    }
+
+    @Test
+    void falhaNaConfirmacaoBoReverteContabilidadePosicoesECheckpointEPermiteReentrega() throws Exception {
+        EventoMatching negocio = negocio("outbox-falha", "100.00", 10, "CONTA-002", "CONTA-003");
+        try (var c = conexao(); var s = c.createStatement()) {
+            s.execute("CREATE FUNCTION it_falhar_acompanhamento() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'falha QA outbox'; END $$");
+            s.execute("CREATE TRIGGER it_falhar_acompanhamento BEFORE INSERT ON bo_outbox FOR EACH ROW EXECUTE FUNCTION it_falhar_acompanhamento()");
+        }
+        try {
+            assertThrows(RuntimeException.class, () -> aplicar.aplicar(coordenada(0, negocio), negocio));
+            conferirRollbackIntegral();
+            assertEquals(0, posicao("CONTA-002").quantidade());
+            assertEquals(0, posicao("CONTA-003").quantidade());
+            assertEquals(0, numero("SELECT count(*) FROM bo_lancamento"));
+            assertEquals(0, numero("SELECT count(*) FROM bo_negocio_origem"));
+        } finally {
+            try (var c = conexao(); var s = c.createStatement()) {
+                s.execute("DROP TRIGGER it_falhar_acompanhamento ON bo_outbox");
+                s.execute("DROP FUNCTION it_falhar_acompanhamento()");
+            }
+        }
+        aplicar.aplicar(coordenada(0, negocio), negocio);
+        assertEquals(10, posicao("CONTA-002").quantidade());
+        assertEquals(1, checkpoint.proximo(0));
+        assertEquals(1, numero("SELECT count(*) FROM bo_outbox WHERE tipo='NEGOCIO_CONTABILIZADO'"));
     }
 
     @Test
@@ -191,7 +219,7 @@ class PosicoesPostgresIT {
         UUID causa = EventoMatching.encerramento("ALFA3", DIA);
         UUID id = UUID.nameUUIDFromBytes(("matching:" + causa + ":0").getBytes(StandardCharsets.UTF_8));
         EventoMatching fim = new EventoMatching(id, causa, "ALFA3", DIA, assinatura("marco"),
-                new EventoMatching.SessaoEncerrada(0), causa, 4);
+                new EventoMatching.SessaoEncerrada(0), new EventoMatching.Contexto(causa, 4, null, null));
         aplicar.aplicar(coordenada(1, fim), fim);
         assertTrue(carteiras.consultar("CONTA-002").getFirst().encerrada());
         EventoMatching tardio = negocio("2", "101.00", 1, "CONTA-002", "CONTA-003");
@@ -220,6 +248,7 @@ class PosicoesPostgresIT {
     }
 
     private void conferirRollbackIntegral() throws Exception {
+        assertEquals(0, numero("SELECT count(*) FROM bo_outbox"));
         assertEquals(0, checkpoint.proximo(0));
         assertEquals(0, numero("SELECT count(*) FROM bo_evento"));
         assertEquals(0, numero("SELECT count(*) FROM bo_negocio"));

@@ -71,7 +71,7 @@ public class LiquidacaoJpa {
 
     private int liquidarLote(LocalDate data) {
         List<?> linhas = em().createNativeQuery("""
-                SELECT l.id,l.negocio_id,l.lado,l.conta,f.ticker,f.quantidade,f.valor,f.data_liquidacao,o.evento
+                SELECT l.id,l.negocio_id,l.lado,l.conta,f.ticker,f.quantidade,f.valor,f.data_liquidacao,o.evento,o.traceparent
                 FROM bo_liquidacao l JOIN bo_negocio_fato f ON f.negocio_id=l.negocio_id
                 LEFT JOIN bo_negocio_origem o ON o.negocio_id=f.negocio_id
                 WHERE l.estado='PENDENTE' AND f.data_liquidacao<=:d
@@ -100,12 +100,12 @@ public class LiquidacaoJpa {
         String valor = lado == LadoNegocio.COMPRADOR ? Long.toString(((Number) r[5]).longValue())
                 : ((BigDecimal) r[6]).toPlainString();
         String payload = EventoCredito.criar(negocio, lado.name(), conta, ticker, valor, vencimento,
-                new EventoCredito.Origem(UUID.fromString(r[8].toString()), Instant.now()));
+                new EventoCredito.Origem(UUID.fromString(r[8].toString()), Instant.now(), (String) r[9]));
         em().createNativeQuery("""
-                INSERT INTO bo_outbox(id,topico,chave,tipo,payload)
-                VALUES(:i,'liquidacao.eventos.v1',:c,'LIQUIDACAO_EFETIVADA',:p)
+                INSERT INTO bo_outbox(id,topico,chave,tipo,payload,traceparent)
+                VALUES(:i,'liquidacao.eventos.v1',:c,'LIQUIDACAO_EFETIVADA',:p,:t)
                 """).setParameter("i", EventoCredito.id(negocio, lado.name())).setParameter("c", conta)
-                .setParameter("p", payload).executeUpdate();
+                .unwrap(org.hibernate.query.NativeQuery.class).setParameter("p", payload).setParameter("t", (String) r[9], String.class).executeUpdate();
     }
 
     private void exigirDisponivel() {

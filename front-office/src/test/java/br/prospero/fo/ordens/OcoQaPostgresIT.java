@@ -93,7 +93,7 @@ class OcoQaPostgresIT {
                 new BigDecimal("12.00"), 2, new EventoMatching.Alvo(compra, compra, "CONTA-002"),
                 new EventoMatching.Alvo(p.tp(), p.grupo(), "CONTA-003"), LadoOrdem.COMPRA);
         return new EventoMatching(UUID.randomUUID(), admissao(compra), "ALFA3", LocalDate.of(2026, 10, 18),
-                "hash-" + UUID.randomUUID(), detalhe, versao == 1 ? null : admissao(compra), versao);
+                "hash-" + UUID.randomUUID(), detalhe, new EventoMatching.Contexto(versao == 1 ? null : admissao(compra), versao, null, null));
     }
 
     @Test

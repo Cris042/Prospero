@@ -77,6 +77,9 @@ rodar_workbook posicoes posicoes
 # RF08b: negócios e razão D0 em DELTA3 logo após posições; repete abrindo e fechando por negócios reais.
 rodar_workbook razao razao
 rodar_workbook razao razao
+# RF09a: recebimento, risco rejeitado, cursor e isolamento; duas execuções sem reconstruir fatos.
+rodar_workbook trajetoria risco
+rodar_workbook trajetoria risco
 # RF06a: livro real, VWAP e repetição sem zerar acumuladores ou reservas.
 rodar_workbook cotacao risco
 rodar_workbook cotacao risco

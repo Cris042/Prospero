@@ -59,8 +59,13 @@ public class RazaoJpa implements ConsultaRazao {
     }
 
     public void registrarOrigem(String negocio, UUID evento) {
-        em().createNativeQuery("INSERT INTO bo_negocio_origem(negocio_id,evento) VALUES(:n,:e)")
-                .setParameter("n", negocio).setParameter("e", evento).executeUpdate();
+        registrarOrigem(negocio, evento, null);
+    }
+
+    public void registrarOrigem(String negocio, UUID evento, String traceparent) {
+        em().createNativeQuery("INSERT INTO bo_negocio_origem(negocio_id,evento,traceparent) VALUES(:n,:e,:t)")
+                .unwrap(org.hibernate.query.NativeQuery.class).setParameter("n", negocio).setParameter("e", evento)
+                .setParameter("t", traceparent, String.class).executeUpdate();
     }
 
     public void liquidar(TransacaoContabil transacao, LocalDate data) {
