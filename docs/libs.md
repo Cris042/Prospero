@@ -28,6 +28,7 @@ Versões registradas nos POMs, lockfile e imagens Compose. Atualizar este docume
 | OpenTelemetry SDK / Collector | 1.62.0 / 0.162.0 | Extensão Quarkus / Collector contrib |
 | Micrometer / Prometheus | 1.17.1 / v3.15.0 | Métricas |
 | Loki / Grafana / Jaeger | 3.7.8 / 13.2.4 / 2.22.0 | Logs, dashboards e traces |
+| Plugins de fontes embarcados no Grafana | Prometheus 13.2.3 / Loki 13.2.2 / Jaeger 13.0.5 | Inspecionados na imagem Grafana 13.2.4; V01a seleciona o diretório bundled, sem instalação/atualização automática |
 | ai-memory | 3.1.0 | CLI e container separado; [guia](rules.md#memória-e-retomada) |
 | actions/upload-artifact | 7.0.2 | Capturas PNG Playwright por sete dias na CI; commit `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, [origem oficial](https://github.com/actions/upload-artifact/tree/cf430e030ddbb5b0abf93d22962f4752f3646cd9) |
 | Gitleaks / Trivy | 8.30.1 / 0.76.0 | CI; imagens fixadas por digest |
@@ -64,3 +65,11 @@ LZ4 1.11.4 substitui 1.11.1 gerida transitivamente pelo baseline. A auditoria Tr
 ExcelJS 4.4.0 (MIT) lê/escreve o exemplo e os fixtures, conforme [documentação oficial fixada](https://github.com/exceljs/exceljs/blob/v4.4.0/README.md). A alternativa [read-excel-file](https://github.com/catamphetamine/read-excel-file) separaria leitura e geração; ExcelJS permite as duas capacidades com o mesmo modelo, ao custo de mais transitivas. O parser não executa fórmulas nem resolve links externos. [yauzl](https://github.com/thejoshwolfe/yauzl) valida entradas/tamanhos e permite contabilizar bytes realmente descomprimidos antes de ExcelJS. Limites e contrato ficam no [README frontend](../frontend/README.md#runner-xlsx--contrato-p03).
 
 O override UUID 11.1.1 mantém exportação CommonJS `v4`, único uso no ExcelJS (`cf-rule-ext-xform`); corrige [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq). Remover quando ExcelJS atualizar sua dependência. Auditoria produção executada localmente em 2026-10-17 após instalação: zero vulnerabilidades; não substitui auditorias futuras nem scan de imagens.
+
+## Plugins Grafana — seleção reproduzível na V01a
+
+Grafana 13.2 passou a distribuir fontes como plugins autônomos e, por padrão, atualiza plugins pré-instalados no startup ([documentação oficial](https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#preinstall_auto_update)). A imagem 13.2.4 já contém Prometheus 13.2.3, Loki 13.2.2 e Jaeger 13.0.5; esses manifests foram inspecionados no container. Nenhum plugin adicional é necessário aos três datasources provisionados.
+
+O Compose seleciona `/usr/share/grafana/data/plugins-bundled`, desabilita preinstall/atualização automática e a administração de plugins pela UI. Downloads antigos em `grafana-dados` ficam preservados, mas deixam de ser selecionados; não apagar o volume para aplicar esta mudança. As versões acompanham a imagem revisada, sem buscar versão mais recente em cada inicialização. Isso fixa seleção/proveniência; não declara os arquivos imutáveis ou impede um operador com acesso ao container de alterá-los.
+
+O orçamento Grafana passa de 256 para 384 MiB após reprodução de OOM com 256 MiB e validação local de quatro dashboards com 384 MiB. O ensaio usou apenas telemetria sintética, com pico observado de 358,7 MiB e 60 s adicionais sem OOM após os E2E; não comprova estabilidade prolongada, capacidade ou soma de todos os limites da stack. A CI integrada ainda precisa repetir os fluxos reais. Portas loopback, autenticação, fontes e volumes persistentes permanecem.

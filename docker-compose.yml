@@ -563,6 +563,7 @@ services:
     - --storage.tsdb.retention.time=3d
     volumes:
     - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - ./infra/prometheus/alertas.yml:/etc/prometheus/alertas.yml:ro
     - prometheus-dados:/prometheus
     networks:
     - telemetria
@@ -581,6 +582,11 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      # Plugins vêm da imagem versionada; não instalar/atualizar dependências durante o startup.
+      GF_PATHS_PLUGINS: /usr/share/grafana/data/plugins-bundled
+      GF_PLUGINS_PREINSTALL_DISABLED: 'true'
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: 'false'
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: 'false'
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_ANALYTICS_REPORTING_ENABLED: 'false'
       GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
@@ -592,7 +598,7 @@ services:
     - telemetria
     ports:
     - 127.0.0.1:13000:3000
-    mem_limit: 256m
+    mem_limit: 384m
     security_opt:
     - no-new-privileges:true
     logging:

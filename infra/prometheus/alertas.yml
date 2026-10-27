@@ -1,0 +1,87 @@
+# Avisos locais de operação. Não executam recuperação nem comprovam conciliação financeira.
+groups:
+- name: prospero-operacao
+  interval: 15s
+  rules:
+  - alert: ProsperoSemScrape
+    expr: up{job="prospero"} == 0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Scrape indisponível em {{ $labels.servico }}'
+      description: 'Sem observação por 1min. Conferir processo, rede e /q/metrics; up não é prontidão financeira.'
+  - alert: ProsperoProcessamentoIndisponivel
+    expr: >-
+      (prospero_cotacao_em_dia{job="prospero",servico="front-office"} == 0)
+      or (prospero_matching_pronto{job="prospero",servico="matching-engine"} == 0)
+      or (prospero_posicoes_em_dia{job="prospero",servico="back-office"} == 0)
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Processamento sem prontidão em {{ $labels.servico }}'
+      description: 'Indicador sem prontidão por 2min. Conferir saúde, consumidores e logs; não inferir perda financeira nem liberar reservas.'
+  - alert: ProsperoMetricaProntidaoAusente
+    expr: >-
+      (up{job="prospero",servico="front-office"} == 1 unless on(job,servico) prospero_cotacao_em_dia{job="prospero",servico="front-office"})
+      or (up{job="prospero",servico="middle-office"} == 1 unless on(job,servico) prospero_liquidacao_aguardando{job="prospero",servico="middle-office"})
+      or (up{job="prospero",servico="matching-engine"} == 1 unless on(job,servico) prospero_matching_pronto{job="prospero",servico="matching-engine"})
+      or (up{job="prospero",servico="back-office"} == 1 unless on(job,servico) prospero_posicoes_em_dia{job="prospero",servico="back-office"})
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Sinal esperado ausente em {{ $labels.servico }}'
+      description: 'Scrape responde, mas falta o indicador esperado por 2min. No MO o sinal é de pendências de crédito, não de prontidão. Conferir configuração; ausência não é zero.'
+  - alert: ProsperoQuarentenaRecente
+    expr: >-
+      sum by (servico) (increase({job="prospero",__name__=~"prospero_(matching|cotacao|contabilizacao|posicoes)_quarentena_total"}[5m])) > 0
+      or (sum by (servico) (
+        ({job="prospero",__name__=~"prospero_(matching|cotacao|contabilizacao|posicoes)_quarentena_total"} > 0)
+        unless on(__name__,job,servico,instance,exported_servico)
+        {job="prospero",__name__=~"prospero_(matching|cotacao|contabilizacao|posicoes)_quarentena_total"} offset 5m
+      ) > 0)
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Ocorrência recente de quarentena em {{ $labels.servico }}'
+      description: 'Incremento em 5min ou contador positivo sem amostra correspondente no offset de 5 min. Esse ramo detecta primeira exposição sem baseline; lookback não determina instante exato. Fim do alerta não comprova recuperação: conferir prontidão, APIs e logs, sem limpar marcadores automaticamente.'
+  - alert: ProsperoOutboxPendente
+    expr: prospero_outbox_pendentes{job="prospero",servico=~"front-office|middle-office|back-office"} > 0
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Pendências observadas na outbox de {{ $labels.servico }}'
+      description: 'Gauge positivo por 2min, amostrado pela manutenção e sujeito a valor antigo após erro. Conferir relay/broker; não mede idade exata nem autoriza desfazer negócio.'
+  - alert: ProsperoCreditoAguardando
+    expr: >-
+      (prospero_liquidacao_aguardando_idade_segundos{job="prospero",servico="middle-office"} > 120)
+      and on(job,servico,instance) (prospero_liquidacao_aguardando{job="prospero",servico="middle-office"} > 0)
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Crédito aguardando observado no middle office'
+      description: 'Quantidade positiva e idade observada acima de 120s por 2min. Não é expectativa D0 aguardando D+2; gauges podem estar antigos. Conferir evento/negócio e recuperação por APIs.'
+  - alert: ProsperoBoletaNegocioP99Alto
+    expr: >-
+      (histogram_quantile(0.99, sum by(le,servico) (rate(prospero_ordens_boleta_negocio_seconds_bucket{job="prospero",servico="front-office"}[5m]))) > 0.050)
+      and on(servico) (sum by(servico) (increase(prospero_ordens_boleta_negocio_seconds_count{job="prospero",servico="front-office"}[5m])) >= 100)
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'p99 observado boleta → primeiro negócio acima de 50ms'
+      description: 'Janela de 5 min, pelo menos 100 observações, persistência de 2 min. Aproximação por buckets inclui população/limites do timer FO; diagnóstico não substitui ensaio RNF04 nem autoriza alterar a meta.'
+  - alert: ProsperoMatchingP99Alto
+    expr: >-
+      (histogram_quantile(0.99, sum by(le,servico) (rate(prospero_matching_comando_seconds_bucket{job="prospero",servico="matching-engine"}[5m]))) > 0.001)
+      and on(servico) (sum by(servico) (increase(prospero_matching_comando_seconds_count{job="prospero",servico="matching-engine"}[5m])) >= 100)
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'p99 observado do matching acima de 1ms'
+      description: 'Janela de 5 min, pelo menos 100 comandos, persistência de 2 min. Timer de núcleo/serialização sem I/O; aproximação por buckets e diagnóstico, não ensaio controlado RNF04.'
