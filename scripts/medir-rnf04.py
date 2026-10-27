@@ -87,6 +87,14 @@ def percentil(antes, depois, q):
     return float("inf"), int(total)
 
 
+def classificar(p99, meta, contexto="dedicado"):
+    """Somente limite superior estritamente abaixo da meta comprova a desigualdade exigida."""
+    if p99 is None:
+        return None
+    prefixo = "indicativo: " if contexto == "ci-hospedado" else ""
+    return prefixo + ("cumprido" if p99 < meta else "não cumprido")
+
+
 def ambiente():
     def saida(*cmd):
         try:
@@ -103,17 +111,61 @@ def ambiente():
             "limites": "384 MiB e 1 CPU por serviço Java (docker-compose.yml)"}
 
 
+def verificar_orcamento(origem, token, necessarias):
+    """Margem conservadora por leitura limitada; não reserva vagas contra outro emissor."""
+    def recusar():
+        raise SystemExit("Margem de ordens não comprovada; nenhuma preparação ou ordem foi enviada.")
+
+    if type(necessarias) is not int or not 1 <= necessarias <= 1000:
+        recusar()
+    ids, cursores = set(), set()
+    cursor = None
+    for _ in range(10):
+        parametros = {"limite": 100}
+        if cursor is not None:
+            parametros["cursor"] = cursor
+        try:
+            pagina = mercado.http("GET", origem.rstrip("/") + "/api/v1/ordens?" +
+                                  urllib.parse.urlencode(parametros), token)
+        except Exception:
+            recusar()
+        if (not isinstance(pagina, dict) or "proximoCursor" not in pagina or
+                not isinstance(pagina.get("ordens"), list) or len(pagina["ordens"]) > 100):
+            recusar()
+        for ordem in pagina["ordens"]:
+            identificador = ordem.get("id") if isinstance(ordem, dict) else None
+            try:
+                valido = isinstance(identificador, str) and str(uuid.UUID(identificador)) == identificador
+            except (ValueError, AttributeError):
+                valido = False
+            if not valido or identificador in ids:
+                recusar()
+            ids.add(identificador)
+        if len(ids) + necessarias > 1000:
+            recusar()
+        cursor = pagina["proximoCursor"]
+        if cursor is None:
+            return len(ids)
+        if not isinstance(cursor, str) or not 1 <= len(cursor) <= 2048 or cursor in cursores:
+            recusar()
+        cursores.add(cursor)
+    recusar()
+
+
 def executar(args):
-    mercado.preparar_carteira(args.origem_mo, "CONTA-002", "1000000.00", {}, prazo=60)
-    mercado.preparar_carteira(args.origem_mo, "CONTA-003", "0.00", {args.ticker: args.amostras + args.aquecimento}, prazo=60)
+    total = args.amostras + args.aquecimento
     vendedor = mercado.token("ordens", 900, "CONTA-003")
     comprador = mercado.token("ordens", 900, "CONTA-002")
+    orcamento = {"compradorExistentes": verificar_orcamento(args.origem, comprador, total),
+                 "vendedorExistentes": verificar_orcamento(args.origem, vendedor, 1),
+                 "compradorNecessarias": total, "vendedorNecessarias": 1, "limite": 1000}
+    mercado.preparar_carteira(args.origem_mo, "CONTA-002", "1000000.00", {}, prazo=60)
+    mercado.preparar_carteira(args.origem_mo, "CONTA-003", "0.00", {args.ticker: total}, prazo=60)
 
     def enviar(tok, corpo):
         return mercado.http("POST", args.origem + "/api/v1/ordens", tok, corpo,
                             {"X-Idempotency-Key": "rnf04-" + uuid.uuid4().hex})
 
-    total = args.amostras + args.aquecimento
     oferta = enviar(vendedor, {"ticker": args.ticker, "lado": "VENDA", "tipo": "LIMIT", "validade": "DIA",
                                "quantidade": total, "precoLimite": args.preco})
     mercado.aguardar_campos(args.origem, vendedor, f"/api/v1/ordens/{oferta['id']}", {"estado": "ABERTA"})
@@ -130,15 +182,14 @@ def executar(args):
         if i >= args.aquecimento:
             cliente.append(time.perf_counter() - inicio)
     depois = {n: buckets(origens[n], n) for n in nomes}
-    resultado = {"ambiente": ambiente(), "plano": vars(args), "metricas": {}}
-    prefixo = "indicativo: " if args.contexto == "ci-hospedado" else ""
+    resultado = {"ambiente": ambiente(), "plano": vars(args), "orcamentoAntes": orcamento, "metricas": {}}
     for n in nomes:
         p50, amostras = percentil(antes[n], depois[n], 0.50)
         p99, _ = percentil(antes[n], depois[n], 0.99)
         media = media_independente(antes[n], depois[n])
         resultado["metricas"][n] = {"amostras": amostras, "p50_max_s": p50, "p99_max_s": p99, "meta_s": METAS[n],
                                     "media_s": media, "linhas_ignoradas": depois[n]["ignoradas"],
-                                    "veredito": None if p99 is None else prefixo + ("cumprido" if p99 <= METAS[n] else "não cumprido")}
+                                    "veredito": classificar(p99, METAS[n], args.contexto)}
     cliente.sort()
     resultado["cliente_ate_terminal_observado_s"] = {
         "amostras": len(cliente), "p50": cliente[len(cliente) // 2], "p99": cliente[min(len(cliente) - 1, int(len(cliente) * 0.99))],
@@ -159,6 +210,8 @@ def main(argv=None):
     parser.add_argument("--origem", type=origem_http, default="http://127.0.0.1:8081", help="front office")
     parser.add_argument("--origem-mo", type=origem_http, default="http://127.0.0.1:8082", help="middle office")
     parser.add_argument("--origem-me", type=origem_http, default="http://127.0.0.1:8083", help="matching engine")
+    parser.add_argument("--variante", choices=["isolada", "baseline", "candidato"], default="isolada",
+                        help="Identifica a variante; a CI confere a flag real dos containers separadamente.")
     parser.add_argument("--ticker", default="ALFA3")
     parser.add_argument("--preco", default="10.00")
     parser.add_argument("--amostras", type=int, default=200)

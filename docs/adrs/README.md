@@ -21,6 +21,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-015](ADR-015-projecao-posicoes-bo.md) | Projeção de posições no BO, idempotência, consulta por conta e recuperação (RF07) | Aceita em 2026-10-23; RF07 integrada pelo PR #42 |
 | [ADR-016](ADR-016-razao-liquidacao-d2.md) | Razão em partidas dobradas, calendário, data de movimento e liquidação D+2 com crédito verificado no MO (RF08) | Aceita em 2026-10-24; implementação em fatias |
 | [ADR-017](ADR-017-trajetoria-tempo-real.md) | Trajetória durável no FO, confirmação BO, WebSocket e recuperação (RF09) | Proposta técnica em implementação; sem aceite atribuído |
+| [ADR-018](ADR-018-publicacao-outbox-apos-commit.md) | Antecipar publicação FO/MO após commit, com coalescência e polling de recuperação (V01b) | Proposta técnica; sem aceite novo atribuído |
 
 ## Relação com a proposta original
 

@@ -1,6 +1,7 @@
 package br.prospero.mo.sessao.jpa;
 
 import br.prospero.mo.mensageria.dominio.MensagemSaida;
+import br.prospero.mo.mensageria.kafka.AvisoOutbox;
 import br.prospero.mo.sessao.dominio.RepositorioSessao;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -15,11 +16,12 @@ import java.time.ZoneOffset;
 @ApplicationScoped
 public class RepositorioSessaoJpa implements RepositorioSessao {
     @Inject EntityManager em;
+    @Inject AvisoOutbox avisoOutbox;
 
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public boolean registrar(MensagemSaida m) {
-        return em.createNativeQuery("""
+        boolean nova = em.createNativeQuery("""
                         INSERT INTO outbox (id, topico, chave, tipo, payload, traceparent, criado_em)
                         VALUES (:id, :topico, :chave, :tipo, :payload, :trace, :criado) ON CONFLICT (id) DO NOTHING""")
                 .unwrap(NativeQuery.class)
@@ -27,5 +29,7 @@ public class RepositorioSessaoJpa implements RepositorioSessao {
                 .setParameter("tipo", m.tipo()).setParameter("payload", m.payload())
                 .setParameter("trace", m.traceparent(), String.class)
                 .setParameter("criado", OffsetDateTime.ofInstant(m.criadaEm(), ZoneOffset.UTC)).executeUpdate() == 1;
+        if (nova) avisoOutbox.registrar();
+        return nova;
     }
 }

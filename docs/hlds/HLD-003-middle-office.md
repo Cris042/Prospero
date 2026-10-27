@@ -134,3 +134,9 @@ Implementa a parte MO do [ADR-016](../adrs/ADR-016-razao-liquidacao-d2.md), feat
 
 Limites: o teto é verificado por contagem na transação do evento, com um único consumidor por instância; recusas e expectativas creditadas não têm expurgo nesta fatia. Evidências (TDD, `LiquidacaoPostgresIT`, REST Assured) no PR.
 
+
+## V01b — agendamento da outbox após commit
+
+A implementação em validação do [ADR-018](../adrs/ADR-018-publicacao-outbox-apos-commit.md) antecipa o relay depois do commit de OutboxJpa e a inserção direta do encerramento de sessão. Um callback por transação, sem dados/I/O, apenas solicita execução coalescida. Executor único compartilha publicação, fallback de 200 ms e manutenção a cada aproximadamente 5 s por tempo monotônico, inclusive entre lotes; falha impõe cooldown de 200 ms também contra sinais novos. Perda do sinal/reinício continua recuperada pela outbox persistida.
+
+`PROSPERO_OUTBOX_URGENCIA=false` conserva somente polling para comparação/reversão; não desabilita mensageria ou guardas financeiras. Seleção ordenada, lote de 50 / orçamento de 20 s, ack antes de marcação e reentrega idempotente permanecem. Um publicador concreto recebe Producer/EntityManager para verificar essas fronteiras com PostgreSQL e ack controlado; não é domínio ou biblioteca compartilhada. Estado/evidências no roadmap; ganho de latência depende da medição integrada, sem novo aceite financeiro.

@@ -1,6 +1,7 @@
 package br.prospero.fo.ordens.jpa;
 
 import br.prospero.fo.comum.dominio.Categoria;
+import br.prospero.fo.comum.kafka.AvisoOutbox;
 import br.prospero.fo.comum.dominio.MensagemSaida;
 import br.prospero.fo.comum.dominio.RegraNegocioException;
 import br.prospero.fo.ordens.dominio.BaseTunel;
@@ -39,6 +40,7 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
     private final EntityManager em;
     @Inject
     RepositorioTrajetoriaJpa trajetoria;
+    @Inject AvisoOutbox avisoOutbox;
 
     @Inject
     public RepositorioOrdensJpa(EntityManager em) {
@@ -131,6 +133,7 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
                 .setParameter("criado", OffsetDateTime.ofInstant(comandoRisco.criadaEm(), ZoneOffset.UTC))
                 .executeUpdate();
         trajetoria.registrarRecebimento(ordens, comandoRisco);
+        avisoOutbox.registrar();
         return new ResultadoRegistro.Novo(ordens);
     }
 

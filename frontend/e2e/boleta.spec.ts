@@ -1,4 +1,223 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+  type Request,
+} from '@playwright/test';
+import { createServer } from 'node:http';
+
+function caminhoSemConsulta(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return '(sem URL)';
+  }
+}
+
+const POSICOES = '/servicos/back-office/api/v1/posicoes';
+const LEITURAS_BO: Record<string, string> = {
+  [POSICOES]: 'POSICOES_INDISPONIVEIS',
+  '/servicos/back-office/api/v1/negocios': 'RAZAO_INDISPONIVEL',
+  '/servicos/back-office/api/v1/razao': 'RAZAO_INDISPONIVEL',
+};
+const ERRO_RECURSO_503 =
+  'Failed to load resource: the server responded with a status of 503 (Service Unavailable)';
+
+function leituraDaPagina(url: string, page: Page): string | null {
+  try {
+    const destino = new URL(url);
+    const query = destino.pathname === POSICOES ? '' : '?limite=20';
+    return destino.origin === new URL(page.url()).origin &&
+      Object.hasOwn(LEITURAS_BO, destino.pathname) &&
+      destino.search === query
+      ? destino.pathname
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+type ClassificacaoProblema =
+  | 'CONTRATO_VALIDO'
+  | 'CORPO_INDISPONIVEL'
+  | 'TIPO_CONTEUDO'
+  | 'STATUS'
+  | 'CODIGO'
+  | 'CORPO_INVALIDO';
+
+async function classificarProblema(
+  resposta: Pick<APIResponse, 'status' | 'headers' | 'json'>,
+  codigo: string,
+): Promise<ClassificacaoProblema> {
+  if (resposta.status() !== 503) return 'STATUS';
+  if (
+    resposta.headers()['content-type']?.split(';')[0].trim().toLowerCase() !==
+    'application/problem+json'
+  )
+    return 'TIPO_CONTEUDO';
+  let problema: unknown;
+  try {
+    problema = await resposta.json();
+  } catch (erro) {
+    return erro instanceof SyntaxError ? 'CORPO_INVALIDO' : 'CORPO_INDISPONIVEL';
+  }
+  if (problema === null || typeof problema !== 'object' || Array.isArray(problema))
+    return 'CORPO_INVALIDO';
+  if (!('status' in problema) || problema.status !== 503) return 'STATUS';
+  if (!('codigo' in problema) || problema.codigo !== codigo) return 'CODIGO';
+  return 'CONTRATO_VALIDO';
+}
+
+/** Só aceita 503 contratado de leitura BO quando o navegador e a UI comprovam recuperação. */
+async function observarRecuperacao(page: Page) {
+  const erros: string[] = [];
+  const respostasComErro: {
+    metodo: string;
+    caminho: string;
+    status: number;
+    motivo?: ClassificacaoProblema;
+  }[] = [];
+  const provas = new WeakMap<Request, ClassificacaoProblema>();
+  const pendentes = new Set<Promise<void>>();
+  const ultimaFalha = new Map<string, number>();
+  const ultimoSucesso = new Map<string, number>();
+  const indisponibilidades = new Map<string, number>();
+  const mensagens503 = new Map<string, number>();
+  let sequencia = 0;
+  // Um único GET real por leitura. Capturar só a classificação antes do fulfill evita
+  // depender da retenção do corpo pelo CDP; nenhum corpo/token/header é guardado ou emitido.
+  await page.route(
+    (url) => Object.hasOwn(LEITURAS_BO, url.pathname),
+    async (rota) => {
+      const leitura =
+        rota.request().method() === 'GET' ? leituraDaPagina(rota.request().url(), page) : null;
+      if (!leitura) return rota.fallback();
+      try {
+        // Mesmo prazo da verificação: BO lento continua reprovando, sem um teto mais curto que a UI.
+        const resposta = await rota.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 15000 });
+        if (resposta.status() >= 400)
+          provas.set(rota.request(), await classificarProblema(resposta, LEITURAS_BO[leitura]));
+        await rota.fulfill({ response: resposta });
+      } catch {
+        // Página fechada no teardown não é falha da leitura; abort também falharia.
+        if (page.isClosed()) return;
+        erros.push(`Transporte da leitura indisponível GET ${leitura}`);
+        await rota.abort('failed').catch(() => undefined);
+      }
+    },
+  );
+  page.on('pageerror', (erro) => erros.push(erro.message));
+  page.on('console', (mensagem) => {
+    if (mensagem.type() !== 'error') return;
+    const leitura = leituraDaPagina(mensagem.location().url, page);
+    if (leitura && mensagem.text() === ERRO_RECURSO_503)
+      mensagens503.set(leitura, (mensagens503.get(leitura) ?? 0) + 1);
+    else erros.push(`${caminhoSemConsulta(mensagem.location().url)}: ${mensagem.text()}`);
+  });
+  page.on('response', (resposta) => {
+    const ordem = ++sequencia;
+    const caminho = caminhoSemConsulta(resposta.url());
+    const metodo = resposta.request().method();
+    const leitura = metodo === 'GET' ? leituraDaPagina(resposta.url(), page) : null;
+    // Não aguardar Response.finished: respostas roteadas podem ficar pendentes no Playwright
+    // mesmo após Angular consumir o corpo. O 200 posterior E a UI recuperada são obrigatórios.
+    if (leitura && resposta.status() === 200) ultimoSucesso.set(leitura, ordem);
+    if (resposta.status() < 400) return;
+    if (respostasComErro.length >= 20) {
+      if (!erros.includes('Mais de 20 respostas HTTP com erro'))
+        erros.push('Mais de 20 respostas HTTP com erro');
+      return;
+    }
+    // Somente metadados: nunca registrar headers, query strings ou corpos com credenciais.
+    const diagnostico: (typeof respostasComErro)[number] = {
+      metodo,
+      caminho,
+      status: resposta.status(),
+    };
+    respostasComErro.push(diagnostico);
+    if (!leitura || resposta.status() !== 503) {
+      erros.push(`HTTP ${resposta.status()} ${metodo} ${caminho}`);
+      return;
+    }
+    ultimaFalha.set(leitura, ordem);
+    const verificacao = (async () => {
+      // Injeções locais com route.fulfill não passam pela captura acima; verificar seu
+      // corpo normalmente. Uma falha de leitura continua reprovando com enum sanitizado.
+      const classificacao =
+        provas.get(resposta.request()) ??
+        (await classificarProblema(resposta, LEITURAS_BO[leitura]));
+      diagnostico.motivo = classificacao;
+      if (classificacao === 'CONTRATO_VALIDO') {
+        indisponibilidades.set(leitura, (indisponibilidades.get(leitura) ?? 0) + 1);
+      } else erros.push(`503 fora do contrato ${classificacao} ${metodo} ${caminho}`);
+    })();
+    pendentes.add(verificacao);
+    void verificacao.finally(() => pendentes.delete(verificacao));
+  });
+  return async (timeout = 15000) => {
+    const historico = page.locator('app-historico');
+    let reconsultouHistorico = false;
+    await expect
+      .poll(
+        async () => {
+          const falhouHistorico = [...indisponibilidades.keys()].some(
+            (rota) =>
+              rota !== POSICOES && (ultimoSucesso.get(rota) ?? 0) <= (ultimaFalha.get(rota) ?? 0),
+          );
+          const atualizar = historico.getByRole('button', {
+            name: 'Atualizar histórico',
+            exact: true,
+          });
+          // O produto oferece recuperação manual para histórico. Uma tentativa limitada pela UI;
+          // outra recusa continua falhando, sem fabricar sucesso ou gerar polling ilimitado.
+          if (
+            !reconsultouHistorico &&
+            falhouHistorico &&
+            (await historico.getByRole('alert').count()) > 0 &&
+            (await atualizar.isEnabled())
+          ) {
+            reconsultouHistorico = true;
+            await atualizar.click({ timeout });
+          }
+          return {
+            erros,
+            respostasPendentes: pendentes.size,
+            console503Correlacionado: [...mensagens503].every(
+              ([rota, total]) => total <= (indisponibilidades.get(rota) ?? 0),
+            ),
+            recuperou: Object.keys(LEITURAS_BO).every(
+              (rota) => (ultimoSucesso.get(rota) ?? 0) > (ultimaFalha.get(rota) ?? 0),
+            ),
+            tabelaVisivel: await page
+              .getByRole('region', { name: 'Tabela de posições' })
+              .isVisible(),
+            historicoVisivel:
+              ((await historico.getByRole('region', { name: 'Tabela de negócios' }).isVisible()) ||
+                (await historico
+                  .getByText('Nenhum negócio registrado para esta conta.', { exact: true })
+                  .isVisible())) &&
+              ((await historico.getByRole('region', { name: 'Tabela da razão' }).isVisible()) ||
+                (await historico
+                  .getByText('Nenhum lançamento registrado para esta conta.', { exact: true })
+                  .isVisible())),
+            alertas: await page.locator('app-posicoes, app-historico').getByRole('alert').count(),
+          };
+        },
+        { timeout, message: JSON.stringify(respostasComErro) },
+      )
+      .toEqual({
+        erros: [],
+        respostasPendentes: 0,
+        console503Correlacionado: true,
+        recuperou: true,
+        tabelaVisivel: true,
+        historicoVisivel: true,
+        alertas: 0,
+      });
+  };
+}
 
 function registroDaBoleta(page: Page) {
   return page
@@ -148,6 +367,137 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   );
   await page.getByRole('heading', { name: 'Boleta' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('boleta.png'), fullPage: true });
+});
+
+test('recupera posições após um 503 contratado sem esconder erros da boleta', async ({ page }) => {
+  const verificarRecuperacao = await observarRecuperacao(page);
+  const liberacao = Promise.withResolvers<void>();
+  let primeira = true;
+  await page.route(`**${POSICOES}`, async (rota) => {
+    if (primeira) {
+      primeira = false;
+      await rota.fulfill({
+        status: 503,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({ status: 503, codigo: 'POSICOES_INDISPONIVEIS' }),
+      });
+      return;
+    }
+    await liberacao.promise;
+    await rota.fallback();
+  });
+  try {
+    await page.goto('/');
+    await expect(page.locator('app-posicoes').getByRole('alert')).toContainText(
+      'Tentaremos novamente automaticamente',
+    );
+  } finally {
+    liberacao.resolve();
+  }
+  // A resposta posterior passa pela API real; nenhum clique em Atualizar posições.
+  await verificarRecuperacao();
+});
+
+for (const recurso of [
+  { rota: '/servicos/back-office/api/v1/negocios', nome: 'negócios' },
+  { rota: '/servicos/back-office/api/v1/razao', nome: 'razão' },
+]) {
+  test(`recupera histórico após um 503 contratado em ${recurso.nome} pela UI`, async ({ page }) => {
+    const verificarRecuperacao = await observarRecuperacao(page);
+    let consultas = 0;
+    await page.route(`**${recurso.rota}?limite=20`, async (rota) => {
+      if (++consultas === 1) {
+        await rota.fulfill({
+          status: 503,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({ status: 503, codigo: 'RAZAO_INDISPONIVEL' }),
+        });
+      } else await rota.fallback();
+    });
+    await page.goto('/');
+    await expect(page.locator('app-historico').getByRole('alert')).toContainText(recurso.nome);
+    await verificarRecuperacao();
+    expect(consultas).toBe(2);
+  });
+}
+
+test('reprova histórico com 503 contratado persistente após uma atualização manual', async ({
+  page,
+}) => {
+  const verificarRecuperacao = await observarRecuperacao(page);
+  let consultas = 0;
+  await page.route('**/servicos/back-office/api/v1/negocios?limite=20', (rota) => {
+    consultas++;
+    return rota.fulfill({
+      status: 503,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ status: 503, codigo: 'RAZAO_INDISPONIVEL' }),
+    });
+  });
+  await page.goto('/');
+  await expect(page.locator('app-historico').getByRole('alert')).toBeVisible();
+  await expect(verificarRecuperacao(250)).rejects.toThrow();
+  expect(consultas).toBe(2);
+});
+
+for (const falha of [
+  {
+    nome: '503 contratado persistente',
+    status: 503,
+    codigo: 'POSICOES_INDISPONIVEIS',
+    persistente: true,
+  },
+  { nome: '500 de posições', status: 500, codigo: 'POSICOES_INDISPONIVEIS', persistente: false },
+  { nome: '503 com código inesperado', status: 503, codigo: 'ERRO_HTTP', persistente: false },
+]) {
+  test(`reprova verificação da boleta com ${falha.nome}`, async ({ page }) => {
+    const verificarRecuperacao = await observarRecuperacao(page);
+    const liberacao = Promise.withResolvers<void>();
+    let primeira = true;
+    await page.route(`**${POSICOES}`, async (rota) => {
+      if (primeira || falha.persistente) {
+        primeira = false;
+        await rota.fulfill({
+          status: falha.status,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({ status: falha.status, codigo: falha.codigo }),
+        });
+        return;
+      }
+      await liberacao.promise;
+      await rota.fallback();
+    });
+    try {
+      await page.goto('/');
+      await expect(page.locator('app-posicoes').getByRole('alert')).toBeVisible();
+    } finally {
+      liberacao.resolve();
+    }
+    if (!falha.persistente) {
+      await expect(page.getByRole('region', { name: 'Tabela de posições' })).toBeVisible({
+        timeout: 15000,
+      });
+      await expect(page.locator('app-posicoes').getByRole('alert')).toHaveCount(0);
+    }
+    // Mesmo após a UI recuperar, 500 e código inesperado continuam reprovando.
+    await expect(verificarRecuperacao(250)).rejects.toThrow();
+  });
+}
+
+test('reprova verificação da boleta com erro JavaScript mesmo após posições recuperarem', async ({
+  page,
+}) => {
+  const verificarRecuperacao = await observarRecuperacao(page);
+  await page.goto('/');
+  await verificarRecuperacao();
+  const erro = page.waitForEvent('pageerror');
+  await page.evaluate(() => {
+    const frame = document.createElement('iframe');
+    frame.srcdoc = '<script>throw new Error("Falha JavaScript de controle QA")</script>';
+    document.body.appendChild(frame);
+  });
+  await erro;
+  await expect(verificarRecuperacao(250)).rejects.toThrow();
 });
 
 test('mostra recusa do backend de forma acessível e registra OCO', async ({ page }) => {
@@ -438,4 +788,129 @@ test('mostra Stop aguardando gatilho e execução preservando tipo e validade', 
   await page.getByRole('button', { name: 'Atualizar ordens' }).click();
   await expect(linha).toContainText('Executada');
   await page.screenshot({ path: testInfo.outputPath('stop-executada.png'), fullPage: true });
+});
+
+// Fixture de transporte do próprio teste: não usa nem altera serviços/dados de negócio.
+for (const contrato of [
+  {
+    nome: 'válido',
+    tipo: 'application/problem+json',
+    corpo: { status: 503, codigo: 'POSICOES_INDISPONIVEIS' },
+    motivo: null,
+  },
+  {
+    nome: 'MIME inesperado',
+    tipo: 'application/json',
+    corpo: { status: 503, codigo: 'POSICOES_INDISPONIVEIS' },
+    motivo: 'TIPO_CONTEUDO',
+  },
+  {
+    nome: 'código inesperado',
+    tipo: 'application/problem+json',
+    corpo: { status: 503, codigo: 'OUTRO' },
+    motivo: 'CODIGO',
+  },
+  {
+    nome: 'status inesperado no corpo',
+    tipo: 'application/problem+json',
+    corpo: { status: 502, codigo: 'POSICOES_INDISPONIVEIS' },
+    motivo: 'STATUS',
+  },
+  {
+    nome: 'JSON inválido',
+    tipo: 'application/problem+json',
+    corpo: '{',
+    motivo: 'CORPO_INVALIDO',
+  },
+]) {
+  test(`classifica APIResponse ${contrato.nome} antes de o corpo CDP ficar indisponível`, async ({
+    page,
+  }) => {
+    let consultasPosicoes = 0;
+    const servidor = createServer((pedido, resposta) => {
+      let caminho: string;
+      try {
+        caminho = new URL(pedido.url ?? '', 'http://localhost').pathname;
+      } catch {
+        resposta.writeHead(400);
+        resposta.end();
+        return;
+      }
+      const responder = (corpo: unknown, status = 200, tipo = 'application/json') => {
+        resposta.writeHead(status, { 'content-type': tipo });
+        resposta.end(typeof corpo === 'string' ? corpo : JSON.stringify(corpo));
+      };
+      if (caminho === POSICOES) {
+        if (++consultasPosicoes === 1) return responder(contrato.corpo, 503, contrato.tipo);
+        return responder({ posicoes: [] });
+      }
+      if (Object.hasOwn(LEITURAS_BO, caminho)) return responder({ itens: [] });
+      if (caminho !== '/') {
+        resposta.writeHead(204);
+        resposta.end();
+        return;
+      }
+      responder(
+        `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><body>
+        <app-posicoes></app-posicoes>
+        <app-historico>
+          <p>Nenhum negócio registrado para esta conta.</p>
+          <p>Nenhum lançamento registrado para esta conta.</p>
+        </app-historico>
+        <script>
+          (async () => {
+            await Promise.all([
+              fetch('/servicos/back-office/api/v1/negocios?limite=20').then(r => r.json()),
+              fetch('/servicos/back-office/api/v1/razao?limite=20').then(r => r.json())
+            ]);
+            const posicoes = document.querySelector('app-posicoes');
+            const primeira = await fetch('${POSICOES}');
+            await primeira.text();
+            posicoes.innerHTML = '<p role="alert">Leitura indisponível</p>';
+            const recuperada = await fetch('${POSICOES}');
+            await recuperada.json();
+            if (recuperada.ok)
+              posicoes.innerHTML = '<div role="region" aria-label="Tabela de posições">Posições consultadas</div>';
+          })();
+        </script></body></html>`,
+        200,
+        'text/html',
+      );
+    });
+    try {
+      await new Promise<void>((resolve) => servidor.listen(0, '127.0.0.1', resolve));
+      const endereco = servidor.address();
+      if (!endereco || typeof endereco === 'string') throw new Error('Fixture sem porta TCP');
+      // Response usa CDP; APIResponse de route.fetch tem armazenamento independente.
+      // Simula a perda do corpo posterior sem fabricar a classificação do contrato.
+      page.on('response', (resposta) => {
+        if (resposta.status() === 503)
+          resposta.json = async () => {
+            throw new Error('Corpo CDP indisponível por controle QA');
+          };
+      });
+      const verificar = await observarRecuperacao(page);
+      await page.goto(`http://127.0.0.1:${endereco.port}/`);
+      await expect(page.getByRole('region', { name: 'Tabela de posições' })).toBeVisible();
+      if (contrato.motivo === null) await verificar();
+      else await expect(verificar(250)).rejects.toThrow(contrato.motivo);
+      expect(consultasPosicoes).toBe(2);
+    } finally {
+      servidor.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        servidor.close((erro) => (erro ? reject(erro) : resolve())),
+      );
+    }
+  });
+}
+
+test('reprova classificação quando o corpo da própria APIResponse está indisponível', async () => {
+  const resposta = {
+    status: () => 503,
+    headers: () => ({ 'content-type': 'application/problem+json' }),
+    json: async () => {
+      throw new Error('Corpo APIResponse indisponível por controle QA');
+    },
+  };
+  expect(await classificarProblema(resposta, 'POSICOES_INDISPONIVEIS')).toBe('CORPO_INDISPONIVEL');
 });
