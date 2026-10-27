@@ -37,6 +37,59 @@ public final class MotorMatching {
         this.parametros = Map.copyOf(parametros);
     }
 
+    /** Retirada interna entre comandos completos; transporte e reserva financeira pertencem a outras fatias. */
+    public ResultadoCancelamentoManual cancelarManual(AlvoCancelamento alvo) {
+        java.util.Objects.requireNonNull(alvo);
+        EstadoAtivo estado = estados.get(alvo.ticker());
+        OrigemOrdem origem = estado == null ? null : estado.origens.get(alvo.ordem());
+        if (origem == null) {
+            return recusarCancelamento(ResultadoCancelamentoManual.Situacao.SEM_SALDO_VIVO);
+        }
+        if (!origem.intencao().equals(alvo.intencao()) || !origem.conta().equals(alvo.conta())
+                || !origem.ticker().equals(alvo.ticker()) || !origem.sessao().equals(alvo.sessao())) {
+            return recusarCancelamento(ResultadoCancelamentoManual.Situacao.ALVO_DIVERGENTE);
+        }
+        if (origem.takeProfit() != null || origem.stopLoss() != null) {
+            return recusarCancelamento(ResultadoCancelamentoManual.Situacao.ORIGEM_OCO);
+        }
+        estado.conferirAtiva(alvo.ordem(), alvo.conta());
+        OfertaViva oferta = estado.livro.consultar(alvo.ordem());
+        Admissao pendente = estado.stops.consultar(alvo.ordem());
+        SaldoCanceladoManual saldo = conferirSaldoManual(alvo, origem, oferta, pendente);
+        if (oferta != null) {
+            estado.livro.remover(alvo.ordem());
+        } else {
+            estado.stops.remover(alvo.ordem());
+        }
+        estado.desativar(alvo.ordem(), alvo.conta());
+        return new ResultadoCancelamentoManual(ResultadoCancelamentoManual.Situacao.APLICADO, List.of(saldo));
+    }
+
+    private static ResultadoCancelamentoManual recusarCancelamento(ResultadoCancelamentoManual.Situacao situacao) {
+        return new ResultadoCancelamentoManual(situacao, List.of());
+    }
+
+    private static SaldoCanceladoManual conferirSaldoManual(AlvoCancelamento alvo, OrigemOrdem origem,
+                                                           OfertaViva oferta, Admissao pendente) {
+        if ((oferta == null) == (pendente == null)) {
+            throw new IllegalStateException("Origem ativa sem uma única estrutura viva.");
+        }
+        if (oferta != null) {
+            if (!oferta.ordem.equals(alvo.ordem()) || !oferta.conta.equals(alvo.conta())
+                    || (origem.tipoOriginal() != TipoOrdem.LIMIT && origem.tipoOriginal() != TipoOrdem.STOP_LIMIT)) {
+                throw new IllegalStateException("Oferta divergente da origem ativa.");
+            }
+            return new SaldoCanceladoManual(oferta.ordem, alvo.ticker(), oferta.executada, oferta.restante());
+        }
+        if (!pendente.ordem().equals(alvo.ordem()) || !pendente.intencao().equals(alvo.intencao())
+                || !pendente.conta().equals(alvo.conta()) || !pendente.ticker().equals(alvo.ticker())
+                || !pendente.sessao().equals(alvo.sessao()) || !pendente.tipo().stop()
+                || pendente.tipo() != origem.tipoOriginal()) {
+            throw new IllegalStateException("Stop pendente divergente da origem ativa.");
+        }
+        return new SaldoCanceladoManual(pendente.ordem(), pendente.ticker(), 0, pendente.quantidade());
+    }
+
     /** Snapshot interno imutável; conversão/dissolução não alteram a origem de uma ordem viva. */
     Map<UUID, OrigemOrdem> origensVivas(String ticker) {
         EstadoAtivo estado = estados.get(ticker);
@@ -71,16 +124,21 @@ public final class MotorMatching {
         }
 
         void desativar(UUID ordem, String conta) {
-            OrigemOrdem origem = origens.get(ordem);
-            Integer total = ativasPorConta.get(conta);
-            if (origem == null || !origem.conta().equals(conta) || total == null || total <= 0) {
-                throw new IllegalStateException("Ordem terminal fora da origem ou contagem ativa.");
-            }
+            conferirAtiva(ordem, conta);
+            int total = ativasPorConta.get(conta);
             origens.remove(ordem);
             if (total == 1) {
                 ativasPorConta.remove(conta);
             } else {
                 ativasPorConta.put(conta, total - 1);
+            }
+        }
+
+        void conferirAtiva(UUID ordem, String conta) {
+            OrigemOrdem origem = origens.get(ordem);
+            Integer total = ativasPorConta.get(conta);
+            if (origem == null || !origem.conta().equals(conta) || total == null || total <= 0) {
+                throw new IllegalStateException("Ordem terminal fora da origem ou contagem ativa.");
             }
         }
     }
