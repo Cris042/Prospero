@@ -4,7 +4,7 @@
 
 Manter o livro em memória e produzir negócios determinísticos. Comunicação com outros serviços somente por Kafka; persistência exclusiva em `postgres-matching-engine`, banco/usuário `prospero_me`. Este roteiro detalha a participação do componente nas tarefas do [roadmap global](../docs/roadmap.md); não cria PRs duplicados para o mesmo RF.
 
-A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Não há entidades nem endpoints de negócio implementados. A migração inicial identifica o schema e cria o histórico Flyway, sem inventar tabelas financeiras.
+A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26, build independente, Flyway, JPA configurado, DTO de identidade, saúde e OpenAPI. Desde a RF05, o serviço executa o núcleo e o adaptador Kafka com replay/checkpoint; a RF06 publica fatos de mercado. O livro continua em memória, sem tabelas financeiras por ordem no caminho crítico.
 
 ## Entregas
 
@@ -12,10 +12,10 @@ A fundação P02 foi validada localmente e integrada pelo PR #1: Quarkus/Java 26
 | --- | --- | --- | --- |
 | ME00 | P02 | Build, container, banco próprio e endpoints técnicos | Concluída — PR #1 integrado |
 | ME01 | RF05 | Implementar domínio puro: livro, preço-tempo, FIFO e execuções parciais. | RF05a concluída — PR #23 integrado |
-| ME02 | RF05 | Implementar Market/Limit/Stop/Stop Limit, IOC/FOK e OCO. | Market/Limit e IOC/FOK na RF05a; RF05c.1a/1b implementam encerramento e Stop/Stop Limit internos, em validação/revisão; RF05c.2 integra stops simples em validação; OCO e fechamento integrado planejados |
-| ME03 | RF05 | Integrar Kafka por ativo, offsets e replay após falhas; snapshots somente se necessários por medição (ADR-013). | RF05b em validação — sessão única, posse e assign manual |
-| ME04 | RF06 | Publicar negócios e mudanças de ofertas mesmo sem execução. | Planejada |
-| ME05 | RF10 | Cancelar apenas saldo elegível e ordenar cancelamento com execução. | Planejada |
+| ME02 | RF05 | Implementar Market/Limit/Stop/Stop Limit, IOC/FOK e OCO. | Concluída — RF05 integrada até PR #36; inclui stops, OCO e fechamento |
+| ME03 | RF05 | Integrar Kafka por ativo, offsets e replay após falhas; snapshots somente se necessários por medição (ADR-013). | Concluída — RF05 integrada; sessão única, posse e assign manual |
+| ME04 | RF06 | Publicar negócios e mudanças de ofertas mesmo sem execução. | Concluída — RF06 integrada nos PRs #37/#38 |
+| ME05 | RF10 | Cancelar apenas saldo elegível e ordenar cancelamento com execução. | Em refinamento; regras Stop Limit/OCO pendentes, sem implementação |
 | ME99 | V01 | Resiliência, métricas, rastreio e critérios não funcionais aplicáveis | Planejada |
 
 ## Verificação e execução

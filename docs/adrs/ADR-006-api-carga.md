@@ -82,3 +82,11 @@ Contrato, limites combinados, atestado host assinado vinculado ao plano/instânc
 ### Manutenção de segurança — 2026-10-21
 
 Go 1.27.3 substitui 1.27.2 no toolchain fixado para corrigir [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809), encontrada pelo gate de segurança do PR #27. Imagem/digest correntes no inventário; código, contratos, isolamento e decisão por biblioteca padrão permanecem iguais. O registro original de versão/experimento acima é histórico; a correção não comprova desempenho nem conclui P06. Evidências de race/vet/build/govulncheck pertencem ao PR.
+
+## Extensão técnica P06B1 — leituras financeiras (2026-10-25)
+
+Cinco perspectivas medium independentes recomendaram seguir com ressalvas, registradas na P06 do roadmap. Primeira fatia: catálogo fechado de GET financeiros autenticados, conservando stdlib/executor, execução única, preflight, limites e contagens da etapa A. Cenário opcional preserva planos/hashes anteriores quando omitido; métricas distinguem cenário com cardinalidade finita. Contrato e rotas no HLD-006.
+
+Credenciais de leitura por audiência/conta são pré-emitidas fora do gerador e montadas em arquivos individuais, sem chave HS256 financeira no Go. Metadados são inspecionados antes da admissão; assinatura/autorização permanecem no alvo. Ausência de credencial desabilita somente o cenário correspondente. Não aceitar URL/header/conta livres nem reutilizar o bearer de controle.
+
+Alternativas: montar chave financeira permitiria emitir também credenciais administrativas e amplia privilégio sem necessidade; token no plano/relatório vaza autoridade; um executor genérico de requisições aumenta superfície/contagem sem benefício para o catálogo. Escolher leituras primeiro produz uma fatia verificável sem resíduos financeiros. Escrita/reconciliação/coletores continuam futuros, com isolamento, headroom e recuperação ainda necessários. Não declarar P06 ou RNF04 concluídos por esta extensão.

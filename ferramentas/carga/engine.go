@@ -172,10 +172,10 @@ func (s *Server) countLocked(r *run, wi int, measured bool, apply func(*Counts))
 	if measured {
 		apply(&r.Medicao)
 	}
-	c := s.totals[r.Plano.Servico]
+	c := s.totals[r.Plano.chaveMetrica()]
 	if c == nil {
 		c = &Counts{}
-		s.totals[r.Plano.Servico] = c
+		s.totals[r.Plano.chaveMetrica()] = c
 	}
 	apply(c)
 }
@@ -187,9 +187,13 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 	httpError := false
 	var bytesRead int64
 	var doErr error
-	req, e := http.NewRequestWithContext(ctx, http.MethodGet, target+"/api/v1/sistema", nil)
+	operacao, _ := r.Plano.leitura()
+	req, e := http.NewRequestWithContext(ctx, http.MethodGet, target+operacao.caminho, nil)
 	if e == nil {
 		req.Header.Set("Accept", "application/json")
+		if r.credencial != "" {
+			req.Header.Set("Authorization", "Bearer "+r.credencial)
+		}
 		// A non-idempotent marker is deliberately absent: Transport may retry a GET on a reused
 		// broken connection before response. These are logical HTTP calls, not wire attempt counts.
 		resp, err := client.Do(req)
@@ -246,7 +250,7 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 		r.samples = append(r.samples, elapsed)
 		r.Janelas[wi].samples = append(r.Janelas[wi].samples, elapsed)
 	}
-	bucket := s.hist[r.Plano.Servico]
+	bucket := s.hist[r.Plano.chaveMetrica()]
 	if bucket == nil {
 		bucket = make([]int64, len(latencyBuckets)+3)
 	}
@@ -257,7 +261,7 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 	}
 	bucket[len(latencyBuckets)]++
 	bucket[len(latencyBuckets)+1] += elapsed
-	s.hist[r.Plano.Servico] = bucket
+	s.hist[r.Plano.chaveMetrica()] = bucket
 }
 
 func expirou(err error) bool {

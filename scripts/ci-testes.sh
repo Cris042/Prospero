@@ -17,9 +17,10 @@ docker system df || true
 export PROSPERO_CI_TAG="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 project="prospero-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 # RF05d: o arquivo do robô entra desde o início (FO já na rede dele); o perfil opt-in só liga no fim, com tag da execução.
-compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.robo.yml)
+compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.robo.yml -f docker-compose.carga.yml -f docker-compose.carga-ci.yml)
 export PROSPERO_ROBO_TAG="$PROSPERO_CI_TAG"
-compose_robo=("${compose[@]}" --profile robo)
+compose_robo=("${compose[@]}" --profile robo --profile carga)
+compose_carga=("${compose[@]}" --profile carga)
 mkdir -p .ci-evidencias
 cleanup() {
   code=$?
@@ -32,8 +33,8 @@ cleanup() {
     fi
   fi
   "${compose_robo[@]}" down --volumes --remove-orphans || true
-  rm -rf -- "${runner_cfg:-}"
-  for service in front-office middle-office matching-engine back-office frontend runner-planilhas robo-formador; do
+  rm -rf -- "${runner_cfg:-}" "${carga_cfg:-}"
+  for service in front-office middle-office matching-engine back-office frontend runner-planilhas robo-formador api-carga; do
     docker image rm "prospero/$service:$PROSPERO_CI_TAG" >/dev/null 2>&1 || true
   done
   exit "$code"
@@ -88,6 +89,19 @@ rodar_workbook posicoes posicoes
 # RF08b: negócios e razão D0 em DELTA3 logo após posições; repete abrindo e fechando por negócios reais.
 rodar_workbook razao razao
 rodar_workbook razao razao
+# B1: somente 12 leituras logicas, preflight real e controlador do proprio projeto.
+carga_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-carga.XXXXXX")"
+export PROSPERO_CARGA_SECRETS_DIR="$carga_cfg"
+python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carga_cfg" --preparar
+"${compose_carga[@]}" build api-carga
+"${compose_carga[@]}" up -d --wait --wait-timeout 90 api-carga
+timeout --kill-after=15s 90s python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carga_cfg" \
+  > .ci-evidencias/carga-leituras.json
+cat .ci-evidencias/carga-leituras.json
+"${compose_carga[@]}" stop --timeout 8 api-carga
+"${compose_carga[@]}" rm -f api-carga
+rm -rf -- "$carga_cfg"
+carga_cfg=''
 # RF09a: recebimento, risco rejeitado, cursor e isolamento; duas execuções sem reconstruir fatos.
 rodar_workbook trajetoria risco
 rodar_workbook trajetoria risco
