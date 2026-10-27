@@ -44,7 +44,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Fundação técnica. Negociação, risco e liquidação ainda não implementados. Os quatro painéis de negócio serão entregues na V01."
+        "content": "Fundação técnica e scrape dos quatro serviços. Negociação, risco e liquidação estão implementados conforme roadmap; quatro dashboards operacionais V01a detalham ordens, risco/reservas, matching/mercado e back office/liquidação. Fontes e lacunas aparecem em cada painel; configuração não comprova RNF04 ou conciliação financeira."
       }
     }
   ]

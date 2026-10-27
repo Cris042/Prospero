@@ -1,0 +1,436 @@
+{
+  "uid": "prospero-matching",
+  "title": "Próspero — Matching e mercado",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "tags": [
+    "prospero",
+    "negocio",
+    "v01a"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "panels": [
+    {
+      "title": "Escopo, fontes e limites",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "ME: escritor por ativo, comandos/eventos e timer do núcleo/serialização sem poll/publicação. FO: sincronização e aplicações da projeção de cotação. Eventos não equivalem a negócios, e prontidão não mede profundidade/volume/lag em segundos. p99 aproximado por buckets, população geral de comandos: não substitui ensaio RNF04. Meta preservada: 1 ms.\n\n**Sem série significa sem dados.** Scrape a cada 15 s; taxas/percentis/janelas de 5 min. Contadores observam processamento e podem incluir reentrega ou anteceder commit: não substituem APIs/fatos financeiros. Alertas locais ficam na UI do Prometheus; não enviam notificações externas."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "title": "Prontidão do escritor ME",
+      "type": "stat",
+      "description": "Fonte: ProcessadorMatching. Indicador binário de estado do escritor, não scrape ou capacidade.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_matching_pronto{job=\"prospero\",servico=\"matching-engine\"}",
+          "legendFormat": "{{servico}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Sem prontidão"
+                },
+                "1": {
+                  "text": "Pronto"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Projeção de cotação FO em dia",
+      "type": "stat",
+      "description": "Fonte: ConsumidorCotacao. Sincronização da projeção; não volume ou preço.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_cotacao_em_dia{job=\"prospero\",servico=\"front-office\"}",
+          "legendFormat": "{{servico}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Sem prontidão"
+                },
+                "1": {
+                  "text": "Pronto"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Comandos e eventos processados",
+      "type": "timeseries",
+      "description": "Fonte: ProcessadorMatching. Tipos variados de comandos/fatos, não negócios únicos.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(prospero_matching_comandos_total{job=\"prospero\",servico=\"matching-engine\"}[5m])",
+          "legendFormat": "comandos"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(prospero_matching_eventos_total{job=\"prospero\",servico=\"matching-engine\"}[5m])",
+          "legendFormat": "eventos"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Falhas observadas do escritor (5min)",
+      "type": "timeseries",
+      "description": "Fonte: ProcessadorMatching. Ocorrência recente; resolução temporal não prova recuperação.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(prospero_matching_falhas_total{job=\"prospero\",servico=\"matching-engine\"}[5m])",
+          "legendFormat": "falhas"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "p99 do núcleo/serialização (5min)",
+      "type": "timeseries",
+      "description": "Fonte: ProcessadorMatching. Sem I/O, aproximação por buckets; meta de 1 ms e população do HLD-004.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le,servico) (rate(prospero_matching_comando_seconds_bucket{job=\"prospero\",servico=\"matching-engine\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Comandos observados no timer ME (5min)",
+      "type": "timeseries",
+      "description": "Denominador do histograma; sem amostras o percentil não é válido.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(servico) (increase(prospero_matching_comando_seconds_count{job=\"prospero\",servico=\"matching-engine\"}[5m]))",
+          "legendFormat": "observações"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Aplicações da projeção de cotação",
+      "type": "timeseries",
+      "description": "Fonte: AplicarCotacaoActor. Inclui ofertas sem negócio e reentregas sem mudança.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(mudou) (rate(prospero_cotacao_eventos_total{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "mudou={{mudou}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Quarentenas de cotação acumuladas no processo",
+      "type": "timeseries",
+      "description": "Fonte: ConsumidorCotacao. Counter observado desde início do processo, pode nascer em 1; reinicia com o processo e não é estado atual de bloqueio.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_cotacao_quarentena_total{job=\"prospero\",servico=\"front-office\"}",
+          "legendFormat": "ocorrências"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    }
+  ]
+}

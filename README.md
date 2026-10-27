@@ -145,11 +145,11 @@ Os serviços enviam logs/traces por OTLP ao Collector; ele encaminha traces ao J
 | --- | --- | --- |
 | Coleta técnica | `up{job="prospero"}` por serviço | Consulta do dashboard atual; sucesso de scrape não comprova prontidão financeira. |
 | HTTP/JVM e recursos | Vazão, erros, latência, heap/GC, CPU, memória, disco/rede e pools | Endpoint técnico configurado; inventariar séries, coletores necessários e painéis na P06. |
-| Kafka e publicação | Lag, idade do backlog/outbox, falhas e reentregas | Planejado; depende dos consumidores/publicadores e fontes de métricas. |
-| SAGA e risco | Ordens pendentes/rejeitadas, tempo por etapa, reservas e compensações | Planejado nas RFs; controlar duplicação e recursos sem resolução. |
-| Matching | Tempo de processamento e boleta até negócio; sequência/replay | Planejado; RNF04 exige p99 boleta→negócio < 50 ms e matching < 1 ms/ordem em cenário documentado. |
-| Back office | Duplicações evitadas, conciliação de caixa/custódia, razão e liquidações pendentes | Planejado; medir invariantes e recuperação nas RF07/RF08. |
-| Mercado e trajetória | Idade/ausência da cotação e trace da ordem nos quatro serviços | Planejado; quatro dashboards de negócio e alertas na V01. |
+| Kafka e publicação | Outbox pendente/publicada, consumidores ativos e reentregas | Fontes existentes; lag numérico e idade detalhada da outbox continuam sem cobertura. |
+| SAGA e risco | Recebimentos, decisões por resultado/motivo e reentregas | Fontes existentes; decisões não medem estoque/valor reservado atual. |
+| Matching | Timer do núcleo/serialização e boleta até primeiro negócio | Instrumentados; RNF04 exige p99 < 50 ms / < 1 ms em cenário documentado. Primeira medição indicativa: 447 ms / 0,70 ms. |
+| Back office | Prontidão/falhas/quarentena da projeção, outbox e créditos aguardando no MO | Fontes operacionais existentes; não há contadores de lançamentos D0/D2 ou liquidações concluídas no BO. Conciliação usa APIs e cenários RF08. |
+| Mercado e trajetória | Sincronização da cotação, aplicações e avisos WebSocket | Fontes existentes; trace integrado RF09 em validação. Dashboards e alertas locais V01a também em validação. |
 
 Ausência de série aparece como ausente, não zero. IDs de conta/ordem/execução ficam na correlação sanitizada de logs/traces, sem labels de alta cardinalidade nem segredos. Metas futuras exigem medições; configuração não comprova desempenho. Fontes: [Collector](infra/otel/collector.yaml), [Prometheus](infra/prometheus/prometheus.yml), [dashboard atual](infra/grafana/dashboards/fundacao.json) e [roadmap](docs/roadmap.md). Fontes editáveis e critérios das figuras: [catálogo de diagramas](docs/c4/README.md).
 
@@ -254,7 +254,7 @@ O primeiro comando cria `.env` com credenciais aleatórias sem sobrescrever arqu
 | Loki — prontidão | http://localhost:13100/ready |
 | OpenTelemetry Collector — saúde | http://localhost:14333 |
 
-Grafana: usuário `admin`, senha em `GRAFANA_ADMIN_PASSWORD` no `.env` local. Há um dashboard provisionado de fundação e fontes Prometheus/Loki/Jaeger. Os quatro dashboards financeiros serão entregues na V01. Jaeger usa memória nesta etapa; seus traces se perdem ao reiniciar. Demais dados de infraestrutura usam volumes nomeados do projeto.
+Grafana: usuário `admin`, senha em `GRAFANA_ADMIN_PASSWORD` no `.env` local. Além da fundação e do painel técnico de carga, a V01a provisiona quatro dashboards operacionais: [ordens](infra/grafana/dashboards/ordens.json), [risco/reservas](infra/grafana/dashboards/risco.json), [matching/mercado](infra/grafana/dashboards/matching.json) e [back office/liquidação](infra/grafana/dashboards/back-office.json), em validação conforme roadmap. Cada um informa fontes e lacunas; não substituem a conciliação financeira por APIs. As [regras locais](infra/prometheus/alertas.yml) aparecem em `http://localhost:19090/alerts`, sem notificações externas; condições, janelas e recuperação estão no [HLD](docs/hlds/HLD-001-arquitetura-prospero.md#painéis-e-alertas-operacionais--v01a). Jaeger usa memória nesta etapa; seus traces se perdem ao reiniciar. Demais dados de infraestrutura usam volumes nomeados do projeto.
 
 ## Desenvolvimento e testes
 
