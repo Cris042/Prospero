@@ -83,7 +83,7 @@ Ainda pendentes: cinco ativos e parâmetros; escalas/ticks/lotes/arredondamento;
 
 A RF07 foi definida pelo usuário em 2026-10-23: médio ponderado nas ampliações; médio preservado na redução e resultado sobre a quantidade encerrada; virada ao preço do negócio; zeragem conserva realizado acumulado. Acumuladores exatos, exibição em quatro casas HALF_EVEN; autonegociação neutra na posição/PnL da conta. A visão começa em zero na origem do log, separada da custódia inicial. A venda descoberta continua bloqueada no risco atual. [ADR-015](../adrs/ADR-015-projecao-posicoes-bo.md).
 
-A RF10 foi parcialmente definida pelo usuário em 2026-10-27: saldo de Stop Limit já acionado pode ser cancelado; pedir cancelamento em uma perna OCO não deve encerrar o grupo inteiro. Continua pendente escolher entre cancelar somente a perna solicitada ou impedir cancelamento manual de OCO; a resposta negativa sobre o grupo não decide essa alternativa. Decisão ainda não implementada, conforme [ADR-013](../adrs/ADR-013-matching-execucao.md).
+A RF10 foi definida pelo usuário em 2026-10-27: saldo de Stop Limit já acionado pode ser cancelado; **não permitir cancelamento manual de ordens originadas de OCO**, inclusive a perna sobrevivente após dissolução automática. Cancelamentos e reduções automáticos do vínculo permanecem como definidos. As escolhas não autorizam desfazer negócios nem liberar reserva por aceite HTTP; implementação e evidências no roadmap e no [ADR-013](../adrs/ADR-013-matching-execucao.md).
 
 ## Critérios de aceite e métricas de sucesso
 

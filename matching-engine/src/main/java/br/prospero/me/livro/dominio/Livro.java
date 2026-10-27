@@ -64,6 +64,11 @@ final class Livro {
         return porOrdem.containsKey(ordem);
     }
 
+    /** Consulta interna do escritor para conferir o saldo antes de uma retirada manual. */
+    OfertaViva consultar(UUID ordem) {
+        return porOrdem.get(ordem);
+    }
+
     /** Retira ambos os lados e índices em ordem global de chegada, independente do preço e do HashMap. */
     List<OfertaViva> retirarTodas() {
         List<OfertaViva> ofertas = porOrdem.values().stream()
