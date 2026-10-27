@@ -9,6 +9,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <quarkus.platform.version>3.40.1</quarkus.platform.version>
         <lz4.version>1.11.4</lz4.version>
+        <snappy.version>1.1.10.9</snappy.version>
+        <guava.version>33.7.2-jre</guava.version>
         <compiler-plugin.version>3.14.1</compiler-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
     </properties>
@@ -16,6 +18,10 @@
         <dependency><groupId>io.quarkus.platform</groupId><artifactId>quarkus-bom</artifactId><version>${quarkus.platform.version}</version><type>pom</type><scope>import</scope></dependency>
         <!-- CVE-2026-106451: remover override quando o BOM incluir versão corrigida. -->
         <dependency><groupId>at.yawk.lz4</groupId><artifactId>lz4-java</artifactId><version>${lz4.version}</version></dependency>
+        <!-- CVE-2026-108106 e CVE-2026-93451: remover override quando o BOM incluir snappy-java corrigido. -->
+        <dependency><groupId>org.xerial.snappy</groupId><artifactId>snappy-java</artifactId><version>${snappy.version}</version></dependency>
+        <!-- CVE-2026-102554: remover override quando o BOM incluir guava corrigida. -->
+        <dependency><groupId>com.google.guava</groupId><artifactId>guava</artifactId><version>${guava.version}</version></dependency>
     </dependencies></dependencyManagement>
     <dependencies>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-smallrye-jwt</artifactId></dependency>
