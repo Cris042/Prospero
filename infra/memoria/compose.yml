@@ -1,4 +1,5 @@
-name: prospero-memoria
+# Mesmo projeto Compose do servidor compartilhado da configuração global de IA.
+name: ia-memoria
 services:
   ai-memory:
     image: akitaonrails/ai-memory:3.1.0@sha256:01af788550335e41f23818fed38e101cffff2166aef7021b719e6e165708307f

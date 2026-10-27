@@ -179,6 +179,12 @@ rodar_workbook validacao ordens
 python3 scripts/mercado.py verificar-ordens --origem "$fo_origem"
 python3 scripts/mercado.py preparar-demo --origem "$fo_origem"
 bo_origem="http://$("${compose[@]}" port back-office 8080)"
+# Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
+# Instalado antes de recriar o BO: o apt do --with-deps disputava CPU com a projeção recém-iniciada
+# e deixava a prontidão vencer (emDia expira após 10 s sem reconferência), gerando 503/lentidão no 1º E2E.
+playwright_deps=()
+[ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
+(cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium)
 # RF09b: relay ativo durante os E2E confirma contabilização; restaura false antes da prova RF08e.
 PROSPERO_CI_WORKER_LIQUIDACAO=true "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 back-office
 bo_origem="http://$("${compose[@]}" port back-office 8080)"
@@ -191,10 +197,27 @@ export PROSPERO_POSICOES_E2E_CONFIG="$runner_cfg/posicoes-e2e.json"
 python3 scripts/verificar-observabilidade.py --projeto "$project" --config-e2e "$runner_cfg/grafana.json"
 export PROSPERO_GRAFANA_E2E_CONFIG="$runner_cfg/grafana.json"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
-# Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
-playwright_deps=()
-[ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && playwright_deps=(--with-deps)
-(cd frontend && npm exec playwright install "${playwright_deps[@]}" chromium && npm run test:e2e)
+# Os E2E só começam com a projeção do BO em dia, comprovada por 3 respostas 200 seguidas pelo proxy real.
+aguardar_posicoes() {
+  local seguidas=0
+  for _ in $(seq 1 60); do
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$BASE_URL/servicos/back-office/api/v1/posicoes")" = 200 ]; then
+      seguidas=$((seguidas + 1)); [ "$seguidas" -ge 3 ] && return 0
+    else
+      seguidas=0
+    fi
+    sleep 1
+  done
+  echo 'Projeção de posições do BO não ficou em dia antes dos E2E.' >&2
+  return 1
+}
+diagnosticar_e2e() {
+  echo '== Diagnóstico pós-falha E2E (BO, MO, FO; últimos 4 min)'
+  "${compose[@]}" logs --no-color --since 4m back-office middle-office front-office 2>&1 | tail -n 300 || true
+  docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}' 2>&1 | grep -F "$project" || true
+}
+aguardar_posicoes
+(cd frontend && npm run test:e2e) || { diagnosticar_e2e; exit 1; }
 PROSPERO_CI_WORKER_LIQUIDACAO=false "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 back-office
 bo_origem="http://$("${compose[@]}" port back-office 8080)"
 # RF05d.2: robô em DELTA3, que nenhuma prova seguinte usa; para ao fim, com as ofertas DIA vivas (o encerramento é só GAMA3).

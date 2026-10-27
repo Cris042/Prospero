@@ -1,6 +1,6 @@
 ---
 name: refinar-task
-description: Refinar obrigatoriamente cada nova tarefa do roadmap do Próspero com memória, ADRs e pareceres de agentes separados antes da implementação.
+description: Refinar obrigatoriamente cada nova tarefa do roadmap do Próspero — classifica via rápida ou fluxo completo, consulta memória e ADRs e colhe pareceres de Yoda, Patrick Jane e Neo (Jarvis com gatilho operacional) antes da implementação.
 ---
 
 # Refinar tarefa do Próspero
@@ -14,17 +14,25 @@ Esta adaptação substitui os gatilhos por épico e as dispensas do [upstream](U
 3. Consultar ai-memory no escopo Prospero e recuperar decisões, handoff e tentativas relevantes. Confrontar o resultado com arquivos atuais. A memória não altera requisitos nem prevalece sobre ADRs e regras.
 4. Registrar indisponibilidade real da memória e tentar recuperar a conexão; usar fontes documentais para trabalho independente. Não criar `continuidade.md`, não inventar consulta e não declarar a tarefa refinada com memória sem tê-la consultado.
 
-## Brief comum e pontos de vista
+## Classificação
 
-Preparar um mesmo brief com objetivo, requisito/RNF, limites, estado atual, decisões já aceitas, dependências, riscos e perguntas. Despachar pareceres em agentes separados, todos com esforço **medium**, sem revelar o primeiro parecer de outro agente antes da análise inicial:
+Antes dos pareceres, classificar a mudança:
 
-- Arquitetura/domínio: fronteiras, invariantes, compatibilidade e ADRs.
-- Testes/QA: critérios observáveis, casos negativos, planilha e caminho de evidências.
-- Segurança: entradas, dados, permissões, dependências e superfícies de ataque.
-- Operação: recursos locais, containers, telemetria, persistência e recuperação.
-- Viabilidade: sequência de implementação, dependências e tamanho da tarefa.
+- **Via rápida:** documentação, governança, adaptador de ferramenta, automação mecânica ou manutenção **sem** comportamento de produto, endpoint, contrato público, persistência, integração, dependência ou decisão estrutural. Tarefa curta com objetivo, arquivos permitidos, validação determinística (sintaxe, links, estrutura, diff) e um revisor independente do tema dominante; Neo também quando tocar hook, permissão, segredo, dependência ou CI.
+- **Fluxo completo:** qualquer outro caso, incluindo toda tarefa RF/P/V com efeito financeiro ou contrato. Na dúvida, fluxo completo; se a via rápida encontrar comportamento de produto, volta ao fluxo completo.
 
-São cinco perspectivas independentes; não exigir execução simultânea. Respeitar slots disponíveis e executar em lotes, preservando o brief. O implementador não substitui os pareceristas. Agentes de revisão, testes e segurança permanecem separados entre si e do implementador durante a validação da entrega.
+## Brief comum e pareceres
+
+Preparar um mesmo brief com objetivo, requisito/RNF, limites, estado atual, decisões já aceitas, dependências, riscos e perguntas. Despachar pareceres em agentes separados, com esforço **medium**, sem revelar o parecer de outro agente antes da análise inicial. Os papéis seguem as definições globais em `~/.agents/agentes/`:
+
+| Agente | Perspectiva | Quando |
+| --- | --- | --- |
+| Yoda | Arquitetura/domínio: fronteiras, invariantes, compatibilidade, ADRs, tamanho e sequência da tarefa | Sempre no fluxo completo |
+| Patrick Jane | Testes/QA: critérios observáveis, casos negativos, planilha (ADR-004) e caminho de evidências | Sempre no fluxo completo |
+| Neo | Segurança: entradas, dados, permissões, dependências e superfícies de ataque | Sempre no fluxo completo |
+| Jarvis | Operação: recursos locais, containers, telemetria, persistência e recuperação | Quando houver Compose, ambiente, observabilidade, carga ou recuperação |
+
+Ausência de gatilho para Jarvis é registrada no refinamento. O implementador (Severino ou a sessão principal) não substitui os pareceristas. Na validação da entrega, revisão = Yoda, testes = Patrick Jane e segurança = Neo, separados entre si e do implementador.
 
 ## Consolidação e início
 
