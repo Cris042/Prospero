@@ -1,5 +1,13 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
+function caminhoSemConsulta(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return '(sem URL)';
+  }
+}
+
 function registroDaBoleta(page: Page) {
   return page
     .locator('app-boleta')
@@ -52,9 +60,22 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   page,
 }, testInfo) => {
   const erros: string[] = [];
+  const respostasComErro: { metodo: string; caminho: string; status: number }[] = [];
+  page.on('response', (resposta) => {
+    if (resposta.status() >= 400 && respostasComErro.length < 20) {
+      // Somente metadados: nunca incluir headers, query strings ou corpos com credenciais.
+      respostasComErro.push({
+        metodo: resposta.request().method(),
+        caminho: caminhoSemConsulta(resposta.url()),
+        status: resposta.status(),
+      });
+    }
+  });
   page.on('pageerror', (erro) => erros.push(erro.message));
   page.on('console', (mensagem) => {
-    if (mensagem.type() === 'error') erros.push(mensagem.text());
+    if (mensagem.type() === 'error') {
+      erros.push(`${caminhoSemConsulta(mensagem.location().url)}: ${mensagem.text()}`);
+    }
   });
   const posts: { autorizacao?: string; chave?: string }[] = [];
   page.on('request', (pedido) => {
@@ -122,7 +143,7 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   expect(posts[0].autorizacao).toBeUndefined();
   expect(posts[0].chave).toMatch(/^[0-9a-f-]{36}$/);
   await expect(status).not.toContainText('Executada');
-  expect(erros).toEqual([]);
+  expect(erros, JSON.stringify(respostasComErro)).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
