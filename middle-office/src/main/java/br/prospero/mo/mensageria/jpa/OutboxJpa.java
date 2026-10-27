@@ -26,6 +26,7 @@ public class OutboxJpa implements Outbox {
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public void gravar(MensagemSaida m) {
+        new PublicacoesAdmissaoJpa(em).registrar(m);
         em.createNativeQuery("""
                         INSERT INTO outbox (id, topico, chave, tipo, payload, traceparent, criado_em)
                         VALUES (:id, :topico, :chave, :tipo, :payload, :trace, :criado)""")

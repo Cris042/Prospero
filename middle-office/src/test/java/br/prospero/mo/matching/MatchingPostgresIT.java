@@ -84,6 +84,8 @@ class MatchingPostgresIT {
             }
             em.createNativeQuery("DELETE FROM matching_evento").executeUpdate();
             em.createNativeQuery("DELETE FROM matching_negocio").executeUpdate();
+            // RF10c1: recibo referencia a reserva; limpeza restrita ao schema descartável do teste.
+            em.createNativeQuery("DELETE FROM admissao_publicacao").executeUpdate();
             em.createNativeQuery("DELETE FROM reserva").executeUpdate();
             em.createNativeQuery("DELETE FROM decisao_risco").executeUpdate();
             em.createNativeQuery("UPDATE conta_risco SET total=1000,disponivel=1000,reservado=0").executeUpdate();
