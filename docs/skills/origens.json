@@ -3,119 +3,6 @@
   "data": "2026-10-16",
   "skills": [
     {
-      "nome": "worktrees",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "worktrees/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/worktrees/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/worktrees/SKILL.md": "c77d5efaa04fdc3d9e7d88e058b13825c1d2000ac05bebc967d4f3bc57d2f692",
-        ".agents/skills/worktrees/UPSTREAM.md": "09c9b694ff3450e96d078ff687f25dae6238202972fdc62a6769605531bc22f6"
-      }
-    },
-    {
-      "nome": "humanizer",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "humanizer/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/humanizer/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/humanizer/.claude-plugin/marketplace.json": "24261fcfead5f536e0a6f0c3fd27fa809c69393217d67d617adb6c83a2715eb7",
-        ".agents/skills/humanizer/.claude-plugin/plugin.json": "ce4f3dd0397c9ca71fe9a089dd00cd132436cfeba4513c53cc6c486f537de43c",
-        ".agents/skills/humanizer/.github/workflows/validate.yml": "f2d6a8780fb0b3cf6fa7d2ffccd72d0fc8bee29b4e63ea0fd65924712c9055fd",
-        ".agents/skills/humanizer/AGENTS.md": "8f5069d68622bc956e2d492f26879d2a06508e2ef16d2e573ab13f7a92a0607a",
-        ".agents/skills/humanizer/LICENSE": "4ac4810254ab36d45419141aeb8e69bf50652cfafe5b2dab947d06d44e5cbf96",
-        ".agents/skills/humanizer/README.md": "d546538831ce8423587208d4a86dbe2be1f1f63445505d284dc558e6de86dac0",
-        ".agents/skills/humanizer/SKILL.md": "a050f653d3451e65470a66aeef55fc8b806c9741805bd6cf1aafc1b1e3641de4",
-        ".agents/skills/humanizer/UPSTREAM.md": "e8269e236bed06ed0fe4824c274112e54950b0cb46b0bafe5e1576ef7c9f93d5",
-        ".agents/skills/humanizer/agents/openai.yaml": "9d87ff83149a04f86a372948b8ee35fa249de20923867bbc2a49304290aad736",
-        ".agents/skills/humanizer/scripts/validate-package.py": "750e5f50561b8a5285bd1a20ed8b127af65b1b25d50e88c2ce5fe8522943c8fd"
-      }
-    },
-    {
-      "nome": "release",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "release/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/release/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/release/SKILL.md": "11ffdd2e1bfb9144ba351f115d4b99ff9076bd0d6b7dc98250453e424cd73ee0",
-        ".agents/skills/release/UPSTREAM.md": "5908c9e2d59281c31394766341eee6fe78eee703197e9452f77e1577ddc473da"
-      }
-    },
-    {
-      "nome": "iss-audit",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "iss-audit/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/iss-audit/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/iss-audit/SKILL.md": "7307f8b17a0cecf86c2a3ee810eb1fbd28f5b0a2dea62cb745244b5843f3ca35",
-        ".agents/skills/iss-audit/UPSTREAM.md": "30efdda7639ebd2179ae287af0e5bf4093c019f427eb8c69715685f26bfb38d8",
-        ".agents/skills/iss-audit/agents/openai.yaml": "ef52894f5c88b9c43ab9da2488e2c5887aba4401daa0df6a2e2678fc1308bb67"
-      }
-    },
-    {
-      "nome": "loop-engineering",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "loop-engineering/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/loop-engineering/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/loop-engineering/SKILL.md": "1c27db4b8ef66107ca8e4253c845cb447d2072b0b18894868aed6c2f1ed991c8",
-        ".agents/skills/loop-engineering/UPSTREAM.md": "551b298be29aa9603d0572ebb0b4ffcf6c873c692a49ba1106b373ab806192b6"
-      }
-    },
-    {
-      "nome": "pr-audit",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "pr-audit/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/pr-audit/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/pr-audit/SKILL.md": "e77d9c65f24b79f6b23355328e58c907067fc04b0cddfd0a39aa22df6a6a5d63",
-        ".agents/skills/pr-audit/UPSTREAM.md": "2ff89e944a76aef8e122a464b31d8e2f20b06675f5d813e703c9c38742726753",
-        ".agents/skills/pr-audit/agents/openai.yaml": "3791af41628e1b76e2ce0d1404853a2e1f2b58ed8539b9632041ca268b857853"
-      }
-    },
-    {
-      "nome": "security-audit",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "security-audit/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/security-audit/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/security-audit/SKILL.md": "9fe760aacfb2d518d73daa22d286cfcec96fa536ada126da878b0f09e257011b",
-        ".agents/skills/security-audit/UPSTREAM.md": "a05950e220e3071e47b8e5b57a21e62c1281f37e602c7e4a536e88e9ddfa6645",
-        ".agents/skills/security-audit/agents/openai.yaml": "07f05a5dfd1157adf61fb34eba76ed19a48d6883907842178970b638511b684d",
-        ".agents/skills/security-audit/references/ecosystem-checks.md": "6a65520c4822c3c6788996397a63d3a229734e73607d04080d76d4fbdb1c61e9",
-        ".agents/skills/security-audit/references/security-checklist.md": "3af74a39a5f3230ff555f44a65b413a8ecdd55b47b7ba97e28f44d3a1c839f03",
-        ".agents/skills/security-audit/scripts/security-surface.sh": "c13bb60831688805dcdcd00f18a415df40d321effd0019a61c006a4773819124"
-      }
-    },
-    {
-      "nome": "verification-planning",
-      "repositorio": "akitaonrails/my-skills",
-      "commit": "7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a",
-      "caminho_origem": "verification-planning/SKILL.md",
-      "url": "https://github.com/akitaonrails/my-skills/blob/7b8a5e5e0259da8cabcdaf806cca9d1d55abf20a/verification-planning/SKILL.md",
-      "arquivos_sha256": {
-        ".agents/skills/verification-planning/SKILL.md": "b4979a3f6e4f4f1d964bf7e9463b084c482ae1a7fd47b875b10d0ef4969efffd",
-        ".agents/skills/verification-planning/UPSTREAM.md": "7d2f4db38901c82a2884284805ebe4105b813933ba5cdca572acfed5b92e83c5"
-      }
-    },
-    {
-      "nome": "deep-research",
-      "repositorio": "Cris042/Minerva",
-      "commit": "76a991d7296cddba5e595a07e9b3b6f8da581b78",
-      "caminho_origem": "docs/skills/deep-research.md",
-      "url": "https://github.com/Cris042/Minerva/blob/76a991d7296cddba5e595a07e9b3b6f8da581b78/docs/skills/deep-research.md",
-      "arquivos_sha256": {
-        ".agents/skills/deep-research/SKILL.md": "ebfd2aeab58d051e73eb575c2c09b79feb1d3f47617575379b2ff459c492b984",
-        ".agents/skills/deep-research/UPSTREAM.md": "5e1269278620441ba6a09ff11bf6543ded6b50f41004cd1852eb5a0187a42cd0"
-      }
-    },
-    {
       "nome": "tdd-workflow",
       "repositorio": "Cris042/Minerva",
       "commit": "76a991d7296cddba5e595a07e9b3b6f8da581b78",
@@ -138,24 +25,13 @@
       }
     },
     {
-      "nome": "gerar-adr",
-      "repositorio": "Cris042/Minerva",
-      "commit": "76a991d7296cddba5e595a07e9b3b6f8da581b78",
-      "caminho_origem": "docs/skills/gerar-adr.md",
-      "url": "https://github.com/Cris042/Minerva/blob/76a991d7296cddba5e595a07e9b3b6f8da581b78/docs/skills/gerar-adr.md",
-      "arquivos_sha256": {
-        ".agents/skills/gerar-adr/SKILL.md": "53e8a855b09392700a063266aa1f1750db4af4a7ce1e601319c4d328d61ee530",
-        ".agents/skills/gerar-adr/UPSTREAM.md": "dd628509d60bab07f0d7f03bbf6e00b9b85f3c3f47a56311e63f582c12f18165"
-      }
-    },
-    {
       "nome": "refinar-task",
       "repositorio": "Cris042/Minerva",
       "commit": "76a991d7296cddba5e595a07e9b3b6f8da581b78",
       "caminho_origem": "docs/skills/refinar-task.md",
       "url": "https://github.com/Cris042/Minerva/blob/76a991d7296cddba5e595a07e9b3b6f8da581b78/docs/skills/refinar-task.md",
       "arquivos_sha256": {
-        ".agents/skills/refinar-task/SKILL.md": "98a452808ac6216d1ff6efecb125f3fe4f54ec67b6aec5a30b32ce133cf32384",
+        ".agents/skills/refinar-task/SKILL.md": "f615ac48b2f4ef55a5d9205632315a135d7ea10f1e5ae8d55889d44ceb8669fd",
         ".agents/skills/refinar-task/UPSTREAM.md": "bd8afefdeff2633a7cd4923a4b4432b1eb7fff2db48ccd274e2b0ef7410e45a4"
       }
     },
@@ -164,7 +40,7 @@
       "tipo": "local",
       "origem": "Instrução explícita do usuário, 2026-10-16",
       "arquivos_sha256": {
-        ".agents/skills/subir-sistema/SKILL.md": "7b5ce2ffb535dffe30fe84ac68f520c4aa93c0756f844d1d2757766ea1c9dd04"
+        ".agents/skills/subir-sistema/SKILL.md": "429c0eaabda7db9c4d01bb8ea47bc1dc10467118b039fad45192556f6fe896e4"
       }
     },
     {
@@ -187,6 +63,15 @@
       "arquivos_sha256": {
         ".agents/skills/gerar-hld/SKILL.md": "e395fddbfa945246b1f86cb9ec79a68a50ea2e3bb0a5a4f9c786292d431d0f95",
         ".agents/skills/gerar-hld/UPSTREAM.md": "bccaeb89cb7998b42bcd6fb892b36927c504f8d6c43ae0129b39ac88423181ed"
+      }
+    },
+    {
+      "nome": "estado-roadmap",
+      "tipo": "local",
+      "autor": "Próspero",
+      "arquivos_sha256": {
+        ".agents/skills/estado-roadmap/SKILL.md": "875251adf14d63271dbbb5d99d6a599916b87a6c5d742423c7faad5784bda578",
+        ".agents/skills/estado-roadmap/estado_roadmap.py": "756d9be11aaed193caf73e960dcc1b5a2d8e260587342142ff6f2df2a43db086"
       }
     }
   ]

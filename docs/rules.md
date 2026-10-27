@@ -66,7 +66,7 @@ Confirmar runner online com labels `self-hosted`, `linux`, `x64`, `prospero`; di
 
 ## Memória e retomada
 
-ai-memory 3.1.0 local, sem LLM/API paga obrigatória, Compose independente `prospero-memoria`, loopback `127.0.0.1:49374`, dados privados em `~/.local/share/prospero-ai-memory` fora do Git e da CI. `.ai-memory.toml` fixa `prospero/Prospero` e raiz do repositório; captura allowlist apenas em projetos marcados. Memória não é dependência dos quatro serviços e não deve ser reiniciada para corrigir negociação.
+ai-memory 3.1.0 local, sem LLM/API paga obrigatória, Compose independente `ia-memoria` (servidor compartilhado com os demais projetos do usuário e também gerenciado pela configuração global de IA em `config-ia/infra/memoria/compose.yml`; os dois arquivos têm a mesma imagem, o mesmo `command`, a mesma porta e a mesma pasta de dados padrão; usar um só deles), loopback `127.0.0.1:49374`, dados privados em `~/.local/share/prospero-ai-memory` fora do Git e da CI. `.ai-memory.toml` fixa `prospero/Prospero` e raiz do repositório; captura allowlist apenas em projetos marcados. Memória não é dependência dos quatro serviços e não deve ser reiniciada para corrigir negociação.
 
 ```bash
 docker compose -f infra/memoria/compose.yml up -d
