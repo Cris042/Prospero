@@ -9,53 +9,54 @@ function caminhoSemConsulta(url: string): string {
 }
 
 const POSICOES = '/servicos/back-office/api/v1/posicoes';
+const LEITURAS_BO: Record<string, string> = {
+  [POSICOES]: 'POSICOES_INDISPONIVEIS',
+  '/servicos/back-office/api/v1/negocios': 'RAZAO_INDISPONIVEL',
+  '/servicos/back-office/api/v1/razao': 'RAZAO_INDISPONIVEL',
+};
 const ERRO_RECURSO_503 =
   'Failed to load resource: the server responded with a status of 503 (Service Unavailable)';
 
-function posicoesDaPagina(url: string, page: Page): boolean {
+function leituraDaPagina(url: string, page: Page): string | null {
   try {
     const destino = new URL(url);
-    return (
-      destino.origin === new URL(page.url()).origin &&
-      destino.pathname === POSICOES &&
-      destino.search === ''
-    );
+    const query = destino.pathname === POSICOES ? '' : '?limite=20';
+    return destino.origin === new URL(page.url()).origin &&
+      Object.hasOwn(LEITURAS_BO, destino.pathname) &&
+      destino.search === query
+      ? destino.pathname
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** Aceita somente indisponibilidade contratada de posições, seguida de recuperação observável. */
+/** Só aceita 503 contratado de leitura BO quando o navegador e a UI comprovam recuperação. */
 function observarRecuperacao(page: Page) {
   const erros: string[] = [];
   const respostasComErro: { metodo: string; caminho: string; status: number }[] = [];
   const pendentes = new Set<Promise<void>>();
+  const ultimaFalha = new Map<string, number>();
+  const ultimoSucesso = new Map<string, number>();
+  const indisponibilidades = new Map<string, number>();
+  const mensagens503 = new Map<string, number>();
   let sequencia = 0;
-  let ultimaFalha = 0;
-  let ultimoSucesso = 0;
-  let indisponibilidades = 0;
-  let mensagens503 = 0;
   page.on('pageerror', (erro) => erros.push(erro.message));
   page.on('console', (mensagem) => {
     if (mensagem.type() !== 'error') return;
-    const caminho = caminhoSemConsulta(mensagem.location().url);
-    if (posicoesDaPagina(mensagem.location().url, page) && mensagem.text() === ERRO_RECURSO_503)
-      mensagens503++;
-    else erros.push(`${caminho}: ${mensagem.text()}`);
+    const leitura = leituraDaPagina(mensagem.location().url, page);
+    if (leitura && mensagem.text() === ERRO_RECURSO_503)
+      mensagens503.set(leitura, (mensagens503.get(leitura) ?? 0) + 1);
+    else erros.push(`${caminhoSemConsulta(mensagem.location().url)}: ${mensagem.text()}`);
   });
   page.on('response', (resposta) => {
     const ordem = ++sequencia;
     const caminho = caminhoSemConsulta(resposta.url());
     const metodo = resposta.request().method();
-    const posicoes = metodo === 'GET' && posicoesDaPagina(resposta.url(), page);
-    if (posicoes && resposta.status() === 200) {
-      const conclusao = resposta.finished().then((falha) => {
-        if (falha) erros.push('Resposta 200 de posições não foi concluída');
-        else ultimoSucesso = Math.max(ultimoSucesso, ordem);
-      });
-      pendentes.add(conclusao);
-      void conclusao.finally(() => pendentes.delete(conclusao));
-    }
+    const leitura = metodo === 'GET' ? leituraDaPagina(resposta.url(), page) : null;
+    // Não aguardar Response.finished: respostas roteadas podem ficar pendentes no Playwright
+    // mesmo após Angular consumir o corpo. O 200 posterior E a UI recuperada são obrigatórios.
+    if (leitura && resposta.status() === 200) ultimoSucesso.set(leitura, ordem);
     if (resposta.status() < 400) return;
     if (respostasComErro.length >= 20) {
       if (!erros.includes('Mais de 20 respostas HTTP com erro'))
@@ -64,11 +65,11 @@ function observarRecuperacao(page: Page) {
     }
     // Somente metadados: nunca registrar headers, query strings ou corpos com credenciais.
     respostasComErro.push({ metodo, caminho, status: resposta.status() });
-    if (!posicoes || resposta.status() !== 503) {
+    if (!leitura || resposta.status() !== 503) {
       erros.push(`HTTP ${resposta.status()} ${metodo} ${caminho}`);
       return;
     }
-    ultimaFalha = ordem;
+    ultimaFalha.set(leitura, ordem);
     const verificacao = (async () => {
       try {
         const problema: unknown = await resposta.json();
@@ -79,32 +80,66 @@ function observarRecuperacao(page: Page) {
           'status' in problema &&
           problema.status === 503 &&
           'codigo' in problema &&
-          problema.codigo === 'POSICOES_INDISPONIVEIS'
+          problema.codigo === LEITURAS_BO[leitura]
         ) {
-          indisponibilidades++;
+          indisponibilidades.set(leitura, (indisponibilidades.get(leitura) ?? 0) + 1);
           return;
         }
       } catch {
         // Corpo inválido também reprova, sem expor seu conteúdo no diagnóstico.
       }
-      erros.push('503 de posições fora do contrato POSICOES_INDISPONIVEIS');
+      erros.push(`503 fora do contrato ${metodo} ${caminho}`);
     })();
     pendentes.add(verificacao);
     void verificacao.finally(() => pendentes.delete(verificacao));
   });
   return async (timeout = 15000) => {
+    const historico = page.locator('app-historico');
+    let reconsultouHistorico = false;
     await expect
       .poll(
         async () => {
+          const falhouHistorico = [...indisponibilidades.keys()].some(
+            (rota) =>
+              rota !== POSICOES && (ultimoSucesso.get(rota) ?? 0) <= (ultimaFalha.get(rota) ?? 0),
+          );
+          const atualizar = historico.getByRole('button', {
+            name: 'Atualizar histórico',
+            exact: true,
+          });
+          // O produto oferece recuperação manual para histórico. Uma tentativa limitada pela UI;
+          // outra recusa continua falhando, sem fabricar sucesso ou gerar polling ilimitado.
+          if (
+            !reconsultouHistorico &&
+            falhouHistorico &&
+            (await historico.getByRole('alert').count()) > 0 &&
+            (await atualizar.isEnabled())
+          ) {
+            reconsultouHistorico = true;
+            await atualizar.click({ timeout });
+          }
           return {
             erros,
             respostasPendentes: pendentes.size,
-            console503Correlacionado: mensagens503 <= indisponibilidades,
-            recuperou: ultimoSucesso > ultimaFalha,
+            console503Correlacionado: [...mensagens503].every(
+              ([rota, total]) => total <= (indisponibilidades.get(rota) ?? 0),
+            ),
+            recuperou: Object.keys(LEITURAS_BO).every(
+              (rota) => (ultimoSucesso.get(rota) ?? 0) > (ultimaFalha.get(rota) ?? 0),
+            ),
             tabelaVisivel: await page
               .getByRole('region', { name: 'Tabela de posições' })
               .isVisible(),
-            alertas: await page.locator('app-posicoes').getByRole('alert').count(),
+            historicoVisivel:
+              ((await historico.getByRole('region', { name: 'Tabela de negócios' }).isVisible()) ||
+                (await historico
+                  .getByText('Nenhum negócio registrado para esta conta.', { exact: true })
+                  .isVisible())) &&
+              ((await historico.getByRole('region', { name: 'Tabela da razão' }).isVisible()) ||
+                (await historico
+                  .getByText('Nenhum lançamento registrado para esta conta.', { exact: true })
+                  .isVisible())),
+            alertas: await page.locator('app-posicoes, app-historico').getByRole('alert').count(),
           };
         },
         { timeout, message: JSON.stringify(respostasComErro) },
@@ -115,6 +150,7 @@ function observarRecuperacao(page: Page) {
         console503Correlacionado: true,
         recuperou: true,
         tabelaVisivel: true,
+        historicoVisivel: true,
         alertas: 0,
       });
   };
@@ -275,6 +311,48 @@ test('recupera posições após um 503 contratado sem esconder erros da boleta',
   await verificarRecuperacao();
 });
 
+for (const recurso of [
+  { rota: '/servicos/back-office/api/v1/negocios', nome: 'negócios' },
+  { rota: '/servicos/back-office/api/v1/razao', nome: 'razão' },
+]) {
+  test(`recupera histórico após um 503 contratado em ${recurso.nome} pela UI`, async ({ page }) => {
+    const verificarRecuperacao = observarRecuperacao(page);
+    let consultas = 0;
+    await page.route(`**${recurso.rota}?limite=20`, async (rota) => {
+      if (++consultas === 1) {
+        await rota.fulfill({
+          status: 503,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({ status: 503, codigo: 'RAZAO_INDISPONIVEL' }),
+        });
+      } else await rota.fallback();
+    });
+    await page.goto('/');
+    await expect(page.locator('app-historico').getByRole('alert')).toContainText(recurso.nome);
+    await verificarRecuperacao();
+    expect(consultas).toBe(2);
+  });
+}
+
+test('reprova histórico com 503 contratado persistente após uma atualização manual', async ({
+  page,
+}) => {
+  const verificarRecuperacao = observarRecuperacao(page);
+  let consultas = 0;
+  await page.route('**/servicos/back-office/api/v1/negocios?limite=20', (rota) => {
+    consultas++;
+    return rota.fulfill({
+      status: 503,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ status: 503, codigo: 'RAZAO_INDISPONIVEL' }),
+    });
+  });
+  await page.goto('/');
+  await expect(page.locator('app-historico').getByRole('alert')).toBeVisible();
+  await expect(verificarRecuperacao(250)).rejects.toThrow();
+  expect(consultas).toBe(2);
+});
+
 for (const falha of [
   {
     nome: '503 contratado persistente',
@@ -327,9 +405,9 @@ test('reprova verificação da boleta com erro JavaScript mesmo após posições
   await verificarRecuperacao();
   const erro = page.waitForEvent('pageerror');
   await page.evaluate(() => {
-    setTimeout(() => {
-      throw new Error('Falha JavaScript de controle QA');
-    }, 0);
+    const frame = document.createElement('iframe');
+    frame.srcdoc = '<script>throw new Error("Falha JavaScript de controle QA")</script>';
+    document.body.appendChild(frame);
   });
   await erro;
   await expect(verificarRecuperacao(250)).rejects.toThrow();
