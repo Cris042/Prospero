@@ -10,15 +10,15 @@ Estados: **planejada**, **em andamento**, **aguardando revisão/merge**, **concl
 
 ### Retomada de 2026-10-27
 
-Memória `prospero/Prospero`, seis PRs abertos, heads e checks remotos conferidos; nenhum handoff aberto. O checkout principal está em `feat/rf09b-atualizacoes`, sem alterações locais; os complementos de carga permanecem na worktree própria. Os estados abaixo distinguem entrega validada de integração em `main`.
+Memória `prospero/Prospero`, Git e PRs remotos confrontados nesta retomada. O checkout principal acompanha `main` em `3cce026`; a RF10b1 já foi integrada pelo PR #55 e as skills do Claude Code pelo PR #57. As entregas abaixo ainda não concluem P06/V01/RF10 integrais.
 
 | Pendência | Situação conferida | Próximo passo |
 | --- | --- | --- |
-| RF09 | PRs [#49](https://github.com/mclovin137/Prospero/pull/49) e [#50](https://github.com/mclovin137/Prospero/pull/50) integrados em 2026-10-27, merges `9a3f31d`/`bb2ad5b`, após autorização do usuário e três gates aprovados em ambos | Concluída |
-| P06 etapa B | Leituras B1 no [PR #51](https://github.com/mclovin137/Prospero/pull/51), head `0746fa7`, três gates aprovados; smoke real do catálogo iniciado e ainda sem commit na worktree de carga | Concluir smoke e seus checks; depois escrita/reconciliação/falhas, preservando dependências financeiras |
-| V01a | [PR #52](https://github.com/mclovin137/Prospero/pull/52), head `564e220`, três gates aprovados | Revisão/merge; quatro dashboards não concluem a V01 integral |
-| V01b | [PR #53](https://github.com/mclovin137/Prospero/pull/53), head `9deb31b`, revisão/segurança aprovadas e testes reprovados | Identificar HTTP 503 do E2E sem URL no log; não atribuir causa nem dispensar o erro |
-| RF10 | Preparação interna no [PR #54](https://github.com/mclovin137/Prospero/pull/54), head `a79753f`, três gates aprovados | Definir cancelamento do saldo Stop Limit acionado e efeito manual sobre OCO antes da implementação dependente |
+| RF01–RF09 | Integradas em `main`; RF09 pelos PRs #49/#50 | Preservar regressões financeiras |
+| P06 etapa B | B1 integrada pelo [PR #51](https://github.com/mclovin137/Prospero/pull/51), incluindo smoke dos doze GETs | Escrita controlada, reconciliação, falhas e evidência integrada |
+| V01a | Integrada pelo [PR #52](https://github.com/mclovin137/Prospero/pull/52) | Preservar painéis/alertas; não equivale à V01 integral |
+| V01b | [PR #53](https://github.com/mclovin137/Prospero/pull/53), head `43aa384`: revisão/segurança aprovadas; testes falharam na verificação do contrato de GET posições com 503, apesar da recuperação da UI; o corpo da resposta CDP ficou indisponível ao harness (`CORPO_INDISPONIVEL` reproduzido por mutação) | Validar captura antecipada da resposta, controles negativos e repetir os gates no novo head |
+| RF10 | Proveniência e retirada internas integradas pelos PRs #54/#55; recibo de ACK da admissão no [PR #56](https://github.com/mclovin137/Prospero/pull/56), head `bce0195`, revisão/segurança aprovadas; testes falharam no mesmo E2E da V01b herdado pela composição | Coordenação durável, contratos/leitores, emissão/API, tela, planilha e recuperação; OCO manual proibida e Stop Limit acionado elegível |
 | V01 integral | Pendente; comparação V01b anterior melhorou latência, mas não comprovou p99 boleta < 50 ms | Carga e recuperação completas, RNFs, demonstração e validação final após dependências |
 
 Atualização de 2026-10-27: usuário autorizou e foram realizados somente os merges #49/#50. Também definiu Stop Limit acionado elegível para cancelar saldo e proibiu cancelamento manual de OCO; registro completo na próxima fatia RF10. Nenhum outro merge/release presumido. A tabela preserva as observações anteriores dos demais heads; avanços posteriores ficam nas respectivas seções/PRs. PRD/HLD/ADRs preservam os contratos atuais. `[DOC-MISMATCH]` resolvido neste resumo: a seção RF09 ainda abria como em andamento apesar da validação final já registrada; agora indica aguardando integração.
