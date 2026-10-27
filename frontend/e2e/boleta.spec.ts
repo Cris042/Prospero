@@ -56,6 +56,16 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   page.on('console', (mensagem) => {
     if (mensagem.type() === 'error') erros.push(mensagem.text());
   });
+  // ADR-015: leituras do BO respondem 503 problem+json enquanto a projeção processa os eventos
+  // da própria ordem; o console registra esse 503 contratado e as telas se recuperam sozinhas.
+  const indisponibilidadesBo: string[] = [];
+  page.on('response', (r) => {
+    if (r.status() !== 503) return;
+    const caminho = new URL(r.url()).pathname;
+    const leituraBo = /^\/servicos\/back-office\/api\/v1\/(posicoes|negocios|razao)$/.test(caminho);
+    const problema = (r.headers()['content-type'] ?? '').startsWith('application/problem+json');
+    indisponibilidadesBo.push(leituraBo && problema ? 'contratado' : `inesperado ${caminho}`);
+  });
   const posts: { autorizacao?: string; chave?: string }[] = [];
   page.on('request', (pedido) => {
     if (pedido.method() === 'POST' && pedido.url().endsWith('/api/v1/ordens')) {
@@ -122,7 +132,14 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   expect(posts[0].autorizacao).toBeUndefined();
   expect(posts[0].chave).toMatch(/^[0-9a-f-]{36}$/);
   await expect(status).not.toContainText('Executada');
-  expect(erros).toEqual([]);
+  const console503 = 'Failed to load resource: the server responded with a status of 503';
+  expect(indisponibilidadesBo.filter((tipo) => tipo !== 'contratado')).toEqual([]);
+  expect(erros.filter((erro) => erro.startsWith(console503)).length).toBeLessThanOrEqual(
+    indisponibilidadesBo.length,
+  );
+  expect(erros.filter((erro) => !erro.startsWith(console503))).toEqual([]);
+  // Posições consulta a cada 2 s: depois de um 503 contratado, a tela volta sem alerta.
+  await expect(page.locator('app-posicoes').getByRole('alert')).toHaveCount(0, { timeout: 10000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
