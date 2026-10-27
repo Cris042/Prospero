@@ -178,3 +178,13 @@ Alternativas consideradas: tópicos próprios de cancelamento são coerentes, po
 Rodada complementar com cinco pareceres medium independentes reduziu a primeira entrega à conservação da proveniência viva. Stop Limit convertido conserva o tipo público original; dissolver o vínculo operacional OCO não transforma a origem da perna sobrevivente em simples. Um índice por identidade no estado do ativo guarda dados imutáveis e acompanha inclusão e baixa da contagem ativa, termina com a ordem e é reconstruído pelas admissões existentes no replay. Guarda tipo original, intenção, conta, ativo, sessão e identidades TP/SL; não guarda outro histórico de comandos nem muda IDs, prioridades ou bytes v1–v4. Consulta interna retorna somente dados imutáveis.
 
 Alternativa: propagar um novo parâmetro por admissão, conversão, fila e repouso dispersaria a mudança pelo algoritmo; o índice vivo concentra o ciclo de vida sem alterar o contrato de admissão. Asserções de identidade nos terminais verificam correspondência com a conta ativa. Fechamento limpa o índice junto às estruturas vivas. Limites existentes permanecem; não há registro de solicitações, política de cancelamento, emissão, parser novo ou efeito em reservas nesta fatia. As propostas de transporte acima e as duas decisões do usuário continuam pendentes.
+
+## Decisões parciais de cancelamento manual — RF10 (2026-10-27)
+
+O usuário autorizou integrar os PRs #49/#50 e respondeu às perguntas de produto: **sim** para cancelar saldo de Stop Limit já acionado; **não** para encerrar o grupo OCO inteiro quando se solicita cancelamento de uma perna. RF09 foi integrada, com gates aprovados, nos merges `9a3f31d` e `bb2ad5b`.
+
+A elegibilidade do Stop Limit considera somente saldo vivo; negócios anteriores ao corte não são desfeitos, e a liberação financeira continua dependendo dos fatos aplicados pelo MO. A origem Stop Limit é preservada após a conversão, conforme a preparação RF10a. Isso registra uma decisão de produto, sem afirmar implementação.
+
+A resposta sobre OCO rejeita a alternativa de cancelar o grupo inteiro; **ainda não escolhe** entre cancelar somente a perna solicitada e impedir cancelamento manual de OCO. Pergunta complementar apresentada ao usuário, sem resposta até este registro. Não transformar a irmã em ordem simples, dissolver proteção ou liberar reserva de grupo por inferência. As decisões automáticas OCO anteriores permanecem aplicáveis até existir contrato manual completo.
+
+Esta seção atualiza as duas lacunas registradas no refinamento histórico acima: Stop Limit resolvida, OCO parcialmente resolvida. Transporte continua proposta técnica; comportamento dependente da escolha OCO aguarda resposta, evolução coordenada dos consumidores e revisão complementar antes do código.
