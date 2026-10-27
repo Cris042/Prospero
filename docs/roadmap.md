@@ -359,6 +359,8 @@ A V01 também entregará alertas locais orientados às metas e sintomas de negó
 
 Os quatro dashboards cobrirão fluxo de ordens, risco/reservas, matching/mercado e back office/liquidação. Falha de uma meta deve gerar evidência e ajuste, não mudança silenciosa do requisito. Compensações, falhas de consumidor e reinícios serão exercitados por harness de infraestrutura; planilhas continuarão usando apenas APIs.
 
+Pendência registrada pelo PR #60 (2026-10-27): `CicloPosicoes.rodada` invalida a prontidão a cada lote recebido, então leituras de posições/negócios/razão, o avanço de liquidação e o `WorkerLiquidacao` respondem 503 ou pausam durante o processamento normal, embora o banco esteja consistente. O E2E da boleta tolera apenas esse 503 contratado (ADR-015). A V01 deve definir prontidão por lag real (checkpoint atrás do fim), com teste em `CicloPosicoes`, e alinhar ADR-015/HLD-005.
+
 ### V01a — painéis e alertas operacionais
 
 - Estado: em validação no [PR #52](https://github.com/mclovin137/Prospero/pull/52); refinamento anterior ao código em 2026-10-26; branch `feat/v01a-observabilidade`, worktree isolada sobre RF09b `22848c7`. A V01 integral depende de P06/RF10; esta fatia independente não conclui RNF04/RNF07 nem essas dependências.
