@@ -15,17 +15,19 @@ import (
 )
 
 type Config struct {
-	TokenKey     []byte
-	PreflightKey []byte
-	Hosts        []string
-	Targets      map[string]string
-	Cooldown     time.Duration
+	FinancialTokens map[string]string
+	TokenKey        []byte
+	PreflightKey    []byte
+	Hosts           []string
+	Targets         map[string]string
+	Cooldown        time.Duration
 }
 type run struct {
 	Report
-	cancel  context.CancelFunc
-	done    chan struct{}
-	samples []int64
+	credencial string
+	cancel     context.CancelFunc
+	done       chan struct{}
+	samples    []int64
 }
 type Server struct {
 	Instance    string
@@ -74,6 +76,20 @@ func NewServer(cfg Config) (*Server, error) {
 			return nil, errConfig
 		}
 	}
+	tokens := map[string]string{}
+	for nome, token := range cfg.FinancialTokens {
+		conhecido := false
+		for _, c := range leiturasFinanceiras {
+			if c.nome == nome {
+				conhecido = true
+			}
+		}
+		if !conhecido {
+			return nil, errConfig
+		}
+		tokens[nome] = token
+	}
+	cfg.FinancialTokens = tokens
 	return &Server{Instance: identifier(), cfg: cfg, runs: map[string]*run{}, nonces: map[string]int64{}, totals: map[string]*Counts{}, hist: map[string][]int64{}}, nil
 }
 func (s *Server) Close() {
@@ -238,6 +254,11 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		problem(w, 422, "PLANO_INVALIDO")
 		return
 	}
+	credencial, err := s.credencialLeitura(req.Plano, time.Now())
+	if err != nil {
+		problem(w, 422, "CREDENCIAL_FINANCEIRA_INDISPONIVEL")
+		return
+	}
 	target, ok := s.cfg.Targets[req.Plano.Servico]
 	if !ok {
 		problem(w, 422, "ALVO_INDISPONIVEL")
@@ -285,7 +306,7 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	v := &run{Report: Report{ID: identifier(), Instancia: s.Instance, Estado: "AGUARDANDO", Plano: req.Plano, Inicio: now.UTC(), Ambiente: map[string]any{"go": runtime.Version(), "memoriaDisponivelMiB": a.MemoriaDisponivelMiB, "discoLivreMiB": a.DiscoLivreMiB, "cpusHost": a.CPUs, "preflightEm": time.Unix(a.Iat, 0).UTC(), "fonte": "operador-host-assinado", "recursosProcesso": "controle+gerador"}, Populacao: "nearest-rank; chamadas finalizadas de ofertas programadas apos aquecimento, incluindo erros; duracao HTTP sem atraso de agendamento"}, cancel: cancel, done: make(chan struct{})}
+	v := &run{Report: Report{ID: identifier(), Instancia: s.Instance, Estado: "AGUARDANDO", Plano: req.Plano, Inicio: now.UTC(), Ambiente: map[string]any{"go": runtime.Version(), "memoriaDisponivelMiB": a.MemoriaDisponivelMiB, "discoLivreMiB": a.DiscoLivreMiB, "cpusHost": a.CPUs, "preflightEm": time.Unix(a.Iat, 0).UTC(), "fonte": "operador-host-assinado", "recursosProcesso": "controle+gerador"}, Populacao: "nearest-rank; chamadas finalizadas de ofertas programadas apos aquecimento, incluindo erros; duracao HTTP sem atraso de agendamento"}, cancel: cancel, done: make(chan struct{}), credencial: credencial}
 	if req.Plano.Modo == "ABERTO" {
 		total := 0
 		for _, st := range req.Plano.Estagios {

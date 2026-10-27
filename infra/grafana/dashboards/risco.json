@@ -1,0 +1,395 @@
+{
+  "uid": "prospero-risco",
+  "title": "Próspero — Risco e reservas",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "tags": [
+    "prospero",
+    "negocio",
+    "v01a"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "panels": [
+    {
+      "title": "Escopo, fontes e limites",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "MO: decisões e reentregas, transporte e pendências de crédito. Decisão RESERVADA não mede quantidade/valor atualmente reservado. Não existe estoque financeiro agregado instrumentado nesta fatia. Gauges de liquidação conservam último valor quando falha a atualização; scrape saudável não garante frescor. Expectativas D0 podem aguardar D+2 legitimamente; não são créditos atrasados.\n\n**Sem série significa sem dados.** Scrape a cada 15 s; taxas/percentis/janelas de 5 min. Contadores observam processamento e podem incluir reentrega ou anteceder commit: não substituem APIs/fatos financeiros. Alertas locais ficam na UI do Prometheus; não enviam notificações externas."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "title": "Decisões por resultado e motivo",
+      "type": "timeseries",
+      "description": "Fonte: AvaliarRiscoActor. Decisão observada antes de eventual commit; não concilia reservas.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(resultado,motivo) (rate(prospero_risco_decisoes_total{job=\"prospero\",servico=\"middle-office\"}[5m]))",
+          "legendFormat": "{{resultado}} · {{motivo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Reentregas de intenções já decididas",
+      "type": "timeseries",
+      "description": "Fonte: AvaliarRiscoActor. Releitura da decisão existente, sem nova reserva.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(prospero_risco_reentregas_total{job=\"prospero\",servico=\"middle-office\"}[5m])",
+          "legendFormat": "reentregas"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Pendências observadas na outbox MO",
+      "type": "timeseries",
+      "description": "Fonte: RelayOutbox. Gauge da manutenção, sem garantia de frescor após falha.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_outbox_pendentes{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "pendências"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Consumidores MO ativos",
+      "type": "timeseries",
+      "description": "Fonte: ConsumoKafka. Thread ativa não equivale a checkpoint em dia ou lag numérico.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_consumo_ativo{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "{{topico}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Expectativas de crédito pendentes",
+      "type": "timeseries",
+      "description": "Fonte: ConsumidorLiquidacao/resumo. Estado observado no MO; pendência pode ser legítima antes de D+2.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_liquidacao_expectativas_pendentes{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "expectativas"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Créditos aguardando negócio conhecido",
+      "type": "timeseries",
+      "description": "Fonte: ConsumidorLiquidacao/resumo. Evento de liquidação aguarda expectativa; não é total D2 do BO.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_liquidacao_aguardando{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "aguardando"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Idade observada do crédito aguardando mais antigo",
+      "type": "timeseries",
+      "description": "Fonte: ConsumidorLiquidacao/resumo. Gauge pode manter último valor após erro de atualização.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_liquidacao_aguardando_idade_segundos{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "idade"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Recusas de liquidação persistidas por motivo",
+      "type": "timeseries",
+      "description": "Fonte: ConsumidorLiquidacao/resumo. Gauge do total persistido, não counter; não aplicar rate.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "prospero_liquidacao_recusadas{job=\"prospero\",servico=\"middle-office\"}",
+          "legendFormat": "{{motivo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      }
+    }
+  ]
+}

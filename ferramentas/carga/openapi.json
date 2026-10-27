@@ -953,7 +953,7 @@
       "get": {
         "operationId": "coletarMetricasCarga",
         "summary": "Métricas Prometheus no listener interno de telemetria.",
-        "description": "Sem publicação no host. Cumulativos do processo; sem labels de execução/usuário. Contadores HTTP por servico, buckets por servico/le. CPU/RSS/heap/GC/goroutines/FDs representam API+gerador. RSS/FDs são omitidos se /proc indisponível; ausência não é zero. Histograma inclui chamadas medidas, incluindo erros; relatórios preservam quantis exatos. Séries: carga_oferecidas_total, carga_iniciadas_total, carga_finalizadas_total, carga_descartadas_total, carga_erros_http_total, carga_timeouts_total, carga_bytes_lidos_total, carga_falhas_transporte_total, carga_canceladas_em_voo_total, carga_limites_resposta_total, carga_execucao_ativa, carga_process_cpu_seconds_total, carga_process_resident_memory_bytes, carga_go_heap_bytes, carga_go_goroutines, carga_go_gc_cycles_total, carga_process_open_fds, carga_duracao_seconds_bucket, carga_duracao_seconds_count, carga_duracao_seconds_sum, carga_scheduler_delay_seconds_max.",
+        "description": "Sem publicação no host. Cumulativos do processo; sem labels de execução/usuário. Contadores HTTP por servico/cenario, buckets por servico/cenario/le. CPU/RSS/heap/GC/goroutines/FDs representam API+gerador. RSS/FDs são omitidos se /proc indisponível; ausência não é zero. Histograma inclui chamadas medidas, incluindo erros; relatórios preservam quantis exatos. Séries: carga_oferecidas_total, carga_iniciadas_total, carga_finalizadas_total, carga_descartadas_total, carga_erros_http_total, carga_timeouts_total, carga_bytes_lidos_total, carga_falhas_transporte_total, carga_canceladas_em_voo_total, carga_limites_resposta_total, carga_execucao_ativa, carga_process_cpu_seconds_total, carga_process_resident_memory_bytes, carga_go_heap_bytes, carga_go_goroutines, carga_go_gc_cycles_total, carga_process_open_fds, carga_duracao_seconds_bucket, carga_duracao_seconds_count, carga_duracao_seconds_sum, carga_scheduler_delay_seconds_max.",
         "servers": [
           {
             "url": "http://api-carga:9091"
@@ -1091,6 +1091,20 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 65536
+          },
+          "cenario": {
+            "type": "string",
+            "enum": [
+              "",
+              "IDENTIDADE",
+              "ATIVOS",
+              "ORDENS",
+              "CARTEIRA",
+              "POSICOES",
+              "NEGOCIOS",
+              "RAZAO"
+            ],
+            "description": "Catálogo fechado de GET. Omitido mantém IDENTIDADE; credenciais financeiras ficam somente no servidor."
           }
         },
         "required": [

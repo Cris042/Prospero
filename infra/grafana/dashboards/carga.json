@@ -1,6 +1,6 @@
 {
   "uid": "prospero-carga",
-  "title": "Próspero — Carga técnica e recursos",
+  "title": "Próspero — Carga HTTP e recursos",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "2s",
@@ -26,7 +26,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Baseline técnico de `GET /api/v1/sistema`; não comprova RNF04 ou capacidade financeira. API e gerador compartilham processo: CPU/RSS/GC abaixo representam ambos. Job `prospero-carga` usa scrape 2s; MS usam 15s. Taxas usam janela de 30s e não substituem contagens/quantis exatos do relatório por execução. Histogramas Prometheus são aproximados e cumulativos. **Sem série significa dado ausente**, inclusive se o perfil `carga` estiver desligado; não preenchê-lo com zero. Host/cgroups, disco/rede, DB/Kafka/outbox e projeções ainda não têm fontes detalhadas neste painel. JVM usa nomes encontrados no scrape real; fontes presentes não implicam regras financeiras implementadas."
+        "content": "Catálogo de identidade técnica e leituras financeiras autenticadas, separado por cenário. Mede consultas HTTP; não comprova negócio concluído, RNF04 ou capacidade financeira. API e gerador compartilham processo: CPU/RSS/GC abaixo representam ambos. Job `prospero-carga` usa scrape 2s; MS usam 15s. Taxas usam janela de 30s e não substituem contagens/quantis exatos do relatório por execução. Histogramas Prometheus são aproximados e cumulativos. **Sem série significa dado ausente**, inclusive se o perfil `carga` estiver desligado; não preenchê-lo com zero. Host/cgroups, disco/rede, DB/Kafka/outbox e projeções ainda não têm fontes detalhadas neste painel. JVM usa nomes encontrados no scrape real; fontes presentes não implicam regras financeiras implementadas."
       }
     },
     {
@@ -96,23 +96,23 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (servico) (rate(carga_oferecidas_total[30s]))",
-          "legendFormat": "oferta {{servico}}"
+          "expr": "sum by (servico, cenario) (rate(carga_oferecidas_total[30s]))",
+          "legendFormat": "oferta {{servico}} {{cenario}}"
         },
         {
           "refId": "B",
-          "expr": "sum by (servico) (rate(carga_iniciadas_total[30s]))",
-          "legendFormat": "início {{servico}}"
+          "expr": "sum by (servico, cenario) (rate(carga_iniciadas_total[30s]))",
+          "legendFormat": "início {{servico}} {{cenario}}"
         },
         {
           "refId": "C",
-          "expr": "sum by (servico) (rate(carga_finalizadas_total[30s]))",
-          "legendFormat": "término {{servico}}"
+          "expr": "sum by (servico, cenario) (rate(carga_finalizadas_total[30s]))",
+          "legendFormat": "término {{servico}} {{cenario}}"
         },
         {
           "refId": "D",
-          "expr": "sum by (servico) (rate(carga_descartadas_total[30s]))",
-          "legendFormat": "descarte {{servico}}"
+          "expr": "sum by (servico, cenario) (rate(carga_descartadas_total[30s]))",
+          "legendFormat": "descarte {{servico}} {{cenario}}"
         }
       ],
       "fieldConfig": {
@@ -156,27 +156,27 @@
         {
           "refId": "A",
           "expr": "rate(carga_erros_http_total[30s])",
-          "legendFormat": "HTTP {{servico}}"
+          "legendFormat": "HTTP {{servico}} {{cenario}}"
         },
         {
           "refId": "B",
           "expr": "rate(carga_timeouts_total[30s])",
-          "legendFormat": "timeout {{servico}}"
+          "legendFormat": "timeout {{servico}} {{cenario}}"
         },
         {
           "refId": "C",
           "expr": "rate(carga_falhas_transporte_total[30s])",
-          "legendFormat": "transporte {{servico}}"
+          "legendFormat": "transporte {{servico}} {{cenario}}"
         },
         {
           "refId": "D",
           "expr": "rate(carga_canceladas_em_voo_total[30s])",
-          "legendFormat": "cancelada em voo {{servico}}"
+          "legendFormat": "cancelada em voo {{servico}} {{cenario}}"
         },
         {
           "refId": "E",
           "expr": "rate(carga_limites_resposta_total[30s])",
-          "legendFormat": "limite resposta {{servico}}"
+          "legendFormat": "limite resposta {{servico}} {{cenario}}"
         }
       ],
       "fieldConfig": {
@@ -220,7 +220,7 @@
         {
           "refId": "A",
           "expr": "rate(carga_bytes_lidos_total[30s])",
-          "legendFormat": "{{servico}}"
+          "legendFormat": "{{servico}} {{cenario}}"
         }
       ],
       "fieldConfig": {
@@ -263,18 +263,18 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (servico, le) (rate(carga_duracao_seconds_bucket[30s])))",
-          "legendFormat": "p50 {{servico}}"
+          "expr": "histogram_quantile(0.5, sum by (servico, cenario, le) (rate(carga_duracao_seconds_bucket[30s])))",
+          "legendFormat": "p50 {{servico}} {{cenario}}"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (servico, le) (rate(carga_duracao_seconds_bucket[30s])))",
-          "legendFormat": "p95 {{servico}}"
+          "expr": "histogram_quantile(0.95, sum by (servico, cenario, le) (rate(carga_duracao_seconds_bucket[30s])))",
+          "legendFormat": "p95 {{servico}} {{cenario}}"
         },
         {
           "refId": "C",
-          "expr": "histogram_quantile(0.99, sum by (servico, le) (rate(carga_duracao_seconds_bucket[30s])))",
-          "legendFormat": "p99 {{servico}}"
+          "expr": "histogram_quantile(0.99, sum by (servico, cenario, le) (rate(carga_duracao_seconds_bucket[30s])))",
+          "legendFormat": "p99 {{servico}} {{cenario}}"
         }
       ],
       "fieldConfig": {

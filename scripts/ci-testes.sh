@@ -4,25 +4,37 @@ for value in "${GITHUB_RUN_ID:-}" "${GITHUB_RUN_ATTEMPT:-}"; do
   case "$value" in ''|*[!0-9]*) echo 'Identidade numérica de execução ausente.' >&2; exit 2;; esac
 done
 python3 scripts/ci-preflight.py
+# V01a: comportamento das regras com relógio/séries sintéticos, sem subir telemetria adicional.
+promtool=(docker run --rm --network=none --read-only --tmpfs /tmp:rw,size=67108864
+  --memory=256m --cpus=1 --pids-limit=64 --entrypoint /bin/promtool
+  -v "$PWD/infra/prometheus:/etc/prometheus:ro" -w /etc/prometheus prom/prometheus:v3.15.0)
+"${promtool[@]}" check config /etc/prometheus/prometheus.yml
+"${promtool[@]}" check rules /etc/prometheus/alertas.yml
+"${promtool[@]}" test rules /etc/prometheus/alertas.test.yml
 # Registra disco e uso Docker para diagnosticar falta de espaço no runner efêmero.
 df -h / "${RUNNER_TEMP:-/tmp}" || true
 docker system df || true
 export PROSPERO_CI_TAG="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 project="prospero-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 # RF05d: o arquivo do robô entra desde o início (FO já na rede dele); o perfil opt-in só liga no fim, com tag da execução.
-compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.robo.yml)
+compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.robo.yml -f docker-compose.carga.yml -f docker-compose.carga-ci.yml)
 export PROSPERO_ROBO_TAG="$PROSPERO_CI_TAG"
-compose_robo=("${compose[@]}" --profile robo)
+compose_robo=("${compose[@]}" --profile robo --profile carga)
+compose_carga=("${compose[@]}" --profile carga)
 mkdir -p .ci-evidencias
 cleanup() {
   code=$?
   trap - EXIT INT TERM
   if [ "$code" -ne 0 ]; then
     "${compose[@]}" logs --no-color --tail=80 > .ci-evidencias/compose.log 2>&1 || true
+    grafana_cid="$("${compose[@]}" ps -a -q grafana 2>/dev/null || true)"
+    if [[ "$grafana_cid" =~ ^[0-9a-f]{12,64}$ ]]; then
+      docker inspect --format 'Grafana: estado={{.State.Status}} OOM={{.State.OOMKilled}} saida={{.State.ExitCode}}' "$grafana_cid" || true
+    fi
   fi
   "${compose_robo[@]}" down --volumes --remove-orphans || true
-  rm -rf -- "${runner_cfg:-}"
-  for service in front-office middle-office matching-engine back-office frontend runner-planilhas robo-formador; do
+  rm -rf -- "${runner_cfg:-}" "${carga_cfg:-}"
+  for service in front-office middle-office matching-engine back-office frontend runner-planilhas robo-formador api-carga; do
     docker image rm "prospero/$service:$PROSPERO_CI_TAG" >/dev/null 2>&1 || true
   done
   exit "$code"
@@ -77,6 +89,19 @@ rodar_workbook posicoes posicoes
 # RF08b: negócios e razão D0 em DELTA3 logo após posições; repete abrindo e fechando por negócios reais.
 rodar_workbook razao razao
 rodar_workbook razao razao
+# B1: somente 12 leituras logicas, preflight real e controlador do proprio projeto.
+carga_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-carga.XXXXXX")"
+export PROSPERO_CARGA_SECRETS_DIR="$carga_cfg"
+python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carga_cfg" --preparar
+"${compose_carga[@]}" build api-carga
+"${compose_carga[@]}" up -d --wait --wait-timeout 90 api-carga
+timeout --kill-after=15s 90s python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carga_cfg" \
+  > .ci-evidencias/carga-leituras.json
+cat .ci-evidencias/carga-leituras.json
+"${compose_carga[@]}" stop --timeout 8 api-carga
+"${compose_carga[@]}" rm -f api-carga
+rm -rf -- "$carga_cfg"
+carga_cfg=''
 # RF09a: recebimento, risco rejeitado, cursor e isolamento; duas execuções sem reconstruir fatos.
 rodar_workbook trajetoria risco
 rodar_workbook trajetoria risco
@@ -129,6 +154,9 @@ python3 scripts/mercado.py config-runner "$runner_cfg/posicoes-e2e.json" --perfi
   --origem "$fo_origem" --origem-mo "$mo_origem" --origem-bo "$bo_origem"
 chmod 600 "$runner_cfg/posicoes-e2e.json"
 export PROSPERO_POSICOES_E2E_CONFIG="$runner_cfg/posicoes-e2e.json"
+# Consultas/regras/provisionamento reais; credencial Grafana somente em arquivo privado temporário.
+python3 scripts/verificar-observabilidade.py --projeto "$project" --config-e2e "$runner_cfg/grafana.json"
+export PROSPERO_GRAFANA_E2E_CONFIG="$runner_cfg/grafana.json"
 export BASE_URL="http://$("${compose[@]}" port frontend 8080)"
 # Runner hospedado é efêmero: instala as bibliotecas do Chromium; host local não é alterado.
 playwright_deps=()
