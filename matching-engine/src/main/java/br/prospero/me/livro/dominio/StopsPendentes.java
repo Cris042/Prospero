@@ -48,6 +48,12 @@ final class StopsPendentes {
         }
     }
 
+    /** Consulta sem retirar nem alterar a sequência de chegada. */
+    Admissao consultar(UUID ordem) {
+        Long sequencia = sequencias.get(ordem);
+        return sequencia == null ? null : ordens.get(sequencia);
+    }
+
     /** Remoção irrevogável: preço posterior não desfaz o acionamento já observado. */
     List<Admissao> retirarAcionados(BigDecimal ultimo) {
         List<Admissao> acionados = new ArrayList<>();
