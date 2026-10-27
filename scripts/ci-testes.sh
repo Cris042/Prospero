@@ -124,6 +124,7 @@ amostrar_recursos_rnf04() {
   done
   # Três snapshots de CPU/memória/I/O após o tráfego, enquanto o gerador está parado.
   # Não medem consultas SQL, nem representam ensaio de capacidade ou repouso prolongado.
+  : > ".ci-evidencias/rnf04-$variante-recursos.jsonl"
   for amostra in 1 2 3; do
     docker stats --no-stream --format '{{json .}}' "${recipientes[@]}" \
       >> ".ci-evidencias/rnf04-$variante-recursos.jsonl"
