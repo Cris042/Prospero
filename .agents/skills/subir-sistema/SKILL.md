@@ -30,7 +30,7 @@ Para um serviço específico, usar `docker compose up -d --build <serviço>`, co
 
 ## Diagnóstico e verificação
 
-Se a subida falhar, examinar `docker compose ps -a` e logs limitados do serviço, formular uma hipótese e corrigir a causa dentro do escopo. Não enfraquecer healthcheck para esconder indisponibilidade. Usar `loop-engineering` para tentativas repetidas.
+Se a subida falhar, examinar `docker compose ps -a` e logs limitados do serviço, formular uma hipótese e corrigir a causa dentro do escopo. Não enfraquecer healthcheck para esconder indisponibilidade. Usar `loop-engineering` (skill global) para tentativas repetidas.
 
 Delegar os testes a um agente exclusivo com esforço **medium**, separado de implementação, revisão e segurança:
 

@@ -54,6 +54,6 @@ Migrações usam Flyway sem Undo pago: mudanças versionadas, recuperação por 
 
 ## Descoberta e instalação
 
-Sem a configuração global, as skills deste diretório continuam utilizáveis, mas revisão, segurança, entrega e diagnóstico dependem dela. Novas skills podem exigir a próxima sessão para aparecer na interface. O ai-memory é uma ferramenta distinta; veja o [guia da memória](../rules.md#memória-e-retomada).
+A configuração global (`~/.agents/`, versionada no repositório privado `config-ia`) é a fonte confiável dos papéis e dos procedimentos de revisão, segurança, entrega e diagnóstico; ela fica fora deste repositório e sem checksum aqui. Sem ela, as skills deste diretório continuam utilizáveis, e as garantias mínimas permanecem nas [regras](../rules.md) e no `AGENTS.md`: três agentes separados do implementador e nenhum merge ou release automático. Novas skills podem exigir a próxima sessão para aparecer na interface. O ai-memory é uma ferramenta distinta; veja o [guia da memória](../rules.md#memória-e-retomada).
 
 O [guia documental](../rules.md#documentação-e-aderência) e o [playbook único](../playbook-desenvolvimento.md) orientam escolha proporcional de documentos e diagnóstico.
