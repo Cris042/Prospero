@@ -1,6 +1,6 @@
 # Skills e fluxo de trabalho
 
-As skills do Prospero ficam em `.agents/skills/<nome>/SKILL.md`, dentro do projeto, e não alteram a instalação global. Cada entrada contém a adaptação local e aponta ao `UPSTREAM.md` preservado e aos recursos pertinentes. [Origens e SHA-256](origens.json) registram os commits fixados. Não atualizar automaticamente a partir de `master`/`main`.
+As skills do Prospero ficam em `.agents/skills/<nome>/SKILL.md`, dentro do projeto, e não alteram a instalação global. O Codex lê essa pasta diretamente; o Claude Code a lê por `.claude/skills`, um link simbólico versionado para `../.agents/skills`. Edite sempre em `.agents/skills`. Em clones Windows sem `core.symlinks`, o link vira arquivo de texto e o Claude Code deixa de ver as skills. Cada entrada contém a adaptação local e aponta ao `UPSTREAM.md` preservado e aos recursos pertinentes. [Origens e SHA-256](origens.json) registram os commits fixados. Não atualizar automaticamente a partir de `master`/`main`.
 
 ## Quando usar e quem executa
 
