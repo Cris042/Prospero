@@ -142,7 +142,7 @@ Dentro das decisões acima, sem nova decisão de produto. Rodada complementar di
 
 ## Cancelamento manual — RF10 em refinamento (2026-10-25)
 
-Cinco pareceres medium independentes, registrados no roadmap, recomendaram seguir com ressalvas. Esta seção registra o alcance técnico proposto; não altera as decisões de produto já aceitas. A composição RF09b ainda está em validação no PR #50.
+Cinco pareceres medium independentes, registrados no roadmap, recomendaram seguir com ressalvas. Esta seção registra o alcance técnico proposto; não altera as decisões de produto já aceitas. A composição RF09b passou nos três gates em `22848c7` no PR #50; revisão/merge continuam pendentes.
 
 FO autentica a conta, localiza a ordem e persiste a solicitação; MO continua único emissor legítimo de comandos ao ME. O escritor do ativo decide sobre o saldo vivo, depois de concluir o comando anterior e sua cascata. Negócios anteriores ao corte permanecem. MO só libera reserva diante de fato terminal coerente e confirmado; aceite HTTP, publicação, timeout ou estado do FO não liberam recursos. Na OCO a reserva é do grupo; terminais preservam a conservação por perna incluindo reduções.
 
@@ -172,3 +172,9 @@ Tréplica arquitetural confirmou que reutilizar os tópicos FO↔MO preserva as 
 Identidades separadas: pedido canônico, comando de cancelamento, admissão alvo, ordem/grupo e IDs de eventos. Correlação financeira continua ligada à admissão; causação dos novos terminais aponta ao comando de cancelamento. Trace não é identidade. Mesmo pedido/comando/evento com assinatura divergente é inconsistência; repetição idêntica recupera o resultado sem nova liberação, notificação ou revisão.
 
 Alternativas consideradas: tópicos próprios de cancelamento são coerentes, porém não há necessidade de isolamento que justifique novo par neste laboratório; rejeitar pedido precoce simplifica a espera, mas cria recusa transitória e exige permitir nova operação futura. Mantê-lo pendente com dependência durável evita essa ambiguidade. Não reutilizar a mesma identidade permanentemente para uma recusa transitória que impediria cancelamento futuro.
+
+### Preparação interna independente — RF10a (2026-10-26)
+
+Rodada complementar com cinco pareceres medium independentes reduziu a primeira entrega à conservação da proveniência viva. Stop Limit convertido conserva o tipo público original; dissolver o vínculo operacional OCO não transforma a origem da perna sobrevivente em simples. Um índice por identidade no estado do ativo guarda dados imutáveis e acompanha inclusão e baixa da contagem ativa, termina com a ordem e é reconstruído pelas admissões existentes no replay. Guarda tipo original, intenção, conta, ativo, sessão e identidades TP/SL; não guarda outro histórico de comandos nem muda IDs, prioridades ou bytes v1–v4. Consulta interna retorna somente dados imutáveis.
+
+Alternativa: propagar um novo parâmetro por admissão, conversão, fila e repouso dispersaria a mudança pelo algoritmo; o índice vivo concentra o ciclo de vida sem alterar o contrato de admissão. Asserções de identidade nos terminais verificam correspondência com a conta ativa. Fechamento limpa o índice junto às estruturas vivas. Limites existentes permanecem; não há registro de solicitações, política de cancelamento, emissão, parser novo ou efeito em reservas nesta fatia. As propostas de transporte acima e as duas decisões do usuário continuam pendentes.

@@ -37,6 +37,12 @@ public final class MotorMatching {
         this.parametros = Map.copyOf(parametros);
     }
 
+    /** Snapshot interno imutável; conversão/dissolução não alteram a origem de uma ordem viva. */
+    Map<UUID, OrigemOrdem> origensVivas(String ticker) {
+        EstadoAtivo estado = estados.get(ticker);
+        return estado == null ? Map.of() : Map.copyOf(estado.origens);
+    }
+
     /** Estado do escritor único de um ativo: livro, último negócio da sessão e sequências. */
     private static final class EstadoAtivo {
         final Livro livro = new Livro();
@@ -44,6 +50,7 @@ public final class MotorMatching {
         final ParesOco pares = new ParesOco();
         // Uma contagem cobre livro, pendentes, agressor e selecionadas aguardando na fila.
         final Map<String, Integer> ativasPorConta = new HashMap<>();
+        final Map<UUID, OrigemOrdem> origens = new HashMap<>();
         BigDecimal ultimo;
         LocalDate sessao;
         LocalDate ultimaEncerrada;
@@ -54,17 +61,27 @@ public final class MotorMatching {
             return ativasPorConta.getOrDefault(conta, 0);
         }
 
-        void ativar(String conta) {
-            ativasPorConta.merge(conta, 1, Integer::sum);
+        void ativar(Admissao ordem, UUID takeProfit, UUID stopLoss) {
+            OrigemOrdem origem = new OrigemOrdem(ordem.tipo(), ordem.intencao(), ordem.conta(), ordem.ticker(),
+                    ordem.sessao(), takeProfit, stopLoss);
+            if (origens.putIfAbsent(ordem.ordem(), origem) != null) {
+                throw new IllegalStateException("Ordem já possui origem ativa.");
+            }
+            ativasPorConta.merge(ordem.conta(), 1, Integer::sum);
         }
 
-        void desativar(String conta) {
-            ativasPorConta.compute(conta, (chave, total) -> {
-                if (total == null || total <= 0) {
-                    throw new IllegalStateException("Ordem terminal fora da contagem ativa.");
-                }
-                return total == 1 ? null : total - 1;
-            });
+        void desativar(UUID ordem, String conta) {
+            OrigemOrdem origem = origens.get(ordem);
+            Integer total = ativasPorConta.get(conta);
+            if (origem == null || !origem.conta().equals(conta) || total == null || total <= 0) {
+                throw new IllegalStateException("Ordem terminal fora da origem ou contagem ativa.");
+            }
+            origens.remove(ordem);
+            if (total == 1) {
+                ativasPorConta.remove(conta);
+            } else {
+                ativasPorConta.put(conta, total - 1);
+            }
         }
     }
 
@@ -92,7 +109,7 @@ public final class MotorMatching {
         abrirSessao(a.sessao(), e);
         ContextoComando contexto = new ContextoComando();
         long sequencia = ++e.chegada;
-        e.ativar(a.conta());
+        e.ativar(a, null, null);
         contexto.eventos.add(new Evento.OrdemAceita(a.ordem(), a.ticker(), sequencia));
         if (a.tipo().stop()) {
             receberStop(a, sequencia, e, contexto);
@@ -148,8 +165,8 @@ public final class MotorMatching {
         ContextoComando contexto = new ContextoComando();
         long sequenciaTp = ++e.chegada;
         long sequenciaSl = ++e.chegada;
-        e.ativar(tp.conta());
-        e.ativar(sl.conta());
+        e.ativar(tp, tp.ordem(), sl.ordem());
+        e.ativar(sl, tp.ordem(), sl.ordem());
         contexto.eventos.add(new Evento.OrdemAceita(tp.ordem(), tp.ticker(), sequenciaTp));
         contexto.eventos.add(new Evento.OrdemAceita(sl.ordem(), sl.ticker(), sequenciaSl));
         ParesOco.Par vinculo = e.pares.registrar(tp, sl);
@@ -207,7 +224,7 @@ public final class MotorMatching {
         }
         e.pares.dissolverPorStopLoss(stopLoss);
         OfertaViva tp = e.livro.remover(par.takeProfit.ordem());
-        e.desativar(tp.conta);
+        e.desativar(tp.ordem, tp.conta);
         eventos.add(new Evento.OrdemEncerrada(tp.ordem, par.takeProfit.ticker(), MotivoEncerramento.CANCELADA_OCO,
                 tp.executada, tp.restante()));
     }
@@ -236,7 +253,7 @@ public final class MotorMatching {
         }
         Admissao sl = par.stopLoss;
         e.stops.remover(sl.ordem());
-        e.desativar(sl.conta());
+        e.desativar(sl.ordem(), sl.conta());
         eventos.add(new Evento.OrdemEncerrada(sl.ordem(), sl.ticker(), MotivoEncerramento.CANCELADA_OCO, 0,
                 sl.quantidade()));
     }
@@ -318,6 +335,7 @@ public final class MotorMatching {
                     MotivoEncerramento.EXPIRADA_DIA, 0, ordem.quantidade()));
         }
         e.ativasPorConta.clear();
+        e.origens.clear();
         e.pares.limpar();
         e.ultimaEncerrada = sessao;
         return List.copyOf(eventos.values());
@@ -428,7 +446,7 @@ public final class MotorMatching {
             reduzirIrma(passiva.ordem, quantidade, e, eventos);
             if (passiva.restante() == 0) {
                 e.livro.removerCabeca(passiva);
-                e.desativar(passiva.conta);
+                e.desativar(passiva.ordem, passiva.conta);
                 eventos.add(new Evento.OrdemEncerrada(passiva.ordem, a.ticker(), MotivoEncerramento.EXECUTADA,
                         passiva.quantidade, 0));
                 encerrarIrma(passiva.ordem, e, eventos);
@@ -447,7 +465,7 @@ public final class MotorMatching {
 
     private static void encerrar(Admissao a, EstadoAtivo e, MotivoEncerramento motivo, long executada,
                                  List<Evento> eventos) {
-        e.desativar(a.conta());
+        e.desativar(a.ordem(), a.conta());
         eventos.add(new Evento.OrdemEncerrada(a.ordem(), a.ticker(), motivo, executada, a.quantidade() - executada));
         encerrarIrma(a.ordem(), e, eventos);
     }
