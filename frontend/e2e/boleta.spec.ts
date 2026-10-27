@@ -56,12 +56,14 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   page.on('console', (mensagem) => {
     if (mensagem.type() === 'error') erros.push(mensagem.text());
   });
-  // ADR-015: leituras do BO respondem 503 problem+json enquanto a projeção processa os eventos
-  // da própria ordem; o console registra esse 503 contratado e as telas se recuperam sozinhas.
+  // ADR-015: leituras do BO respondem 503 problem+json durante lag. Hoje CicloPosicoes invalida a
+  // prontidão a cada lote, inclusive o da própria ordem; a prontidão por lag real é pendência da V01.
   const indisponibilidadesBo: string[] = [];
+  const leiturasPosicoes: number[] = [];
   page.on('response', (r) => {
-    if (r.status() !== 503) return;
     const caminho = new URL(r.url()).pathname;
+    if (caminho === '/servicos/back-office/api/v1/posicoes') leiturasPosicoes.push(r.status());
+    if (r.status() !== 503) return;
     const leituraBo = /^\/servicos\/back-office\/api\/v1\/(posicoes|negocios|razao)$/.test(caminho);
     const problema = (r.headers()['content-type'] ?? '').startsWith('application/problem+json');
     indisponibilidadesBo.push(leituraBo && problema ? 'contratado' : `inesperado ${caminho}`);
@@ -138,8 +140,9 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
     indisponibilidadesBo.length,
   );
   expect(erros.filter((erro) => !erro.startsWith(console503))).toEqual([]);
-  // Posições consulta a cada 2 s: depois de um 503 contratado, a tela volta sem alerta.
-  await expect(page.locator('app-posicoes').getByRole('alert')).toHaveCount(0, { timeout: 10000 });
+  // Posições consulta a cada 2 s: depois de um 503 contratado, um 200 posterior volta a tela sem alerta.
+  await expect.poll(() => leiturasPosicoes.at(-1), { timeout: 10000 }).toBe(200);
+  await expect(page.locator('app-posicoes').getByRole('alert')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
