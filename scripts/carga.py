@@ -13,6 +13,7 @@ import sys
 import time
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,7 +108,7 @@ def request(path, method='GET', body=None):
         return json.loads(content)
 
 
-def host_budget():
+def host_budget(telemetria=None, antes_http=None):
     info = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())
     available = int(info['MemAvailable'].split()[0]) // 1024
     limit = Path('/sys/fs/cgroup/memory.max')
@@ -124,9 +125,18 @@ def host_budget():
     if available < 1024 or disk < 1024 or cpus < 1:
         raise ValueError('host sem orcamento para carga; nenhum projeto foi interrompido')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    for endpoint in ('http://127.0.0.1:19090/-/ready',
-                     'http://127.0.0.1:13000/api/health',
-                     'http://127.0.0.1:14333/'):
+    endpoints = telemetria if telemetria is not None else (
+        'http://127.0.0.1:19090/-/ready', 'http://127.0.0.1:13000/api/health', 'http://127.0.0.1:14333/')
+    if not isinstance(endpoints, (tuple, list)) or len(endpoints) != 3:
+        raise ValueError('telemetria invalida')
+    for endpoint, caminho in zip(endpoints, ('/-/ready', '/api/health', '/')):
+        partes = urllib.parse.urlsplit(endpoint)
+        if (partes.scheme != 'http' or partes.hostname != '127.0.0.1' or partes.username or partes.password
+                or not partes.port or partes.path != caminho or partes.query or partes.fragment):
+            raise ValueError('telemetria invalida')
+    for endpoint in endpoints:
+        if antes_http is not None:
+            antes_http()
         with opener.open(endpoint, timeout=2) as response:
             if response.status != 200 or len(response.read(65537)) > 65536:
                 raise ValueError('telemetria indisponivel')
@@ -134,8 +144,9 @@ def host_budget():
             'cpus': cpus, 'telemetria': True}
 
 
-def authorization(plan, instance):
-    budget = host_budget()
+def authorization(plan, instance, *, telemetria=None, antes_http=None):
+    budget = (host_budget() if telemetria is None and antes_http is None
+              else host_budget(telemetria=telemetria, antes_http=antes_http))
     now = int(time.time())
     canonical = dict(plan)
     if canonical.get('cenario') == '':
