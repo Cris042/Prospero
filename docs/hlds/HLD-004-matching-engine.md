@@ -137,3 +137,7 @@ Na RF09b, o consumidor cria span próprio a partir do contexto W3C do comando e 
 ## Proveniência viva — preparação RF10a
 
 O núcleo conserva, junto à contagem de ordens ativas, tipo original, intenção, conta, ativo, sessão e vínculo TP/SL original. A conversão de Stop Limit e a dissolução do par operacional não apagam esses dados. O índice é somente das ordens vivas: termina com elas, é limpo no fechamento e reconstruído pelo replay existente, sem banco/snapshot/histórico adicional. A identidade do terminal deve corresponder à conta registrada antes da baixa. Esta fatia interna não acrescenta comando, parser, evento, API, regra de elegibilidade ou liberação de reserva. Contrato proposto e decisões ainda pendentes no [ADR-013](../adrs/ADR-013-matching-execucao.md#preparação-interna-independente--rf10a-2026-10-26); estado e evidências no roadmap.
+
+## Elegibilidade manual RF10 — decisão parcial
+
+Em 2026-10-27 o usuário permitiu cancelar o saldo vivo de Stop Limit já acionado, preservando o tipo original e todos os negócios anteriores ao corte. O pedido manual em uma perna OCO não deve cancelar o grupo inteiro; ainda falta decidir entre retirar somente a perna e impedir cancelamento manual de OCO. Não inferir dissolução do vínculo ou liberação de reserva enquanto essa política não estiver definida. As regras automáticas anteriores são preservadas. Decisão parcial no [ADR-013](../adrs/ADR-013-matching-execucao.md#decisões-parciais-de-cancelamento-manual--rf10-2026-10-27); implementação dependente permanece futura.
