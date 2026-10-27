@@ -47,6 +47,14 @@ func main() {
 	for _, name := range []string{"front-office", "middle-office", "matching-engine", "back-office"} {
 		cfg.Targets[name] = "http://" + name + ":8080"
 	}
+	cfg.FinancialTokens = map[string]string{}
+	for cenario, variavel := range map[string]string{
+		"ATIVOS": "CARGA_TOKEN_MERCADO_FILE", "ORDENS": "CARGA_TOKEN_ORDENS_FILE",
+		"CARTEIRA": "CARGA_TOKEN_RISCO_FILE", "POSICOES": "CARGA_TOKEN_POSICOES_FILE",
+		"NEGOCIOS": "CARGA_TOKEN_RAZAO_FILE", "RAZAO": "CARGA_TOKEN_RAZAO_FILE",
+	} {
+		cfg.FinancialTokens[cenario] = lerCredencial(os.Getenv(variavel))
+	}
 	s, e := NewServer(cfg)
 	if e != nil {
 		slog.Error("configuracao invalida")
@@ -115,3 +123,17 @@ type boundedConn struct {
 }
 
 func (c *boundedConn) Close() error { e := c.Conn.Close(); c.once.Do(c.release); return e }
+
+// Arquivo opcional: conteúdo indisponível/inválido impede apenas a admissão financeira.
+func lerCredencial(caminho string) string {
+	arquivo, err := os.Open(caminho)
+	if err != nil {
+		return ""
+	}
+	defer arquivo.Close()
+	conteudo, err := io.ReadAll(io.LimitReader(arquivo, 4097))
+	if err != nil || len(conteudo) > 4096 {
+		return ""
+	}
+	return strings.TrimSpace(string(conteudo))
+}

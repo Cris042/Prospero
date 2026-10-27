@@ -17,6 +17,7 @@ type Stage struct {
 	VUs       int `json:"vus"`
 }
 type Plan struct {
+	Cenario          string  `json:"cenario,omitempty"`
 	Servico          string  `json:"servico"`
 	Modo             string  `json:"modo"`
 	Estagios         []Stage `json:"estagios"`
@@ -28,6 +29,9 @@ type Plan struct {
 }
 
 func (p Plan) Validate() error {
+	if _, err := p.leitura(); err != nil {
+		return err
+	}
 	if p.Modo != "ABERTO" && p.Modo != "FECHADO" {
 		return errors.New("modo")
 	}

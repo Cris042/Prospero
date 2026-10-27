@@ -1,0 +1,11 @@
+# Somente com os arquivos base/ci/robo/carga e projeto prospero-ci-<run>-<attempt>.
+services:
+  api-carga:
+    image: prospero/api-carga:${PROSPERO_CI_TAG:?Defina uma tag exclusiva para CI}
+    ports: !override
+      - target: 8080
+        published: "0"
+        host_ip: 127.0.0.1
+    environment:
+      # Cliente operador liga no loopback dinamico usando esta autoridade exata.
+      CARGA_HOSTS: api-carga:8080

@@ -29,11 +29,21 @@ services:
       CARGA_TOKEN_KEY_FILE: /run/secrets/carga_controle
       CARGA_PREFLIGHT_KEY_FILE: /run/secrets/carga_preflight
       CARGA_HOSTS: '127.0.0.1:8090,localhost:8090,api-carga:8080'
+      CARGA_TOKEN_MERCADO_FILE: /run/secrets/carga_mercado
+      CARGA_TOKEN_ORDENS_FILE: /run/secrets/carga_ordens
+      CARGA_TOKEN_RISCO_FILE: /run/secrets/carga_risco
+      CARGA_TOKEN_POSICOES_FILE: /run/secrets/carga_posicoes
+      CARGA_TOKEN_RAZAO_FILE: /run/secrets/carga_razao
       GOMEMLIMIT: 256MiB
       GOMAXPROCS: '1'
     secrets:
       - carga_controle
       - carga_preflight
+      - carga_mercado
+      - carga_ordens
+      - carga_risco
+      - carga_posicoes
+      - carga_razao
     restart: 'no'
     stop_grace_period: 8s
     logging:
@@ -46,3 +56,13 @@ secrets:
     file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/controle.key
   carga_preflight:
     file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/preflight.key
+  carga_mercado:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/mercado.token
+  carga_ordens:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/ordens.token
+  carga_risco:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/risco.token
+  carga_posicoes:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/posicoes.token
+  carga_razao:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/razao.token
