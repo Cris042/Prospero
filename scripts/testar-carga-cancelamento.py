@@ -374,9 +374,11 @@ def main(argv=None):
         print('Cenario de cancelamento interrompido; limpeza limitada solicitada.', file=sys.stderr)
         return 130
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.SubprocessError,
-            urllib.error.URLError):
-        print('Cenario de cancelamento recusado; verificar projeto, saldos, operacoes e gauge. Dados sensiveis omitidos.',
-              file=sys.stderr)
+            urllib.error.URLError) as erro:
+        # Só ValueError carrega mensagem própria (texto fixo deste script); nas demais, apenas o tipo.
+        motivo = str(erro) if type(erro) is ValueError else type(erro).__name__
+        print('Cenario de cancelamento recusado (' + motivo + '); verificar projeto, saldos, operacoes e gauge. '
+              'Dados sensiveis omitidos.', file=sys.stderr)
         return 1
 
 
