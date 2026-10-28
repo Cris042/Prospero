@@ -53,6 +53,7 @@ def main():
         ("front-office", "FO", "fo", "OcoQaPostgresIT"),
         ("front-office", "FO", "fo", "EncerramentoQaPostgresIT"),
         ("front-office", "FO", "fo", "CancelamentoManualPostgresIT"),
+        ("front-office", "FO", "fo", "CancelamentoOperacaoPostgresIT"),
     ]:
         # Nome de variável em --env: o segredo viaja só no ambiente, sem entrar no argumento/log.
         temporario = "matching_it_" + uuid.uuid4().hex
