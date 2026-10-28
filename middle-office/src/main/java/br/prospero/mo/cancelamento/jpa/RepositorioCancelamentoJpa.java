@@ -57,6 +57,7 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public Optional<ReservaAlvo> reservaComprovada(UUID intencao) {
+        // Sem FOR UPDATE de propósito: a conta já está travada pelo chamador e toda mudança de reserva passa por esse lock.
         // O recibo e a admissão derivada da intenção provam a publicação; reserva anterior ao V8 não tem nenhum dos dois.
         return em().createNativeQuery("""
                         SELECT r.ordem, r.conta, r.ticker, r.data_sessao, r.oco, r.estado FROM reserva r

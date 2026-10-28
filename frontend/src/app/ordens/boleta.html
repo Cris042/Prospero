@@ -165,6 +165,7 @@
           <th scope="col">Disparo</th>
           <th scope="col">Estado</th>
           <th scope="col">Trajetória</th>
+          <th scope="col">Cancelamento</th>
         </tr>
       </thead>
       <tbody>
@@ -183,7 +184,9 @@
             <td>
               {{ rotulo(o.estado) }}{{ o.motivoRejeicao ? ' · ' + rotulo(o.motivoRejeicao) : ''
               }}{{
-                o.motivoEncerramento === 'CANCELADA_OCO' || o.motivoEncerramento === 'EXPIRADA_DIA'
+                o.motivoEncerramento === 'CANCELADA_OCO' ||
+                o.motivoEncerramento === 'EXPIRADA_DIA' ||
+                o.motivoEncerramento === 'CANCELADA_MANUAL'
                   ? ' · ' + rotulo(o.motivoEncerramento)
                   : ''
               }}
@@ -197,10 +200,32 @@
                 Ver trajetória
               </button>
             </td>
+            <td>
+              @if (o.cancelamento) {
+                <span role="status" [attr.data-cancelamento]="o.cancelamento.estado">{{
+                  textoCancelamento(o)
+                }}</span>
+              } @else if (podeCancelar(o)) {
+                <button
+                  type="button"
+                  class="cancelar"
+                  [disabled]="cancelando().has(o.id)"
+                  (click)="cancelar(o)"
+                  [attr.aria-label]="'Cancelar ordem ' + o.id"
+                >
+                  Cancelar
+                </button>
+              } @else if (o.grupoOco && o.estado !== 'CANCELADA' && o.estado !== 'EXECUTADA') {
+                <span class="dica">Ordem OCO: sem cancelamento manual</span>
+              }
+              @if (erroCancelamento()[o.id]; as mensagem) {
+                <p class="alerta" role="alert">{{ mensagem }}</p>
+              }
+            </td>
           </tr>
         } @empty {
           <tr>
-            <td colspan="9">Nenhuma ordem registrada.</td>
+            <td colspan="10">Nenhuma ordem registrada.</td>
           </tr>
         }
       </tbody>

@@ -44,6 +44,7 @@ public final class Problemas {
             case REGRA_VIOLADA -> 422;
             case LIMITE_ATINGIDO -> 429;
             case PROIBIDO -> 403;
+            case INDISPONIVEL -> 503;
         };
     }
 
@@ -62,6 +63,7 @@ public final class Problemas {
             case 415 -> "Tipo de conteúdo não suportado";
             case 422 -> "Regra de negócio violada";
             case 429 -> "Limite atingido";
+            case 503 -> "Serviço indisponível";
             default -> "Erro na requisição";
         };
     }

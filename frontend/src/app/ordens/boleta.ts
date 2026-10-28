@@ -31,6 +31,7 @@ import {
   exigeLimite,
   Lado,
   mensagemErro,
+  mensagemErroCancelamento,
   normalizarPreco,
   Ordem,
   OrdensService,
@@ -70,6 +71,17 @@ const ROTULOS: Record<string, string> = {
   LIMITE_STOPS_PENDENTES: 'limite de stops pendentes atingido',
   CANCELADA_OCO: 'encerrada pela outra perna do OCO',
   EXPIRADA_DIA: 'expirada no fim da sessão',
+  CANCELADA_MANUAL: 'cancelada a pedido',
+  AGUARDANDO_RISCO: 'Cancelamento aguardando a decisão de risco',
+  SOLICITADO: 'Cancelamento solicitado',
+  DECIDIDO: 'Cancelamento decidido; aguardando a liberação do saldo',
+  CONFIRMADO: 'Cancelamento confirmado',
+  RECUSADO: 'Cancelamento recusado',
+  SEM_SALDO_VIVO: 'a ordem não tem mais saldo',
+  ALVO_DIVERGENTE: 'dados da ordem divergentes',
+  ORIGEM_OCO: 'ordem de grupo OCO',
+  ADMISSAO_NAO_COMPROVADA: 'admissão no livro não comprovada',
+  RISCO_REJEITADO: 'ordem rejeitada pelo risco',
   SESSAO_ENCERRADA: 'sessão do ativo encerrada',
   SESSAO_NAO_ENCERRADA: 'sessão anterior ainda aberta',
 };
@@ -95,6 +107,7 @@ export class Boleta implements OnInit {
   private readonly recarregar = new Subject<void>();
   /** Acompanhamento do último envio; um novo envio ou troca de modo cancela o anterior. */
   private acompanhamento: Subscription | null = null;
+  private acompanhamentoCancelamento: Subscription | null = null;
 
   readonly tickers = TICKERS;
   readonly tipos: readonly Tipo[] = ['LIMIT', 'MARKET', 'STOP', 'STOP_LIMIT'];
@@ -106,6 +119,9 @@ export class Boleta implements OnInit {
   readonly registro = signal<readonly Ordem[] | null>(null);
   readonly lista = signal<readonly Ordem[]>([]);
   readonly erroLista = signal(false);
+  /** Ordens com PUT de cancelamento em voo e erro acessível por ordem. */
+  readonly cancelando = signal<ReadonlySet<string>>(new Set());
+  readonly erroCancelamento = signal<Readonly<Record<string, string>>>({});
 
   readonly simples = this.fb.group({
     ticker: 'ALFA3',
@@ -210,6 +226,53 @@ export class Boleta implements OnInit {
       });
   }
 
+  /** Elegível: sem pedido, fora de grupo OCO e ainda sem estado terminal (a decisão final é do matching). */
+  podeCancelar(o: Ordem): boolean {
+    return (
+      !o.cancelamento &&
+      !o.grupoOco &&
+      ['RECEBIDA', 'RESERVADA', 'AGUARDANDO_GATILHO', 'ABERTA', 'PARCIALMENTE_EXECUTADA'].includes(
+        o.estado,
+      )
+    );
+  }
+
+  cancelar(o: Ordem): void {
+    if (this.cancelando().has(o.id)) return;
+    this.cancelando.update((atual) => new Set(atual).add(o.id));
+    this.erroCancelamento.update(({ [o.id]: _removido, ...resto }) => resto);
+    this.ordens
+      .cancelar(o.id)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() =>
+          this.cancelando.update((atual) => {
+            const novo = new Set(atual);
+            novo.delete(o.id);
+            return novo;
+          }),
+        ),
+      )
+      .subscribe({
+        next: () => {
+          this.atualizarLista();
+          this.acompanharCancelamento();
+        },
+        error: (falha) =>
+          this.erroCancelamento.update((atual) => ({
+            ...atual,
+            [o.id]: mensagemErroCancelamento(falha),
+          })),
+      });
+  }
+
+  /** Texto do estado do pedido; só CONFIRMADO diz que o saldo foi liberado pelo middle-office. */
+  textoCancelamento(o: Ordem): string {
+    const c = o.cancelamento;
+    if (!c) return '';
+    return this.rotulo(c.estado) + (c.motivo ? ` (${this.rotulo(c.motivo)})` : '');
+  }
+
   atualizarLista(): void {
     this.recarregar.next();
   }
@@ -231,6 +294,25 @@ export class Boleta implements OnInit {
       .pipe(
         take(20),
         takeWhile(() => this.registro()?.some((o) => o.estado === 'RECEBIDA') ?? false),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.atualizarLista());
+  }
+
+  /** Consulta a lista a cada segundo (até 30 s) enquanto houver cancelamento sem resultado final. */
+  private acompanharCancelamento(): void {
+    this.acompanhamentoCancelamento?.unsubscribe();
+    this.acompanhamentoCancelamento = timer(1000, 1000)
+      .pipe(
+        take(30),
+        // Os dois primeiros ciclos cobrem a latência da primeira recarga; depois só enquanto houver pendência.
+        takeWhile(
+          (ciclo) =>
+            ciclo < 2 ||
+            this.lista().some(
+              (o) => o.cancelamento && !['CONFIRMADO', 'RECUSADO'].includes(o.cancelamento.estado),
+            ),
+        ),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() => this.atualizarLista());

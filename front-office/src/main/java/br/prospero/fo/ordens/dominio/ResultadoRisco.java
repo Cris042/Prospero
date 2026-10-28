@@ -5,7 +5,7 @@ import java.util.UUID;
 
 /** Resposta do MO para uma intenção (grupoEnvio): RESERVADA sem motivo ou REJEITADA com motivo. */
 public record ResultadoRisco(UUID evento, UUID grupoEnvio, String conta, EstadoOrdem estado, MotivoRejeicao motivo,
-                             java.time.Instant ocorridoEm, String traceparent, String assinatura) {
+                             java.time.Instant ocorridoEm, String traceparent, String assinatura) implements MensagemRisco {
     public ResultadoRisco(UUID evento, UUID grupoEnvio, String conta, EstadoOrdem estado, MotivoRejeicao motivo) {
         this(evento, grupoEnvio, conta, estado, motivo, null, null, null);
     }

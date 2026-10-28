@@ -41,6 +41,7 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
     @Inject
     RepositorioTrajetoriaJpa trajetoria;
     @Inject AvisoOutbox avisoOutbox;
+    @Inject RepositorioCancelamentoJpa cancelamentos;
 
     @Inject
     public RepositorioOrdensJpa(EntityManager em) {
@@ -148,7 +149,9 @@ public class RepositorioOrdensJpa implements RepositorioOrdens {
                 .setParameter("e", r.estado().name())
                 .setParameter("m", r.motivo() == null ? null : r.motivo().name(), String.class)
                 .setParameter("c", r.conta()).setParameter("g", r.grupoEnvio()).executeUpdate();
+        var aguardando = cancelamentos.travarAguardandoRisco(r, alteradas);
         trajetoria.registrarRisco(r);
+        cancelamentos.aposRisco(r, aguardando);
         return alteradas;
     }
 

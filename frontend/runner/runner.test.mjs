@@ -860,3 +860,52 @@ test('planilha de sessão compila encerramento só por APIs, com espera observá
     'SESSAO_ENCERRADA',
   );
 });
+
+test('planilha de cancelamento compila PUT/GET canônicos, recusas e conferência de carteira após CONFIRMADO', async () => {
+  const servicos = Object.fromEntries(
+    ['ordens-a', 'ordens-b', 'risco-a', 'risco-b', 'preparacao-risco'].map((nome) => [
+      nome,
+      { origem: 'http://127.0.0.1:8081' },
+    ]),
+  );
+  const sheets = await readWorkbook(
+    new URL('./exemplos/cancelamento.xlsx', import.meta.url).pathname,
+  );
+  const plan = compile(sheets, { servicos });
+  assert.deepEqual(
+    plan.map((c) => c.name),
+    [
+      'CancelaSemExecucaoERepete',
+      'CancelaParcialPreservaNegocio',
+      'CancelaStopPendente',
+      'CancelaStopLimitAcionadoComSaldo',
+      'RecusaOcoInclusiveSobrevivente',
+    ],
+  );
+  for (const scenario of plan) {
+    const pedidos = scenario.steps.filter((s) => s.path.endsWith('/cancelamento'));
+    assert.ok(pedidos.length > 0, scenario.name);
+    for (const s of pedidos) assert.ok(['GET', 'PUT'].includes(s.method), s.id);
+    for (const s of pedidos.filter((p) => p.method === 'GET' && p.expected.status === 200)) {
+      assert.equal(s.deadline, 15000, `${s.id} espera o resultado do middle-office`);
+    }
+    const ultimo = scenario.steps.at(-1);
+    assert.equal(ultimo.method, 'GET');
+    assert.ok(
+      scenario.steps.filter((s) => s.path === '/api/v1/risco/carteira').length > 0,
+      scenario.name,
+    );
+  }
+  const repete = plan[0];
+  assert.equal(repete.steps.find((s) => s.id === 'CorpoComDados').expected.status, 400);
+  assert.equal(repete.steps.find((s) => s.id === 'OutraConta').expected.status, 404);
+  assert.equal(repete.steps.find((s) => s.id === 'Cancelar').body.constructor, Object);
+  assert.equal(repete.steps.find((s) => s.id === 'Repete').body, undefined);
+  const oco = plan.at(-1);
+  assert.equal(oco.steps.filter((s) => s.expected.status === 422).length, 4);
+  assert.ok(
+    oco.steps
+      .filter((s) => s.expected.status === 422)
+      .every((s) => s.expected.body['/codigo'] === 'ORDEM_OCO_NAO_CANCELAVEL'),
+  );
+});

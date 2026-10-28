@@ -7,5 +7,6 @@ public enum Categoria {
     CONFLITO,
     REGRA_VIOLADA,
     LIMITE_ATINGIDO,
-    PROIBIDO
+    PROIBIDO,
+    INDISPONIVEL
 }

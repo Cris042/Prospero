@@ -1,6 +1,8 @@
 package br.prospero.fo.ordens.actor;
 
+import br.prospero.fo.ordens.dominio.MensagemRisco;
 import br.prospero.fo.ordens.dominio.RepositorioOrdens;
+import br.prospero.fo.ordens.dominio.ResultadoCancelamento;
 import br.prospero.fo.ordens.dominio.ResultadoRisco;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -16,11 +18,21 @@ public class AplicarRiscoActor {
     private static final Logger LOG = Logger.getLogger(AplicarRiscoActor.class);
     private final RepositorioOrdens repositorio;
     private final MeterRegistry metricas;
+    private final AplicarCancelamentoActor cancelamento;
 
     @Inject
-    public AplicarRiscoActor(RepositorioOrdens repositorio, MeterRegistry metricas) {
+    public AplicarRiscoActor(RepositorioOrdens repositorio, MeterRegistry metricas, AplicarCancelamentoActor cancelamento) {
         this.repositorio = repositorio;
         this.metricas = metricas;
+        this.cancelamento = cancelamento;
+    }
+
+    /** Despacha o que chega em risco.resultados.v1: decisão de risco ou resultado de cancelamento. */
+    public boolean aplicar(MensagemRisco mensagem) {
+        return switch (mensagem) {
+            case ResultadoRisco risco -> aplicar(risco);
+            case ResultadoCancelamento resultado -> cancelamento.aplicar(resultado);
+        };
     }
 
     public boolean aplicar(ResultadoRisco resultado) {

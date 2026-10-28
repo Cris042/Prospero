@@ -53,6 +53,20 @@ export type MotivoRejeicao =
   | 'SESSAO_ENCERRADA'
   | 'SESSAO_NAO_ENCERRADA';
 
+export type EstadoCancelamento =
+  'AGUARDANDO_RISCO' | 'SOLICITADO' | 'DECIDIDO' | 'CONFIRMADO' | 'RECUSADO';
+
+/** Cancelamento manual (RF10): 202 só confirma a persistência; o saldo é liberado pelo middle-office. */
+export interface ResumoCancelamento {
+  readonly estado: EstadoCancelamento;
+  readonly decisao: string | null;
+  readonly motivo: string | null;
+}
+
+export interface OperacaoCancelamento extends ResumoCancelamento {
+  readonly ordem: string;
+}
+
 export interface Ordem {
   readonly id: string;
   readonly ticker: string;
@@ -81,6 +95,7 @@ export interface Ordem {
   readonly quantidadeReduzida?: number;
   readonly dataSessao: string;
   readonly recebidaEm: string;
+  readonly cancelamento?: ResumoCancelamento | null;
 }
 
 export interface Pagina {
@@ -109,6 +124,34 @@ const MENSAGENS: Record<string, string> = {
   JSON_INVALIDO: 'Dados da ordem em formato inválido.',
   CORPO_INVALIDO: 'Preencha todos os campos obrigatórios.',
 };
+
+const MENSAGENS_CANCELAMENTO: Record<string, string> = {
+  ORDEM_OCO_NAO_CANCELAVEL: 'Ordens de um grupo OCO não podem ser canceladas manualmente.',
+  ORDEM_NAO_ENCONTRADA: 'Ordem não encontrada para esta conta.',
+  CANCELAMENTO_INDISPONIVEL:
+    'Cancelamento temporariamente indisponível. Tente novamente em instantes.',
+  JSON_INVALIDO: 'Pedido de cancelamento inválido.',
+  CORPO_CANCELAMENTO_INVALIDO: 'Pedido de cancelamento inválido.',
+};
+
+/** Mensagem do cancelamento; a repetição do PUT é segura (devolve a mesma operação). */
+export function mensagemErroCancelamento(erro: unknown): string {
+  if (erro instanceof HttpErrorResponse && (erro.status === 401 || erro.status === 403)) {
+    return 'Credencial da conta demo inválida ou expirada. Rode python3 scripts/preparar-ambiente.py e recrie o frontend.';
+  }
+  if (
+    erro instanceof HttpErrorResponse &&
+    erro.status > 0 &&
+    erro.status < 600 &&
+    erro.status !== 502
+  ) {
+    const codigo = (erro.error as { codigo?: string } | null)?.codigo;
+    return (
+      (codigo && MENSAGENS_CANCELAMENTO[codigo]) ?? 'Não foi possível solicitar o cancelamento.'
+    );
+  }
+  return 'Falha de comunicação. Tente cancelar de novo: a repetição não duplica o pedido.';
+}
 
 /** Aceita vírgula decimal (pt-BR) convertendo para o decimal textual da API. */
 export function normalizarPreco(texto: string): string {
@@ -173,6 +216,13 @@ export class OrdensService {
 
   listar(limite = 20): Observable<Pagina> {
     return this.http.get<Pagina>(`${BASE}/ordens?limite=${limite}`).pipe(timeout(8000));
+  }
+
+  /** PUT sem corpo na URI canônica; repetir devolve a mesma operação. */
+  cancelar(ordem: string): Observable<OperacaoCancelamento> {
+    return this.http
+      .put<OperacaoCancelamento>(`${BASE}/ordens/${ordem}/cancelamento`, null)
+      .pipe(timeout(8000));
   }
 
   private chave(chave: string): HttpHeaders {

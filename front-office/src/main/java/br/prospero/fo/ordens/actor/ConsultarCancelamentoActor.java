@@ -1,0 +1,32 @@
+package br.prospero.fo.ordens.actor;
+
+import br.prospero.fo.comum.dominio.Categoria;
+import br.prospero.fo.comum.dominio.RegraNegocioException;
+import br.prospero.fo.ordens.dominio.OperacaoCancelamento;
+import br.prospero.fo.ordens.dominio.RepositorioCancelamento;
+import br.prospero.fo.ordens.dominio.RepositorioOrdens;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import java.util.UUID;
+
+/** Consulta da operação de cancelamento; ordem de outra conta, inexistente ou sem pedido são indistinguíveis (404). */
+@ApplicationScoped
+public class ConsultarCancelamentoActor {
+    private final RepositorioCancelamento cancelamentos;
+    private final RepositorioOrdens ordens;
+
+    @Inject
+    public ConsultarCancelamentoActor(RepositorioCancelamento cancelamentos, RepositorioOrdens ordens) {
+        this.cancelamentos = cancelamentos;
+        this.ordens = ordens;
+    }
+
+    public OperacaoCancelamento buscar(String conta, UUID ordem) {
+        if (conta == null || !ordens.contaExiste(conta)) {
+            throw new RegraNegocioException(Categoria.PROIBIDO, "CONTA_DESCONHECIDA", "Token sem conta cadastrada.");
+        }
+        return cancelamentos.buscar(conta, ordem).orElseThrow(() -> new RegraNegocioException(
+                Categoria.NAO_ENCONTRADO, "CANCELAMENTO_NAO_ENCONTRADO", "Recurso não encontrado para esta conta."));
+    }
+}

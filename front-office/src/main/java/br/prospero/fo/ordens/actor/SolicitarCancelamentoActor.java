@@ -1,0 +1,92 @@
+package br.prospero.fo.ordens.actor;
+
+import br.prospero.fo.comum.dominio.Categoria;
+import br.prospero.fo.comum.dominio.MensagemSaida;
+import br.prospero.fo.comum.dominio.RegraNegocioException;
+import br.prospero.fo.comum.kafka.Rastreio;
+import br.prospero.fo.ordens.dominio.EstadoCancelamento;
+import br.prospero.fo.ordens.dominio.EstadoOrdem;
+import br.prospero.fo.ordens.dominio.OperacaoCancelamento;
+import br.prospero.fo.ordens.dominio.Ordem;
+import br.prospero.fo.ordens.dominio.RepositorioCancelamento;
+import br.prospero.fo.ordens.dominio.RepositorioOrdens;
+import br.prospero.fo.ordens.helper.EnvelopeRisco;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.opentelemetry.api.trace.Span;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.UUID;
+
+/**
+ * Pedido de cancelamento manual (ADR-013, RF10c): uma operação persistida por ordem. Ordem ainda sem decisão do risco
+ * fica AGUARDANDO_RISCO (D1); a partir da decisão, a solicitação segue na outbox. Repetição devolve a mesma operação.
+ */
+@ApplicationScoped
+public class SolicitarCancelamentoActor {
+    public record Solicitacao(OperacaoCancelamento operacao, boolean repetida) {
+    }
+
+    private final RepositorioCancelamento cancelamentos;
+    private final RepositorioOrdens ordens;
+    private final Clock relogio;
+    private final MeterRegistry metricas;
+    private final boolean habilitada;
+
+    @Inject
+    public SolicitarCancelamentoActor(RepositorioCancelamento cancelamentos, RepositorioOrdens ordens, Clock relogio,
+                                      MeterRegistry metricas,
+                                      @ConfigProperty(name = "prospero.cancelamento.emissao-habilitada",
+                                              defaultValue = "false") boolean habilitada) {
+        this.cancelamentos = cancelamentos;
+        this.ordens = ordens;
+        this.relogio = relogio;
+        this.metricas = metricas;
+        this.habilitada = habilitada;
+    }
+
+    @Transactional
+    public Solicitacao solicitar(String conta, UUID id) {
+        if (conta == null || !ordens.contaExiste(conta)) {
+            throw new RegraNegocioException(Categoria.PROIBIDO, "CONTA_DESCONHECIDA", "Token sem conta cadastrada.");
+        }
+        Ordem ordem = cancelamentos.travarOrdem(conta, id).orElseThrow(() -> new RegraNegocioException(
+                Categoria.NAO_ENCONTRADO, "ORDEM_NAO_ENCONTRADA", "Recurso não encontrado para esta conta."));
+        var existente = cancelamentos.buscar(conta, id);
+        if (existente.isPresent()) {
+            contar("repetida");
+            return new Solicitacao(existente.get(), true);
+        }
+        if (ordem.grupoOco() != null) {
+            contar("recusada_oco");
+            throw new RegraNegocioException(Categoria.REGRA_VIOLADA, "ORDEM_OCO_NAO_CANCELAVEL",
+                    "Ordem de grupo OCO não pode ser cancelada manualmente.");
+        }
+        if (!habilitada) {
+            contar("indisponivel");
+            throw new RegraNegocioException(Categoria.INDISPONIVEL, "CANCELAMENTO_INDISPONIVEL",
+                    "Cancelamento manual temporariamente indisponível.");
+        }
+        Instant agora = relogio.instant();
+        OperacaoCancelamento criada = ordem.estado() == EstadoOrdem.RECEBIDA
+                ? cancelamentos.registrar(ordem, EstadoCancelamento.AGUARDANDO_RISCO, null, agora)
+                : cancelamentos.registrar(ordem, EstadoCancelamento.SOLICITADO, comando(ordem, agora), agora);
+        contar(criada.estado().name().toLowerCase());
+        return new Solicitacao(criada, false);
+    }
+
+    private static MensagemSaida comando(Ordem ordem, Instant agora) {
+        String traceparent = Rastreio.traceparent(Span.current().getSpanContext());
+        return new MensagemSaida(EnvelopeRisco.idCancelamentoSolicitado(ordem.id()), EnvelopeRisco.TOPICO_COMANDOS,
+                ordem.conta(), EnvelopeRisco.TIPO_CANCELAMENTO_SOLICITADO,
+                EnvelopeRisco.cancelamentoSolicitado(ordem, agora, traceparent), traceparent, agora);
+    }
+
+    private void contar(String resultado) {
+        metricas.counter("prospero.cancelamento.solicitacoes", "resultado", resultado).increment();
+    }
+}

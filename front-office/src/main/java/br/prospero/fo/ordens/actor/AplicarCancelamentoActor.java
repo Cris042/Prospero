@@ -1,0 +1,36 @@
+package br.prospero.fo.ordens.actor;
+
+import br.prospero.fo.ordens.dominio.RepositorioCancelamento;
+import br.prospero.fo.ordens.dominio.ResultadoCancelamento;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
+
+/**
+ * Aplica o RESULTADO_CANCELAMENTO do MO à operação (ADR-013). Repetição, regressão e resultado sem operação não
+ * alteram nada; a liberação da reserva é do MO e este passo nunca toca a ordem.
+ */
+@ApplicationScoped
+public class AplicarCancelamentoActor {
+    private static final Logger LOG = Logger.getLogger(AplicarCancelamentoActor.class);
+    private final RepositorioCancelamento cancelamentos;
+    private final MeterRegistry metricas;
+
+    @Inject
+    public AplicarCancelamentoActor(RepositorioCancelamento cancelamentos, MeterRegistry metricas) {
+        this.cancelamentos = cancelamentos;
+        this.metricas = metricas;
+    }
+
+    public boolean aplicar(ResultadoCancelamento resultado) {
+        boolean aplicado = cancelamentos.aplicarResultado(resultado);
+        metricas.counter("prospero.cancelamento.resultados", "resultado", resultado.confirmado() ? "CONFIRMADO" : "RECUSADO",
+                "aplicado", Boolean.toString(aplicado)).increment();
+        if (!aplicado) {
+            LOG.infof("Resultado de cancelamento sem efeito (repetido, regressivo ou sem operação): ordem=%s evento=%s",
+                    resultado.ordem(), resultado.evento());
+        }
+        return aplicado;
+    }
+}
