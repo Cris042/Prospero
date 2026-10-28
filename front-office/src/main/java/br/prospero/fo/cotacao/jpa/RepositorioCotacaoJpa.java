@@ -171,12 +171,26 @@ public class RepositorioCotacaoJpa implements RepositorioCotacao {
 
     private void validarCorrelacao(EventoMatching e) {
         if (e.detalhe() instanceof EventoMatching.SessaoEncerrada marco) {
-            UUID causa = EventoMatching.encerramento(e.ticker(), e.sessao());
-            UUID id = UUID.nameUUIDFromBytes(("matching:" + causa + ":" + marco.expiradas()).getBytes(StandardCharsets.UTF_8));
-            if (!causa.equals(e.causacao()) || !causa.equals(e.correlacao()) || !id.equals(e.id())) throw incoerente("MARCO");
+            validarMarco(e, marco);
             return;
         }
-        EventoMatching.Alvo alvo = switch (e.detalhe()) {
+        EventoMatching.Alvo alvo = alvo(e);
+        // Encerrada v1 pode ser a passiva cujo término é causado pela admissão agressora.
+        if (alvo != null && !e.correlacao().equals(UUID.nameUUIDFromBytes(
+                ("admissao:" + alvo.intencao()).getBytes(StandardCharsets.UTF_8)))) throw incoerente("CORRELACAO");
+        if (e.versao() == 4 && !EventoMatching.encerramento(e.ticker(), e.sessao()).equals(e.causacao())) {
+            throw incoerente("CAUSACAO");
+        }
+    }
+
+    private static void validarMarco(EventoMatching e, EventoMatching.SessaoEncerrada marco) {
+        UUID causa = EventoMatching.encerramento(e.ticker(), e.sessao());
+        UUID id = UUID.nameUUIDFromBytes(("matching:" + causa + ":" + marco.expiradas()).getBytes(StandardCharsets.UTF_8));
+        if (!causa.equals(e.causacao()) || !causa.equals(e.correlacao()) || !id.equals(e.id())) throw incoerente("MARCO");
+    }
+
+    private static EventoMatching.Alvo alvo(EventoMatching e) {
+        return switch (e.detalhe()) {
             case EventoMatching.Negocio n -> n.agressor() == LadoOrdem.COMPRA ? n.compra() : n.venda();
             case EventoMatching.Oferta o -> o.alvo();
             case EventoMatching.Aceita a -> a.alvo();
@@ -186,13 +200,8 @@ public class RepositorioCotacaoJpa implements RepositorioCotacao {
             case EventoMatching.Reduzida r -> r.alvo();
             case EventoMatching.Encerrada f -> e.causacao() != null ? f.alvo() : null;
             case EventoMatching.SessaoEncerrada ignorado -> null;
+            case EventoMatching.CancelamentoDecidido d -> d.alvo();
         };
-        // Encerrada v1 pode ser a passiva cujo término é causado pela admissão agressora.
-        if (alvo != null && !e.correlacao().equals(UUID.nameUUIDFromBytes(
-                ("admissao:" + alvo.intencao()).getBytes(StandardCharsets.UTF_8)))) throw incoerente("CORRELACAO");
-        if (e.versao() == 4 && !EventoMatching.encerramento(e.ticker(), e.sessao()).equals(e.causacao())) {
-            throw incoerente("CAUSACAO");
-        }
     }
 
     private Optional<Object[]> oferta(UUID ordem) {

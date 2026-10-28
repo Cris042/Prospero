@@ -170,3 +170,7 @@ Na CI descartável, worker/relay BO ficam inicialmente suspensos pela propriedad
 ## RF09 — confirmação de contabilização e trace
 
 Pelo [ADR-017](../adrs/ADR-017-trajetoria-tempo-real.md), o BO publica `NEGOCIO_CONTABILIZADO` em `acompanhamento.eventos.v1` pela outbox existente, na mesma transação de razão/posição/checkpoint. O FO projeta apenas confirmação efetiva, sem consulta HTTP/banco alheio ou inferência a partir do ME. Contexto de trace é extraído no consumo e preservado para publicação e D+2; Jaeger não é histórico. Migração aditiva conserva bases e fatos anteriores sem inventar confirmação retroativa. Estado e evidências da implementação no roadmap.
+
+## Leitor do cancelamento manual — RF10c2
+
+O BO valida a coerência do envelope v5 ([ADR-013](../adrs/ADR-013-matching-execucao.md#catálogo-v5-e-leitores-de-cancelamento--rf10c2-2026-10-27)) e ignora `ORDEM_ENCERRADA CANCELADA_MANUAL` e `CANCELAMENTO_DECIDIDO`: cancelamento não gera posição, razão nem liquidação.

@@ -1,5 +1,6 @@
 package br.prospero.mo.risco.helper;
 
+import br.prospero.mo.mensageria.dominio.ParticaoBloqueadaException;
 import br.prospero.mo.risco.dominio.ComandoRisco;
 import br.prospero.mo.risco.dominio.Decisao;
 import br.prospero.mo.risco.dominio.Lado;
@@ -30,6 +31,8 @@ public final class EnvelopeRisco {
     public static final String TOPICO_RESULTADOS = "risco.resultados.v1";
     public static final int TAMANHO_MAXIMO = 16 * 1024;
     private static final ObjectMapper JSON = new ObjectMapper().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+    private static final ObjectMapper JSON_ESTRITO = new ObjectMapper().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+            .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final Set<String> CAMPOS = Set.of("id", "tipo", "versao", "origem", "correlacao", "ocorridoEm",
             "conta", "traceparent", "dados");
     private static final Set<String> CAMPOS_COMANDO = Set.of("ticker", "lado", "precoBase", "ordens");
@@ -46,6 +49,11 @@ public final class EnvelopeRisco {
 
     public static ComandoRisco comando(byte[] bytes) {
         JsonNode raiz = ler(bytes);
+        if (raiz != null && raiz.path("tipo").isTextual() && "CANCELAMENTO_SOLICITADO".equals(raiz.get("tipo").textValue())) {
+            // Perder um pedido de cancelamento seria silencioso (retenção de 7 dias): bloquear, nunca descartar.
+            throw new ParticaoBloqueadaException(solicitacaoCancelamentoValida(bytes)
+                    ? "CANCELAMENTO_SOLICITADO_SEM_COORDENACAO" : "CANCELAMENTO_SOLICITADO_INVALIDO");
+        }
         exigirCampos(raiz, CAMPOS, "envelope");
         if (!"AVALIAR_RISCO".equals(texto(raiz, "tipo")) || !raiz.get("versao").isInt() || (raiz.get("versao").intValue() != 1 && raiz.get("versao").intValue() != 2)) {
             throw new EnvelopeInvalidoException("tipo ou versao");
@@ -69,6 +77,32 @@ public final class EnvelopeRisco {
         }
         return new ComandoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, padrao(dados, "ticker", TICKER),
                 enumeracao(dados, "lado", Lado.class), preco(dados, "precoBase"), pernas, traceparent, sessao);
+    }
+
+    /**
+     * Contrato v1 do CANCELAMENTO_SOLICITADO (ADR-013 RF10c2), lido de forma estrita só para escolher o motivo do
+     * bloqueio: id derivado da ordem, correlação = admissão alvo, campos exatos e sem conteúdo após o JSON.
+     */
+    private static boolean solicitacaoCancelamentoValida(byte[] bytes) {
+        try {
+            JsonNode raiz = JSON_ESTRITO.readTree(new String(bytes, StandardCharsets.UTF_8));
+            exigirCampos(raiz, CAMPOS, "envelope");
+            JsonNode dados = raiz.get("dados");
+            exigirCampos(dados, Set.of("ordem", "intencao", "ticker", "dataSessao"), "dados");
+            UUID ordem = uuid(dados, "ordem");
+            UUID intencao = uuid(dados, "intencao");
+            padrao(dados, "ticker", TICKER);
+            sessao(dados);
+            instante(raiz, "ocorridoEm");
+            if (!raiz.get("traceparent").isNull()) padrao(raiz, "traceparent", TRACEPARENT);
+            padrao(raiz, "conta", CONTA);
+            return raiz.get("versao").isInt() && raiz.get("versao").intValue() == 1
+                    && "front-office".equals(texto(raiz, "origem"))
+                    && uuid(raiz, "id").equals(UUID.nameUUIDFromBytes(("cancelamento-solicitado:" + ordem).getBytes(StandardCharsets.UTF_8)))
+                    && uuid(raiz, "correlacao").equals(UUID.nameUUIDFromBytes(("admissao:" + intencao).getBytes(StandardCharsets.UTF_8)));
+        } catch (java.io.IOException | RuntimeException erro) {
+            return false;
+        }
     }
 
     private static JsonNode ler(byte[] bytes) {

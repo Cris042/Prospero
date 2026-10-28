@@ -23,7 +23,8 @@ PAINEIS = {'ordens': 'prospero-ordens', 'risco': 'prospero-risco',
 ALERTAS = {'ProsperoSemScrape', 'ProsperoProcessamentoIndisponivel',
            'ProsperoMetricaProntidaoAusente', 'ProsperoQuarentenaRecente',
            'ProsperoOutboxPendente', 'ProsperoCreditoAguardando',
-           'ProsperoBoletaNegocioP99Alto', 'ProsperoMatchingP99Alto'}
+           'ProsperoBoletaNegocioP99Alto', 'ProsperoMatchingP99Alto',
+           'ProsperoRiscoConsumoBloqueadoOuDescartado'}
 
 
 class SemRedirecionamento(urllib.request.HTTPRedirectHandler):

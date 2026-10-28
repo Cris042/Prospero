@@ -40,8 +40,9 @@ public final class EnvelopeMatching {
     public static EventoMatching evento(byte[] bytes, String chave) {
         JsonNode r = ler(bytes);
         int versao = r != null && r.path("versao").isInt() ? r.get("versao").intValue() : 0;
-        // v2 (stops), v3 (OCO) e v4 (encerramento) acrescentam a causação raiz; v4 só expira e marca a sessão.
-        boolean v2 = versao >= 2 && versao <= 4, v4 = versao == 4;
+        // v2 (stops), v3 (OCO), v4 (encerramento) e v5 (cancelamento manual) acrescentam a causação raiz; v4 só expira e
+        // marca a sessão; v5 só transporta o terminal CANCELADA_MANUAL e a decisão do cancelamento.
+        boolean v2 = versao >= 2 && versao <= 5, v4 = versao == 4, v5 = versao == 5;
         if (v2) campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados", "causacao");
         else campos(r, "id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "ticker", "dataSessao", "traceparent", "dados");
         if (!r.get("versao").isInt() || (versao != 1 && !v2)
@@ -55,10 +56,11 @@ public final class EnvelopeMatching {
         LocalDate sessao = sessao(r);
         exigirTraceparent(r);
         JsonNode d = r.get("dados");
-        if (v4 != exclusivoDaV4(texto(r, "tipo"), d)) {
+        if (v4 != exclusivoDaV4(texto(r, "tipo"), d) || v5 != exclusivoDaV5(texto(r, "tipo"), d)) {
             throw invalido("versao");
         }
         EventoMatching.Detalhe detalhe = detalhe(texto(r, "tipo"), d, ticker, sessao, versao);
+        if (v5) exigirDerivacaoV5(uuid(r, "id"), uuid(r, "correlacao"), uuid(r, "causacao"), detalhe);
         return new EventoMatching(uuid(r, "id"), uuid(r, "correlacao"), ticker, sessao, assinatura(bytes), detalhe,
                 new EventoMatching.Contexto(v2 ? uuid(r, "causacao") : null, versao, Instant.parse(texto(r, "ocorridoEm")),
                         r.get("traceparent").isNull() ? null : texto(r, "traceparent")));
@@ -103,9 +105,61 @@ public final class EnvelopeMatching {
                 && d.path("motivo").isTextual() && "EXPIRADA_DIA".equals(d.path("motivo").textValue());
     }
 
+    /** v5 transporta somente o terminal CANCELADA_MANUAL e a decisão do cancelamento. */
+    private static boolean exclusivoDaV5(String tipoEvento, JsonNode d) {
+        return "CANCELAMENTO_DECIDIDO".equals(tipoEvento) || "ORDEM_ENCERRADA".equals(tipoEvento) && d != null
+                && d.path("motivo").isTextual() && "CANCELADA_MANUAL".equals(d.path("motivo").textValue());
+    }
+
+    /**
+     * Identidade derivada do comando de cancelamento: causação, correlação (admissão alvo) e ids dos eventos
+     * ({@code matching:<comando>:<índice>}, terminal no índice 0 e decisão por último).
+     */
+    private static void exigirDerivacaoV5(UUID id, UUID correlacao, UUID causacao, EventoMatching.Detalhe detalhe) {
+        var alvo = switch (detalhe) {
+            case EventoMatching.Encerrada f -> f.alvo();
+            case EventoMatching.CancelamentoDecidido d -> d.alvo();
+            default -> throw invalido("versao");
+        };
+        boolean aplicado = detalhe instanceof EventoMatching.CancelamentoDecidido d
+                && d.resultado() == EventoMatching.ResultadoCancelamento.APLICADO;
+        UUID terminal = derivado(causacao, 0);
+        if (!causacao.equals(EventoMatching.comandoCancelamento(alvo.ordem())) || !correlacao.equals(admissao(alvo))
+                || !id.equals(derivado(causacao, aplicado ? 1 : 0))) {
+            throw invalido("identidade do cancelamento");
+        }
+        if (detalhe instanceof EventoMatching.CancelamentoDecidido d && !java.util.Objects.equals(d.terminal(), aplicado ? terminal : null)) {
+            throw invalido("terminal");
+        }
+    }
+
+    private static UUID derivado(UUID comando, int indice) {
+        return UUID.nameUUIDFromBytes(("matching:" + comando + ":" + indice).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static UUID admissao(EventoMatching.Alvo alvo) {
+        return UUID.nameUUIDFromBytes(("admissao:" + alvo.intencao()).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static EventoMatching.CancelamentoDecidido decidido(JsonNode d, boolean v5) {
+        if (!v5) throw invalido("versao");
+        campos(d, "ordem", "intencao", "conta", "resultado", "terminal");
+        EventoMatching.ResultadoCancelamento resultado;
+        try {
+            resultado = EventoMatching.ResultadoCancelamento.valueOf(texto(d, "resultado"));
+        } catch (IllegalArgumentException erro) {
+            throw invalido("resultado");
+        }
+        UUID terminal = d.get("terminal").isNull() ? null : uuid(d, "terminal");
+        if ((resultado == EventoMatching.ResultadoCancelamento.APLICADO) != (terminal != null)) {
+            throw invalido("terminal");
+        }
+        return new EventoMatching.CancelamentoDecidido(alvo(d, ""), resultado, terminal);
+    }
+
     private static EventoMatching.Detalhe detalhe(String tipoEvento, JsonNode d, String ticker, LocalDate sessao,
                                                   int versao) {
-        boolean v2 = versao >= 2 && versao <= 4, v3 = versao == 3, v4 = versao == 4;
+        boolean v2 = versao >= 2 && versao <= 5, v3 = versao == 3, v4 = versao == 4, v5 = versao == 5;
         return switch (tipoEvento) {
             case "ORDEM_ACEITA" -> {
                 campos(d, "ordem", "intencao", "conta", "sequencia");
@@ -132,7 +186,8 @@ public final class EnvelopeMatching {
                 yield new EventoMatching.Oferta(alvo(d, ""), lado(d, "lado"), preco(d), inteiro(d, "restante", 1, 1_000_000));
             }
             case "ORDEM_REJEITADA" -> rejeitada(d, v2);
-            case "ORDEM_ENCERRADA" -> encerrada(d, v2, v3, v4);
+            case "ORDEM_ENCERRADA" -> encerrada(d, v2, v3, v4, v5);
+            case "CANCELAMENTO_DECIDIDO" -> decidido(d, v5);
             case "NEGOCIO" -> negocio(d, ticker, sessao);
             default -> throw invalido("tipo");
         };
@@ -155,16 +210,19 @@ public final class EnvelopeMatching {
         return new EventoMatching.Rejeitada(alvo(d, ""), MotivoRejeicao.valueOf(motivo));
     }
 
-    /** v2 habilita LIMITE_CASCATA, v3 CANCELADA_OCO e v4 EXPIRADA_DIA. */
-    private static EventoMatching.Encerrada encerrada(JsonNode d, boolean v2, boolean v3, boolean v4) {
+    /** v2 habilita LIMITE_CASCATA, v3 CANCELADA_OCO, v4 EXPIRADA_DIA e v5 CANCELADA_MANUAL (saldo retirado positivo). */
+    private static EventoMatching.Encerrada encerrada(JsonNode d, boolean v2, boolean v3, boolean v4, boolean v5) {
         campos(d, "ordem", "intencao", "conta", "motivo", "executada", "cancelada");
         String motivo = texto(d, "motivo");
         if (!ENCERRAMENTOS.contains(motivo) && !(v2 && "LIMITE_CASCATA".equals(motivo))
-                && !(v3 && "CANCELADA_OCO".equals(motivo)) && !(v4 && "EXPIRADA_DIA".equals(motivo))) {
+                && !(v3 && "CANCELADA_OCO".equals(motivo)) && !(v4 && "EXPIRADA_DIA".equals(motivo))
+                && !(v5 && "CANCELADA_MANUAL".equals(motivo))) {
             throw invalido("motivo");
         }
-        return new EventoMatching.Encerrada(alvo(d, ""), motivo, inteiro(d, "executada", 0, 1_000_000),
-                inteiro(d, "cancelada", 0, 1_000_000));
+        long executada = inteiro(d, "executada", 0, 1_000_000);
+        long cancelada = inteiro(d, "cancelada", v5 ? 1 : 0, 1_000_000);
+        if (v5 && executada + cancelada > 1_000_000) throw invalido("cancelada");
+        return new EventoMatching.Encerrada(alvo(d, ""), motivo, executada, cancelada);
     }
 
     private static EventoMatching.Negocio negocio(JsonNode d, String ticker, LocalDate sessao) {

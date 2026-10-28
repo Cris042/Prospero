@@ -27,6 +27,8 @@ public final class ProjetarCotacao {
             case EventoMatching.Rejeitada ignorado -> List.of();
             case EventoMatching.StopPendente ignorado -> List.of();
             case EventoMatching.StopAcionado ignorado -> List.of();
+            // A decisão do cancelamento não move o livro nem o último preço; o terminal (Encerrada) é que retira.
+            case EventoMatching.CancelamentoDecidido ignorado -> List.of();
         };
     }
 }
