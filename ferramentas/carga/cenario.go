@@ -133,7 +133,8 @@ func (s *Server) credencialLeitura(p Plan, agora time.Time) (string, error) {
 	if c.escrita() && m.Sub != contaEscrita {
 		return "", errConfig
 	}
-	conhecida := m.Sub == "CONTA-001" || m.Sub == "CONTA-002" || m.Sub == "CONTA-003" || m.Sub == "CONTA-004"
+	conhecida := m.Sub == "CONTA-001" || m.Sub == "CONTA-002" || m.Sub == "CONTA-003" || m.Sub == "CONTA-004" ||
+		m.Sub == "CONTA-005"
 	if (c.conta && !conhecida) || (m.Sub != "" && !conhecida) {
 		return "", errConfig
 	}

@@ -39,7 +39,7 @@ public final class EnvelopeLiquidacao {
             "traceparent", "dados");
     private static final Set<String> DADOS = Set.of("negocio", "lado", "conta", "recurso", "ticker", "valor",
             "dataLiquidacao");
-    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004");
+    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005");
     private static final Set<String> ATIVOS = Set.of("ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3");
     private static final Pattern NEGOCIO = Pattern.compile("[A-Z0-9]{1,8}-\\d{4}-\\d{2}-\\d{2}-[1-9][0-9]{0,17}");
     private static final Pattern CAIXA = Pattern.compile("(0|[1-9][0-9]{0,15})\\.[0-9]{2}");

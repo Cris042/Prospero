@@ -113,7 +113,9 @@ class MatchingProjecaoTest {
                 "intencao":"%s","conta":"CONTA-004","sequencia":1}}
                 """.formatted(UUID.randomUUID(), UUID.randomUUID(), o.id(), o.grupoEnvio());
         assertInstanceOf(EventoMatching.Aceita.class, EnvelopeMatching.evento(evento.getBytes(StandardCharsets.UTF_8), "ALFA3").detalhe());
+        assertInstanceOf(EventoMatching.Aceita.class, EnvelopeMatching.evento(
+                evento.replace("CONTA-004", "CONTA-005").getBytes(StandardCharsets.UTF_8), "ALFA3").detalhe());
         assertThrows(MensagemInvalidaException.class, () -> EnvelopeMatching.evento(
-                evento.replace("CONTA-004", "CONTA-005").getBytes(StandardCharsets.UTF_8), "ALFA3"));
+                evento.replace("CONTA-004", "CONTA-999").getBytes(StandardCharsets.UTF_8), "ALFA3"));
     }
 }

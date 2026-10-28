@@ -27,7 +27,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 @Produces(MediaType.APPLICATION_JSON)
 @RolesAllowed("risco:preparacao")
 @SecurityRequirement(name = "jwt")
-@Tag(name = "Preparação de risco", description = "Carteiras sintéticas de teste (CONTA-002/003); desabilitada fora do "
+@Tag(name = "Preparação de risco", description = "Carteiras sintéticas de teste (CONTA-002/003/005); desabilitada fora do "
         + "ambiente local.")
 public class PreparacaoRiscoResource {
     private final CarteiraActor actor;

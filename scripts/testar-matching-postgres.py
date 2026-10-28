@@ -27,6 +27,7 @@ def main():
         ("back-office", "BO", "bo", "RacionalPostgresIT"),
         ("back-office", "BO", "bo", "RazaoPostgresIT"),
         ("back-office", "BO", "bo", "LiquidacaoPostgresIT"),
+        ("back-office", "BO", "bo", "ContaMedicaoPostgresIT"),
         ("matching-engine", "ME", "me", "CheckpointPostgresIT"),
         ("middle-office", "MO", "mo", "AvisoOutboxPostgresIT"),
         ("middle-office", "MO", "mo", "PublicadorOutboxPostgresIT"),
@@ -45,6 +46,7 @@ def main():
         ("middle-office", "MO", "mo", "EncerramentoQaPostgresIT"),
         ("middle-office", "MO", "mo", "EncerramentoSessaoQaPostgresIT"),
         ("middle-office", "MO", "mo", "LiquidacaoPostgresIT"),
+        ("middle-office", "MO", "mo", "ContaMedicaoPostgresIT"),
         ("front-office", "FO", "fo", "AvisoOutboxPostgresIT"),
         ("front-office", "FO", "fo", "PublicadorOutboxPostgresIT"),
         ("front-office", "FO", "fo", "TrajetoriaPostgresIT"),
@@ -54,6 +56,7 @@ def main():
         ("front-office", "FO", "fo", "EncerramentoQaPostgresIT"),
         ("front-office", "FO", "fo", "CancelamentoManualPostgresIT"),
         ("front-office", "FO", "fo", "CancelamentoOperacaoPostgresIT"),
+        ("front-office", "FO", "fo", "ContaMedicaoPostgresIT"),
     ]:
         # Nome de variável em --env: o segredo viaja só no ambiente, sem entrar no argumento/log.
         temporario = "matching_it_" + uuid.uuid4().hex

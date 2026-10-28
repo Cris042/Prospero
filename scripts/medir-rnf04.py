@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Medição do RNF04 (RF05d, V01-2): boleta → negócio e núcleo do matching, sob carga local documentada.
 
-Contraparte já em repouso (CONTA-003) e agressores Limit IOC de 1 unidade (CONTA-002) enviados em sequência, cada um
+Contraparte já em repouso (CONTA-003) e agressores Limit IOC de 1 unidade (CONTA-005, a única conta medida; CONTA-002
+só aquece) enviados em sequência, cada um
 só depois do terminal do anterior: mede processamento, não espera por contraparte nem fila. Os percentis saem da
 diferença dos histogramas Prometheus antes/depois da fase medida (aquecimento excluído) e são limites superiores do
 bucket. O veredito compara o p99 com a meta; em ambiente compartilhado (`--contexto ci-hospedado`) é só indicativo.
-Atenção: redefine as carteiras de teste CONTA-002/003 (preparação local), apagando o estado delas.
+Atenção: redefine as carteiras de teste CONTA-002/003/005 (preparação local), apagando o estado delas.
 """
 import argparse
 import base64
@@ -34,10 +35,13 @@ LE = re.compile(r'(?:^|,)\s*le="([^"]*)"')
 TETO_METRICAS = 8 * 1024 * 1024
 MINIMO_AMOSTRAS_DEDICADO = 1000
 TETO_ORDENS_POR_CONTA = 1000
-# Só contas preparáveis no MO compram: CONTA-001 é a conta da tela (ADR-012), CONTA-003 é a vendedora
-# e CONTA-004 é o robô formador, não preparável (ADR-013).
-COMPRADORES_PREPARAVEIS = frozenset({"CONTA-002"})
-COMPRADORES_PADRAO = "CONTA-002"
+# A CONTA-005 é a única compradora medida (medição dedicada: 1000 amostras, teto de 1000 ordens por conta e sessão);
+# a CONTA-002 só aquece. CONTA-001 é a conta da tela (ADR-012), CONTA-003 é a vendedora e CONTA-004 é o robô formador
+# (ADR-013): nenhuma delas é compradora medida.
+COMPRADOR_MEDIDO_PADRAO = "CONTA-005"
+COMPRADORES_MEDIDOS = frozenset({"CONTA-005"})
+COMPRADOR_AQUECIMENTO_PADRAO = "CONTA-002"
+COMPRADORES_AQUECIMENTO = frozenset({"CONTA-002"})
 TRACES_AMOSTRADOS = 100
 # Span de entrada de cada serviço na trajetória de uma ordem (mesmos nomes de testar-trajetoria.py).
 SALTOS = {"front-office": "POST /api/v1/ordens", "middle-office": "risco.avaliar",
@@ -111,16 +115,22 @@ def classificar(p99, meta, contexto="dedicado"):
     return prefixo + ("cumprido" if p99 < meta else "não cumprido")
 
 
-def validar_plano(amostras, aquecimento, compradores, contexto):
-    """Recusa planos que não permitem veredito: poucas amostras (dedicado) ou estouro do teto de ordens por conta."""
+def validar_plano(amostras, aquecimento, comprador, comprador_aquecimento, contexto):
+    """Recusa planos sem veredito: comprador medido fora da lista, poucas amostras (dedicado) ou teto por conta estourado.
+
+    Cada conta tem o próprio teto: a medida recebe só as amostras e o aquecedor só o aquecimento.
+    """
+    if comprador not in COMPRADORES_MEDIDOS:
+        raise SystemExit(f"Comprador medido deve ser {sorted(COMPRADORES_MEDIDOS)}; recebido {comprador}.")
+    if comprador_aquecimento not in COMPRADORES_AQUECIMENTO:
+        raise SystemExit(f"Comprador de aquecimento deve ser {sorted(COMPRADORES_AQUECIMENTO)}; recebido {comprador_aquecimento}.")
     if contexto == "dedicado" and amostras < MINIMO_AMOSTRAS_DEDICADO:
         raise SystemExit(f"Modo dedicado exige pelo menos {MINIMO_AMOSTRAS_DEDICADO} amostras; recebido {amostras}.")
-    if amostras < 1 or not 0 <= aquecimento <= 150 or not compradores:
-        raise SystemExit("Amostras >= 1, aquecimento 0–150 e ao menos um comprador.")
-    por_conta = math.ceil((amostras + aquecimento) / len(compradores))
-    if por_conta > TETO_ORDENS_POR_CONTA:
-        raise SystemExit(f"{por_conta} ordens por comprador excedem o teto de {TETO_ORDENS_POR_CONTA} por conta e sessão.")
-    return por_conta
+    if amostras < 1 or not 0 <= aquecimento <= 150:
+        raise SystemExit("Amostras >= 1 e aquecimento 0–150.")
+    if amostras > TETO_ORDENS_POR_CONTA:
+        raise SystemExit(f"{amostras} ordens da conta medida excedem o teto de {TETO_ORDENS_POR_CONTA} por conta e sessão.")
+    return {"medido": amostras, "aquecimento": aquecimento}
 
 
 def duracoes_por_salto(conteudo, trace_id):
@@ -238,17 +248,17 @@ def verificar_orcamento(origem, token, necessarias):
 
 
 def executar(args):
-    compradores = [c.strip() for c in args.compradores.split(",") if c.strip()]
-    if any(c not in COMPRADORES_PREPARAVEIS for c in compradores) or len(set(compradores)) != len(compradores):
-        raise SystemExit(f"Compradores devem ser contas distintas e preparáveis no MO: {sorted(COMPRADORES_PREPARAVEIS)}.")
-    por_conta = validar_plano(args.amostras, args.aquecimento, compradores, args.contexto)
-    total = args.amostras + args.aquecimento
+    plano = validar_plano(args.amostras, args.aquecimento, args.comprador, args.comprador_aquecimento, args.contexto)
+    total = plano["medido"] + plano["aquecimento"]
     vendedor = mercado.token("ordens", 900, "CONTA-003")
-    tokens = {c: mercado.token("ordens", 900, c) for c in compradores}
-    orcamento = {"compradorExistentes": {c: verificar_orcamento(args.origem, tokens[c], por_conta) for c in compradores},
+    tokens = {c: mercado.token("ordens", 900, c) for c in (args.comprador, args.comprador_aquecimento)}
+    orcamento = {"medidoExistentes": verificar_orcamento(args.origem, tokens[args.comprador], plano["medido"]),
+                 "aquecimentoExistentes": (verificar_orcamento(args.origem, tokens[args.comprador_aquecimento], plano["aquecimento"])
+                                           if plano["aquecimento"] else None),
                  "vendedorExistentes": verificar_orcamento(args.origem, vendedor, 1),
-                 "compradorNecessarias": por_conta, "vendedorNecessarias": 1, "limite": TETO_ORDENS_POR_CONTA}
-    for c in compradores:
+                 "medidoNecessarias": plano["medido"], "aquecimentoNecessarias": plano["aquecimento"],
+                 "vendedorNecessarias": 1, "limite": TETO_ORDENS_POR_CONTA}
+    for c in (args.comprador, args.comprador_aquecimento):
         mercado.preparar_carteira(args.origem_mo, c, "1000000.00", {}, prazo=60)
     mercado.preparar_carteira(args.origem_mo, "CONTA-003", "0.00", {args.ticker: total}, prazo=60)
 
@@ -261,20 +271,22 @@ def executar(args):
     mercado.aguardar_campos(args.origem, vendedor, f"/api/v1/ordens/{oferta['id']}", {"estado": "ABERTA"})
     nomes = list(METAS)
     origens = {nomes[0]: args.origem, nomes[1]: args.origem_me}
+    # Aquecimento com a conta aquecedora; a fase medida (só a conta medida) começa depois da primeira amostra medida.
+    sequencia = ([(False, tokens[args.comprador_aquecimento])] * plano["aquecimento"]
+                 + [(True, tokens[args.comprador])] * plano["medido"])
     antes, cliente, traces = None, [], []
-    for i in range(total):
-        if i == args.aquecimento:
+    for i, (medida, token) in enumerate(sequencia):
+        if medida and antes is None:
             antes = {n: buckets(origens[n], n) for n in nomes}
-        conta = compradores[i % len(compradores)]
         extras, trace = None, None
-        if args.origem_jaeger and i >= total - TRACES_AMOSTRADOS:
+        if medida and args.origem_jaeger and i >= total - TRACES_AMOSTRADOS:
             trace = uuid.uuid4().hex
             extras = {"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"}
         inicio = time.perf_counter()
-        ordem = enviar(tokens[conta], {"ticker": args.ticker, "lado": "COMPRA", "tipo": "LIMIT", "validade": "IOC",
-                                       "quantidade": 1, "precoLimite": args.preco}, extras)
-        mercado.aguardar_campos(args.origem, tokens[conta], f"/api/v1/ordens/{ordem['id']}", {"estado": "EXECUTADA"})
-        if i >= args.aquecimento:
+        ordem = enviar(token, {"ticker": args.ticker, "lado": "COMPRA", "tipo": "LIMIT", "validade": "IOC",
+                               "quantidade": 1, "precoLimite": args.preco}, extras)
+        mercado.aguardar_campos(args.origem, token, f"/api/v1/ordens/{ordem['id']}", {"estado": "EXECUTADA"})
+        if medida:
             cliente.append(time.perf_counter() - inicio)
         if trace:
             traces.append(trace)
@@ -320,15 +332,17 @@ def main(argv=None):
     parser.add_argument("--preco", default="10.00")
     parser.add_argument("--origem-jaeger", type=origem_http, default=None,
                         help="Jaeger (opcional): atribui a latência por salto em até 100 traces da fase medida")
-    parser.add_argument("--compradores", default=COMPRADORES_PADRAO,
-                        help="contas compradoras em rodízio (teto de 1000 ordens por conta e sessão)")
+    parser.add_argument("--comprador", default=COMPRADOR_MEDIDO_PADRAO,
+                        help="conta compradora medida (somente CONTA-005; teto de 1000 ordens por conta e sessão)")
+    parser.add_argument("--comprador-aquecimento", default=COMPRADOR_AQUECIMENTO_PADRAO,
+                        help="conta que só aquece antes da fase medida (somente CONTA-002)")
     parser.add_argument("--amostras", type=int, default=MINIMO_AMOSTRAS_DEDICADO)
     parser.add_argument("--aquecimento", type=int, default=30)
     parser.add_argument("--contexto", choices=["dedicado", "ci-hospedado"], default="dedicado",
                         help="ambiente da execução; em ci-hospedado o veredito é só indicativo")
     args = parser.parse_args(argv)
     try:
-        validar_plano(args.amostras, args.aquecimento, [c for c in args.compradores.split(",") if c.strip()], args.contexto)
+        validar_plano(args.amostras, args.aquecimento, args.comprador, args.comprador_aquecimento, args.contexto)
     except SystemExit as erro:
         parser.error(str(erro))
     print(json.dumps(executar(args), ensure_ascii=False, indent=2, sort_keys=True))

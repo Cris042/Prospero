@@ -29,7 +29,7 @@ public final class EnvelopeMatching {
     private static final Set<String> DADOS = Set.of("ordem", "ticker", "lado", "tipo", "validade", "quantidade", "precoLimite", "precoMaximo", "dataSessao");
     private static final Set<String> DADOS_STOP = Set.of("ordem", "ticker", "lado", "tipo", "validade", "quantidade", "precoLimite", "precoMaximo", "precoGatilho", "dataSessao");
     private static final Set<String> ATIVOS = Set.of("ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3");
-    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004");
+    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005");
     private static final String DATA = "[0-9]{4}-[0-9]{2}-[0-9]{2}";
     private static final String TRACEPARENT = "00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}";
     private static final int QUANTIDADE_MAXIMA = 1_000_000;

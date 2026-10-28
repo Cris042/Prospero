@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
 /** Conta sempre do token; leitura só com a projeção em dia, conferida antes e depois do snapshot. */
 @ApplicationScoped
 public class ConsultarRazaoActor {
-    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004");
+    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005");
     private static final Pattern NEGOCIO = Pattern.compile("(ALFA3|BETA3|GAMA3|DELTA3|OMEGA3)-[0-9]{4}-[0-9]{2}-[0-9]{2}-[1-9][0-9]{0,9}");
     private static final int LIMITE_PADRAO = 50;
     private static final int LIMITE_MAXIMO = 100;

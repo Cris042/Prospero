@@ -18,7 +18,7 @@ public class ConsultarPosicoesActor {
     }
 
     public PosicoesResponseDTO consultar(String conta) {
-        if (!Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004").contains(conta == null ? "" : conta)) {
+        if (!Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005").contains(conta == null ? "" : conta)) {
             throw new AcessoPosicoesException();
         }
         if (!situacao.emDia()) throw new PosicoesIndisponiveisException();

@@ -20,8 +20,8 @@ import java.util.Set;
 /** Consulta da carteira da própria conta e preparação local de carteiras de teste (RF04b, ADR-012). */
 @ApplicationScoped
 public class CarteiraActor {
-    /** Somente contas de teste: a conta da tela (CONTA-001) nunca é redefinida. */
-    static final Set<String> PREPARAVEIS = Set.of("CONTA-002", "CONTA-003");
+    /** Somente contas de teste e de medição: a conta da tela (CONTA-001) e o robô (CONTA-004) nunca são redefinidos. */
+    static final Set<String> PREPARAVEIS = Set.of("CONTA-002", "CONTA-003", "CONTA-005");
     private static final Logger LOG = Logger.getLogger(CarteiraActor.class);
     private final RepositorioRisco repositorio;
     private final boolean preparacaoHabilitada;
@@ -55,7 +55,7 @@ public class CarteiraActor {
         }
         if (!PREPARAVEIS.contains(conta)) {
             throw new RegraNegocioException(Categoria.PROIBIDO, "CONTA_NAO_PREPARAVEL",
-                    "Somente as contas de teste CONTA-002 e CONTA-003 podem ser preparadas.");
+                    "Somente as contas de teste CONTA-002, CONTA-003 e CONTA-005 podem ser preparadas.");
         }
         BigDecimal saldo = EntradaCarteira.saldo(pedido.saldo());
         Map<String, Long> custodia = EntradaCarteira.custodia(pedido.custodia(), ticker ->

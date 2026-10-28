@@ -7,12 +7,15 @@ import br.prospero.mo.liquidacao.jpa.RepositorioLiquidacaoJpa;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.util.Set;
+
 @ApplicationScoped
 public class ConsultarCreditoActor {
     @Inject RepositorioLiquidacaoJpa repositorio;
+    private static final Set<String> CONTAS = Set.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005");
 
     public CreditosDTO consultar(String conta, String negocio) {
-        if (conta == null || !conta.matches("CONTA-00[1-4]")) {
+        if (conta == null || !CONTAS.contains(conta)) {
             throw new RegraNegocioException(Categoria.PROIBIDO, "ACESSO_NEGADO", "Conta não permitida.");
         }
         if (negocio == null || !negocio.matches(
