@@ -62,14 +62,21 @@ def repetido(cabecalhos):
 
 
 def classificar_desfecho(estado, operacao):
-    """Só dois desfechos são aceitos para a corrida cancelamento × agressão; qualquer outra combinação recusa."""
+    """Só dois desfechos são aceitos para a corrida cancelamento × agressão; qualquer outra combinação recusa.
+
+    A recusa SEM_SALDO_VIVO vem do ME (decisao preenchida) ou, se o MO já viu a reserva encerrada, da regra local do
+    MO (ADR-013), que não envia o comando ao ME e deixa decisao nula.
+    """
     if (estado == 'CANCELADA' and operacao.get('estado') == 'CONFIRMADO' and operacao.get('decisao') == 'APLICADO'
             and operacao.get('motivo') is None):
         return 'CANCELADA'
     if (estado == 'EXECUTADA' and operacao.get('estado') == 'RECUSADO'
-            and operacao.get('decisao') == 'SEM_SALDO_VIVO' and operacao.get('motivo') == 'SEM_SALDO_VIVO'):
+            and operacao.get('decisao') in (None, 'SEM_SALDO_VIVO') and operacao.get('motivo') == 'SEM_SALDO_VIVO'):
         return 'EXECUTADA'
-    raise ValueError('desfecho do cancelamento incoerente')
+    # Só enums do contrato na mensagem: ajuda o diagnóstico na CI sem expor ids ou saldos.
+    raise ValueError('desfecho do cancelamento incoerente: ordem=' + str(estado) + ' operacao='
+                     + str(operacao.get('estado')) + '/' + str(operacao.get('decisao')) + '/'
+                     + str(operacao.get('motivo')))
 
 
 def _valor(texto):

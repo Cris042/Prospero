@@ -40,6 +40,9 @@ class Desfecho(unittest.TestCase):
         # Agressão chegou antes: o matching recusa com SEM_SALDO_VIVO e a ordem termina EXECUTADA.
         self.assertEqual(canc.classificar_desfecho('EXECUTADA', {'estado': 'RECUSADO', 'decisao': 'SEM_SALDO_VIVO',
                                                                 'motivo': 'SEM_SALDO_VIVO'}), 'EXECUTADA')
+        # Ordem já encerrada no MO: a regra local recusa sem consultar o ME, então decisao fica nula.
+        self.assertEqual(canc.classificar_desfecho('EXECUTADA', {'estado': 'RECUSADO', 'decisao': None,
+                                                                'motivo': 'SEM_SALDO_VIVO'}), 'EXECUTADA')
 
     def test_combinacoes_incoerentes_recusam(self):
         casos = (
@@ -48,6 +51,8 @@ class Desfecho(unittest.TestCase):
             ('EXECUTADA', {'estado': 'CONFIRMADO', 'decisao': 'APLICADO', 'motivo': None}),
             ('CANCELADA', {'estado': 'SOLICITADO', 'decisao': None, 'motivo': None}),
             ('EXECUTADA', {'estado': 'RECUSADO', 'decisao': 'SEM_SALDO_VIVO', 'motivo': 'RISCO_REJEITADO'}),
+            ('EXECUTADA', {'estado': 'RECUSADO', 'decisao': None, 'motivo': 'ADMISSAO_NAO_COMPROVADA'}),
+            ('EXECUTADA', {'estado': 'RECUSADO', 'decisao': 'APLICADO', 'motivo': 'SEM_SALDO_VIVO'}),
         )
         for estado, operacao in casos:
             with self.subTest(estado=estado, operacao=operacao), self.assertRaises(ValueError):
