@@ -11,6 +11,7 @@ import br.prospero.fo.ordens.dominio.TipoOrdem;
 import br.prospero.fo.ordens.dominio.Validade;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 /** Projeção pura: não depende da chegada do resultado do risco em outro tópico. */
 public final class ProjetarMatching {
@@ -19,13 +20,7 @@ public final class ProjetarMatching {
 
     public static Ordem aplicar(Ordem ordem, EventoMatching evento, EventoMatching.Alvo alvo,
                                 BigDecimal tick, long lote) {
-        if (!ordem.id().equals(alvo.ordem()) || !ordem.grupoEnvio().equals(alvo.intencao())
-                || !ordem.conta().equals(alvo.conta()) || !ordem.ticker().equals(evento.ticker())
-                || !ordem.dataSessao().equals(evento.sessao()) || (ordem.grupoOco() != null && evento.versao() < 3)
-                || (evento.versao() == 4 && !EventoMatching.encerramento(evento.ticker(), evento.sessao()).equals(evento.causacao()))
-                || (stop(ordem) && evento.causacao() == null)) {
-            throw incoerente();
-        }
+        exigirIdentidade(ordem, evento, alvo);
         return switch (evento.detalhe()) {
             case EventoMatching.Aceita ignorado -> inicial(ordem)
                     ? atualizar(ordem, stop(ordem) ? EstadoOrdem.AGUARDANDO_GATILHO : EstadoOrdem.ABERTA, 0, 0, null, null) : ordem;
@@ -36,29 +31,43 @@ public final class ProjetarMatching {
             case EventoMatching.Encerrada encerrada -> encerrar(ordem, encerrada);
             case EventoMatching.Reduzida reduzida -> reduzir(ordem, reduzida);
             case EventoMatching.SessaoEncerrada marco -> throw incoerente();
-            case EventoMatching.CancelamentoDecidido decidido -> {
-                // A decisão não altera a ordem; a retirada aplicada exige o terminal manual já projetado (mesma partição).
-                if (decidido.resultado() == EventoMatching.ResultadoCancelamento.APLICADO
-                        && (ordem.estado() != EstadoOrdem.CANCELADA || !"CANCELADA_MANUAL".equals(ordem.motivoEncerramento()))) {
-                    throw incoerente();
-                }
-                yield ordem;
-            }
-            case EventoMatching.Rejeitada rejeitada -> {
-                if ((stop(ordem) && acionada(ordem))
-                        // O par rejeitado por falta de vaga pendente rejeita também o Take Profit (v3).
-                        || (rejeitada.motivo() == MotivoRejeicao.LIMITE_STOPS_PENDENTES && ordem.grupoOco() == null
-                            && (!stop(ordem) || acionada(ordem)))
-                        || ordem.quantidadeExecutada() != 0 || ordem.quantidadeCancelada() != 0
-                        || ordem.estado() == EstadoOrdem.EXECUTADA || ordem.estado() == EstadoOrdem.CANCELADA) {
-                    throw incoerente();
-                }
-                if (ordem.estado() == EstadoOrdem.REJEITADA && ordem.motivoRejeicao() != rejeitada.motivo()) {
-                    throw incoerente();
-                }
-                yield atualizar(ordem, EstadoOrdem.REJEITADA, 0, 0, rejeitada.motivo(), null);
-            }
+            case EventoMatching.CancelamentoDecidido decidido -> decidido(ordem, decidido);
+            case EventoMatching.Rejeitada rejeitada -> rejeitar(ordem, rejeitada);
         };
+    }
+
+    private static void exigirIdentidade(Ordem ordem, EventoMatching evento, EventoMatching.Alvo alvo) {
+        if (!ordem.id().equals(alvo.ordem()) || !ordem.grupoEnvio().equals(alvo.intencao())
+                || !ordem.conta().equals(alvo.conta()) || !ordem.ticker().equals(evento.ticker())
+                || !ordem.dataSessao().equals(evento.sessao()) || (ordem.grupoOco() != null && evento.versao() < 3)
+                || (evento.versao() == 4 && !EventoMatching.encerramento(evento.ticker(), evento.sessao()).equals(evento.causacao()))
+                || (stop(ordem) && evento.causacao() == null)) {
+            throw incoerente();
+        }
+    }
+
+    private static Ordem decidido(Ordem ordem, EventoMatching.CancelamentoDecidido decidido) {
+        // A decisão não altera a ordem; a retirada aplicada exige o terminal manual já projetado (mesma partição).
+        if (decidido.resultado() == EventoMatching.ResultadoCancelamento.APLICADO
+                && (ordem.estado() != EstadoOrdem.CANCELADA || !"CANCELADA_MANUAL".equals(ordem.motivoEncerramento()))) {
+            throw incoerente();
+        }
+        return ordem;
+    }
+
+    private static Ordem rejeitar(Ordem ordem, EventoMatching.Rejeitada rejeitada) {
+        if ((stop(ordem) && acionada(ordem))
+                // O par rejeitado por falta de vaga pendente rejeita também o Take Profit (v3).
+                || (rejeitada.motivo() == MotivoRejeicao.LIMITE_STOPS_PENDENTES && ordem.grupoOco() == null
+                    && (!stop(ordem) || acionada(ordem)))
+                || ordem.quantidadeExecutada() != 0 || ordem.quantidadeCancelada() != 0
+                || ordem.estado() == EstadoOrdem.EXECUTADA || ordem.estado() == EstadoOrdem.CANCELADA) {
+            throw incoerente();
+        }
+        if (ordem.estado() == EstadoOrdem.REJEITADA && ordem.motivoRejeicao() != rejeitada.motivo()) {
+            throw incoerente();
+        }
+        return atualizar(ordem, EstadoOrdem.REJEITADA, 0, 0, rejeitada.motivo(), null);
     }
 
     private static Ordem oferta(Ordem o, EventoMatching.Oferta e) {
@@ -98,26 +107,9 @@ public final class ProjetarMatching {
     }
 
     private static Ordem encerrar(Ordem o, EventoMatching.Encerrada e) {
-        boolean excesso = "LIMITE_CASCATA".equals(e.motivo());
-        // Irmã OCO cancelada: SL ainda sem acionamento e sem execução; TP com a execução já projetada.
-        boolean irma = "CANCELADA_OCO".equals(e.motivo());
-        // Fim da sessão: expira ofertas DIA e stops ainda pendentes (RF05c.4).
-        boolean expirada = "EXPIRADA_DIA".equals(e.motivo());
-        // Retirada manual (v5): nunca OCO; Stop não acionado é elegível e o saldo retirado é o vigente (PRD, ADR-013).
-        boolean manual = "CANCELADA_MANUAL".equals(e.motivo());
-        if ((manual && (o.grupoOco() != null || e.cancelada() <= 0))
-                || (irma && (o.grupoOco() == null || stop(o) && (acionada(o) || e.executada() != 0)))
-                || (excesso && (!stop(o) || acionada(o) || e.executada() != 0))
-                || (expirada && o.validade() != Validade.DIA)
-                || (stop(o) && !excesso && !irma && !expirada && !manual && !acionada(o))
-                || o.estado() == EstadoOrdem.REJEITADA || e.executada() != o.quantidadeExecutada()
-                || e.cancelada() != o.quantidadeVigente() - o.quantidadeExecutada()) {
-            throw incoerente();
-        }
-        if (("FOK_SEM_LIQUIDEZ".equals(e.motivo()) && (o.validade() != Validade.FOK || e.executada() != 0))
-                || ("SALDO_CANCELADO_IOC".equals(e.motivo()) && o.validade() != Validade.IOC && o.tipo() != TipoOrdem.STOP)) {
-            throw incoerente();
-        }
+        exigirMotivoCoerente(o, e);
+        exigirSaldoCoerente(o, e);
+        exigirMotivoDoTipo(o, e);
         boolean executada = "EXECUTADA".equals(e.motivo());
         if (executada != (e.cancelada() == 0) || (o.estado() == EstadoOrdem.CANCELADA
                 && (!e.motivo().equals(o.motivoEncerramento()) || e.cancelada() != o.quantidadeCancelada()))) {
@@ -125,6 +117,44 @@ public final class ProjetarMatching {
         }
         return atualizar(o, executada ? EstadoOrdem.EXECUTADA : EstadoOrdem.CANCELADA,
                 e.executada(), e.cancelada(), null, e.motivo());
+    }
+
+    private static void exigirMotivoCoerente(Ordem o, EventoMatching.Encerrada e) {
+        String motivo = e.motivo();
+        // Retirada manual (v5): nunca OCO; Stop não acionado é elegível e o saldo retirado é o vigente (PRD, ADR-013).
+        if ("CANCELADA_MANUAL".equals(motivo) && (o.grupoOco() != null || e.cancelada() <= 0)) {
+            throw incoerente();
+        }
+        // Irmã OCO cancelada: SL ainda sem acionamento e sem execução; TP com a execução já projetada.
+        if ("CANCELADA_OCO".equals(motivo)
+                && (o.grupoOco() == null || stop(o) && (acionada(o) || e.executada() != 0))) {
+            throw incoerente();
+        }
+        if ("LIMITE_CASCATA".equals(motivo) && (!stop(o) || acionada(o) || e.executada() != 0)) {
+            throw incoerente();
+        }
+        // Fim da sessão: expira ofertas DIA e stops ainda pendentes (RF05c.4).
+        if ("EXPIRADA_DIA".equals(motivo) && o.validade() != Validade.DIA) {
+            throw incoerente();
+        }
+        if (stop(o) && !acionada(o) && !Set.of("LIMITE_CASCATA", "CANCELADA_OCO", "EXPIRADA_DIA", "CANCELADA_MANUAL")
+                .contains(motivo)) {
+            throw incoerente();
+        }
+    }
+
+    private static void exigirSaldoCoerente(Ordem o, EventoMatching.Encerrada e) {
+        if (o.estado() == EstadoOrdem.REJEITADA || e.executada() != o.quantidadeExecutada()
+                || e.cancelada() != o.quantidadeVigente() - o.quantidadeExecutada()) {
+            throw incoerente();
+        }
+    }
+
+    private static void exigirMotivoDoTipo(Ordem o, EventoMatching.Encerrada e) {
+        if (("FOK_SEM_LIQUIDEZ".equals(e.motivo()) && (o.validade() != Validade.FOK || e.executada() != 0))
+                || ("SALDO_CANCELADO_IOC".equals(e.motivo()) && o.validade() != Validade.IOC && o.tipo() != TipoOrdem.STOP)) {
+            throw incoerente();
+        }
     }
 
     /** Só o Stop Loss pendente perde quantidade; a igualdade com o que o TP ainda deve é guarda cruzada do MO. */

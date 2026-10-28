@@ -94,6 +94,22 @@ public final class EnvelopeRisco {
             throw new ParticaoBloqueadaException(resultadoCancelamentoValido(bytes)
                     ? "RESULTADO_CANCELAMENTO_SEM_LEITOR" : "RESULTADO_CANCELAMENTO_INVALIDO");
         }
+        String conta = exigirEnvelope(raiz);
+        JsonNode dados = raiz.get("dados");
+        exigirCampos(dados, CAMPOS_RESULTADO, "dados");
+        EstadoOrdem estado = estado(dados);
+        MotivoRejeicao motivo = motivo(dados);
+        exigirReservaCoerente(dados, estado);
+        try {
+            return new ResultadoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, estado, motivo,
+                    Instant.parse(texto(raiz, "ocorridoEm")), raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent"),
+                    EnvelopeMatching.assinatura(bytes));
+        } catch (IllegalArgumentException erro) {
+            throw new MensagemInvalidaException("motivo do resultado");
+        }
+    }
+
+    private static String exigirEnvelope(JsonNode raiz) {
         exigirCampos(raiz, CAMPOS, "envelope");
         if (!"RESULTADO_RISCO".equals(texto(raiz, "tipo")) || !raiz.get("versao").isInt()
                 || raiz.get("versao").intValue() != 1) {
@@ -114,28 +130,25 @@ public final class EnvelopeRisco {
         if (!raiz.get("traceparent").isNull() && !TRACEPARENT.matcher(texto(raiz, "traceparent")).matches()) {
             throw new MensagemInvalidaException("traceparent");
         }
-        JsonNode dados = raiz.get("dados");
-        exigirCampos(dados, CAMPOS_RESULTADO, "dados");
-        EstadoOrdem estado = switch (texto(dados, "resultado")) {
+        return conta;
+    }
+
+    private static EstadoOrdem estado(JsonNode dados) {
+        return switch (texto(dados, "resultado")) {
             case "RESERVADA" -> EstadoOrdem.RESERVADA;
             case "REJEITADA" -> EstadoOrdem.REJEITADA;
             default -> throw new MensagemInvalidaException("resultado");
         };
-        MotivoRejeicao motivo = null;
-        if (!dados.get("motivo").isNull()) {
-            try {
-                motivo = MotivoRejeicao.valueOf(texto(dados, "motivo"));
-            } catch (IllegalArgumentException erro) {
-                throw new MensagemInvalidaException("motivo");
-            }
+    }
+
+    private static MotivoRejeicao motivo(JsonNode dados) {
+        if (dados.get("motivo").isNull()) {
+            return null;
         }
-        exigirReservaCoerente(dados, estado);
         try {
-            return new ResultadoRisco(uuid(raiz, "id"), uuid(raiz, "correlacao"), conta, estado, motivo,
-                    Instant.parse(texto(raiz, "ocorridoEm")), raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent"),
-                    EnvelopeMatching.assinatura(bytes));
+            return MotivoRejeicao.valueOf(texto(dados, "motivo"));
         } catch (IllegalArgumentException erro) {
-            throw new MensagemInvalidaException("motivo do resultado");
+            throw new MensagemInvalidaException("motivo");
         }
     }
 
