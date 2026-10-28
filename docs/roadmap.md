@@ -387,7 +387,7 @@ Pendência registrada pelo PR #60 (2026-10-27), resolvida na V01-1: `CicloPosico
 
 ### V01-1 e V01-2 — prontidão por lag e medição RNF04
 
-- Estado: implementadas na branch `feat/v01-prontidao-rnf04` (commits sequenciais), sem PR aberto; a V01-3 (matriz RNF, execução local, roteiro) fica para depois de RF10 e P06B2.
+- Estado: implementadas na branch `feat/v01-prontidao-rnf04` (commits sequenciais), em validação no [PR #63](https://github.com/mclovin137/Prospero/pull/63); a V01-3 (matriz RNF, execução local, roteiro) fica para depois de RF10 e P06B2.
 - Modo acelerado autorizado pelo usuário em 2026-10-27: um refinamento com plano de testes por bloco, revisão única no fim e gates de CI obrigatórios (revisão, testes e segurança continuam separados do implementador).
 - Decisões do usuário em 2026-10-27: (1) leituras toleram lag de até **50 registros** (`prospero.posicoes.lag-maximo=50`); o avanço de data de liquidação exige lag 0; (2) RNF04 medido na CI hospedada como **indicativo** (runner compartilhado), com buckets finos e pelo menos 1000 amostras, registrando o contexto; (3) se o p99 ficar em 50 ms ou mais, registrar o desvio como "medido, não cumprido", com atribuição por salto, sem otimizar nesta fatia.
 - Lag = soma, nas três partições, do maior entre `fim − checkpoint do PostgreSQL` e `fim − posição do consumidor`. Erro, rebalanceamento, quarentena, identidade inválida e verificação com mais de 10 s continuam derrubando a prontidão; o gauge `prospero.posicoes.lag_registros` expõe o valor (-1 antes da primeira validação). O `WorkerLiquidacao` usa a tolerância das leituras; o avanço de data usa `semLag()`.
