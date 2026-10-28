@@ -33,6 +33,7 @@ def main():
         ("middle-office", "MO", "mo", "PublicacaoAdmissaoPostgresIT"),
         ("middle-office", "MO", "mo", "PublicacaoAdmissaoMigracaoPostgresIT"),
         ("middle-office", "MO", "mo", "MatchingPostgresIT"),
+        ("middle-office", "MO", "mo", "CancelamentoSemCoordenacaoPostgresIT"),
         ("middle-office", "MO", "mo", "OcoPostgresIT"),
         ("middle-office", "MO", "mo", "OcoQaPostgresIT"),
         ("middle-office", "MO", "mo", "OcoAdmissaoQaPostgresIT"),
