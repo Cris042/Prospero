@@ -34,7 +34,10 @@ LE = re.compile(r'(?:^|,)\s*le="([^"]*)"')
 TETO_METRICAS = 8 * 1024 * 1024
 MINIMO_AMOSTRAS_DEDICADO = 1000
 TETO_ORDENS_POR_CONTA = 1000
-COMPRADORES_PADRAO = "CONTA-002,CONTA-001"
+# Só contas preparáveis no MO compram: CONTA-001 é a conta da tela (ADR-012), CONTA-003 é a vendedora
+# e CONTA-004 é o robô formador, não preparável (ADR-013).
+COMPRADORES_PREPARAVEIS = frozenset({"CONTA-002"})
+COMPRADORES_PADRAO = "CONTA-002"
 TRACES_AMOSTRADOS = 100
 # Span de entrada de cada serviço na trajetória de uma ordem (mesmos nomes de testar-trajetoria.py).
 SALTOS = {"front-office": "POST /api/v1/ordens", "middle-office": "risco.avaliar",
@@ -236,8 +239,8 @@ def verificar_orcamento(origem, token, necessarias):
 
 def executar(args):
     compradores = [c.strip() for c in args.compradores.split(",") if c.strip()]
-    if any(c not in mercado.CONTAS or c == "CONTA-003" for c in compradores) or len(set(compradores)) != len(compradores):
-        raise SystemExit("Compradores devem ser contas distintas de CONTA-001..004, exceto a vendedora CONTA-003.")
+    if any(c not in COMPRADORES_PREPARAVEIS for c in compradores) or len(set(compradores)) != len(compradores):
+        raise SystemExit(f"Compradores devem ser contas distintas e preparáveis no MO: {sorted(COMPRADORES_PREPARAVEIS)}.")
     por_conta = validar_plano(args.amostras, args.aquecimento, compradores, args.contexto)
     total = args.amostras + args.aquecimento
     vendedor = mercado.token("ordens", 900, "CONTA-003")

@@ -139,6 +139,19 @@ class MargemDeOrdens(unittest.TestCase):
             self.assertNotIn(self.token, str(erro.exception))
 
 
+class CompradoresPreparaveis(unittest.TestCase):
+    def test_recusa_conta_nao_preparavel_antes_de_qualquer_http(self):
+        for conta in ("CONTA-001", "CONTA-003", "CONTA-004"):
+            argumentos = SimpleNamespace(origem="http://127.0.0.1:8081", origem_mo="http://127.0.0.1:8082",
+                                         origem_me="http://127.0.0.1:8083", ticker="ALFA3", preco="10.00",
+                                         amostras=3, aquecimento=2, contexto="ci-hospedado",
+                                         compradores=f"CONTA-002,{conta}", origem_jaeger=None)
+            with patch.object(medir.mercado, "http", side_effect=AssertionError("HTTP antes da validação")):
+                with self.assertRaises(SystemExit) as erro:
+                    medir.executar(argumentos)
+            self.assertIn("preparáveis", str(erro.exception))
+
+
 class MargemAntesDePreparar(unittest.TestCase):
     def argumentos(self):
         return SimpleNamespace(origem="http://127.0.0.1:8081", origem_mo="http://127.0.0.1:8082",
