@@ -226,6 +226,112 @@ class CicloPosicoesTest {
         }
     }
 
+    private static CicloPosicoes cicloComLimite(MockConsumer<String, byte[]> c, AtomicLong banco, long limite,
+                                                java.util.function.Consumer<Long> aoAplicar) {
+        return new CicloPosicoes(c, ID, p -> p == 0 ? banco.get() : 0, (coordenada, evento) -> {
+            aoAplicar.accept(banco.incrementAndGet());
+        }, null, limite);
+    }
+
+    @Test
+    void registroProcessadoComLagDentroDoLimiteNaoDerrubaProntidaoDuranteNemDepoisDaRodada() {
+        try (var c = configurar(new MockConsumer<String, byte[]>("earliest"), 2)) {
+            AtomicLong banco = new AtomicLong();
+            var duranteRodada = new java.util.ArrayList<Boolean>();
+            var ciclo = new CicloPosicoes[1];
+            ciclo[0] = new CicloPosicoes(c, ID, p -> p == 0 ? banco.get() : 0, (coordenada, evento) -> {
+                duranteRodada.add(ciclo[0].emDia());
+                banco.incrementAndGet();
+            }, null, 5);
+            ciclo[0].iniciar(); c.rebalance(PARTICOES);
+            ciclo[0].rodada(() -> { });
+            assertTrue(ciclo[0].emDia(), "lag 2 <= 5");
+            c.addRecord(registro(0));
+            ciclo[0].rodada(() -> { });
+            assertEquals(List.of(true), duranteRodada, "processar um registro não invalida a prontidão");
+            assertTrue(ciclo[0].emDia());
+            assertEquals(1, ciclo[0].lag());
+            assertFalse(ciclo[0].semLag(), "avanço de data exige lag zero");
+        }
+    }
+
+    @Test
+    void lagAcimaDoLimiteDerrubaProntidaoEVoltaAoAlcancar() {
+        try (var c = configurar(new MockConsumer<String, byte[]>("earliest"), 3)) {
+            AtomicLong banco = new AtomicLong();
+            var ciclo = cicloComLimite(c, banco, 1, n -> { });
+            ciclo.iniciar(); c.rebalance(PARTICOES);
+            ciclo.rodada(() -> { });
+            assertEquals(3, ciclo.lag());
+            assertFalse(ciclo.emDia(), "lag 3 > 1");
+            c.addRecord(registro(0));
+            ciclo.rodada(() -> { });
+            assertEquals(2, ciclo.lag());
+            assertFalse(ciclo.emDia(), "lag 2 > 1");
+            c.addRecord(registro(1));
+            ciclo.rodada(() -> { });
+            assertEquals(1, ciclo.lag());
+            assertTrue(ciclo.emDia(), "lag 1 <= 1");
+            assertFalse(ciclo.semLag());
+            c.addRecord(registro(2));
+            ciclo.rodada(() -> { });
+            assertEquals(0, ciclo.lag());
+            assertTrue(ciclo.semLag());
+        }
+    }
+
+    @Test
+    void erroDepoisDeProntoComToleranciaDerrubaProntidao() {
+        try (var c = configurar(new MockConsumer<String, byte[]>("earliest"), 2)) {
+            var falhar = new java.util.concurrent.atomic.AtomicBoolean();
+            var ciclo = new CicloPosicoes(c, ID, p -> 0, (coordenada, evento) -> {
+                if (falhar.get()) throw new IllegalStateException("commit abortado");
+            }, null, 5);
+            ciclo.iniciar(); c.rebalance(PARTICOES);
+            ciclo.rodada(() -> { });
+            assertTrue(ciclo.emDia());
+            falhar.set(true);
+            c.addRecord(registro(0));
+            assertThrows(IllegalStateException.class, () -> ciclo.rodada(() -> { }));
+            assertFalse(ciclo.emDia());
+            assertFalse(ciclo.semLag());
+        }
+    }
+
+    @Test
+    void rebalanceamentoDerrubaProntidaoMesmoComTolerancia() {
+        try (var c = configurar(new MockConsumer<String, byte[]>("earliest"), 1)) {
+            var ciclo = new CicloPosicoes(c, ID, p -> 0, (coordenada, evento) -> { }, null, 5);
+            ciclo.iniciar(); c.rebalance(PARTICOES);
+            ciclo.rodada(() -> { });
+            assertTrue(ciclo.emDia());
+            assertThrows(ProjecaoIncoerenteException.class, () -> c.rebalance(List.of(P0, P1)));
+            assertFalse(ciclo.emDia());
+        }
+    }
+
+    @Test
+    void falhaDeIdentidadeDerrubaProntidaoMesmoComTolerancia() {
+        try (var c = configurar(new MockConsumer<String, byte[]>("earliest"), 1)) {
+            var ciclo = new CicloPosicoes(c, ID, p -> 0, (coordenada, evento) -> { }, null, 5);
+            ciclo.iniciar(); c.rebalance(PARTICOES);
+            ciclo.rodada(() -> { });
+            assertTrue(ciclo.emDia());
+            assertThrows(IllegalStateException.class, () -> ciclo.rodada(() -> { throw new IllegalStateException("TOPICO_RECRIADO"); }));
+            assertFalse(ciclo.emDia());
+        }
+    }
+
+    @Test
+    void historicoIncompativelContinuaLancandoComTolerancia() {
+        try (var c = configurar(new MockConsumer<String, byte[]>("earliest"), 1)) {
+            var ciclo = new CicloPosicoes(c, ID, p -> p == 0 ? 2 : 0, (coordenada, evento) -> { }, null, 50);
+            ciclo.iniciar();
+            assertThrows(ProjecaoIncoerenteException.class, () -> c.rebalance(PARTICOES));
+            assertFalse(ciclo.emDia());
+        }
+    }
+
     private static class AckFalhaUmaVez extends MockConsumer<String, byte[]> {
         private boolean falhar = true;
         AckFalhaUmaVez() { super("earliest"); }
