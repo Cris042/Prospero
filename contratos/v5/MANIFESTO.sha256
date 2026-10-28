@@ -83,7 +83,6 @@ d92432d8a9b54313e86f6ff2672a36be03686e0d36e0ea2a2ad47b593d78cd3f  invalidos/risc
 4455bf5916b7753fa1867fae71b8d5ca415be6b09dc3616f4d79463c6a3c1d4a  invalidos/risco.resultados.v1/CONTA-002/resultado-chave-duplicada.json
 ae8458e284a84e5b48d05922301bed0010bf8939993e7e6fe9acb7bce120ef28  invalidos/risco.resultados.v1/CONTA-002/resultado-conta-diferente-da-chave.json
 7af39dd5caabc148fe1592040aefa3c8e65189f1fbbcd080abfab3b8ea184017  invalidos/risco.resultados.v1/CONTA-002/resultado-conteudo-apos-json.json
-843fc656e0583cc871b95d46c2b2ea76084345bac3f741f76ce60d1781045f48  invalidos/risco.resultados.v1/CONTA-002/resultado-correlacao-nao-derivada.json
 296d1beb57db51fa2b5f0c92f44f974a8c849d02b6a6755fa5063da2ada22b47  invalidos/risco.resultados.v1/CONTA-002/resultado-fora-do-enum.json
 1be9d68af771475232fee2a531adc60be6e8b0405d1f0921770311da5a063378  invalidos/risco.resultados.v1/CONTA-002/resultado-id-nao-derivado.json
 1fa4282e21d81511212639e4532e652c08092d7be0c12a7bc98e4cd6fd4812e3  invalidos/risco.resultados.v1/CONTA-002/resultado-maior-que-16-kib.json

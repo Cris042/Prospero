@@ -242,7 +242,7 @@ Cinco pareceres medium independentes (arquitetura, QA, segurança, operação e 
 
 | Leitor | `ORDEM_ENCERRADA CANCELADA_MANUAL` | `CANCELAMENTO_DECIDIDO` |
 | --- | --- | --- |
-| FO ordens e trajetória | Marca a ordem `CANCELADA` com o motivo, se não há OCO, a executada e o saldo conferem exatamente e a causação é a derivada; Stop não acionado é elegível (PRD) | Valida identidade e, em `APLICADO`, exige a ordem já cancelada manualmente; registra o id para deduplicação e não altera estado. A marca de trajetória fica para a fatia de API |
+| FO ordens e trajetória | Marca a ordem `CANCELADA` com o motivo, se não há OCO, a executada e o saldo conferem exatamente e a causação é a derivada; Stop não acionado é elegível (PRD) | Valida identidade e, em `APLICADO`, exige a ordem já cancelada manualmente; registra o id para deduplicação e o marco `CANCELAMENTO_DECIDIDO` na trajetória, sem alterar estado |
 | FO cotação | `Retirar` da oferta, como os demais terminais; Stop pendente não repousa e nada muda | Ignora sem negócio fictício |
 | BO | Valida a coerência v5 e ignora | Valida e ignora |
 | MO reservas | Valida estritamente e **bloqueia** com `CANCELAMENTO_SEM_COORDENACAO`, sem tocar reserva nem deduplicação; liberar só com solicitação persistida (fatia de coordenação) | Idem |

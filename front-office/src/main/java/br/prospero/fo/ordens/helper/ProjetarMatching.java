@@ -36,6 +36,14 @@ public final class ProjetarMatching {
             case EventoMatching.Encerrada encerrada -> encerrar(ordem, encerrada);
             case EventoMatching.Reduzida reduzida -> reduzir(ordem, reduzida);
             case EventoMatching.SessaoEncerrada marco -> throw incoerente();
+            case EventoMatching.CancelamentoDecidido decidido -> {
+                // A decisão não altera a ordem; a retirada aplicada exige o terminal manual já projetado (mesma partição).
+                if (decidido.resultado() == EventoMatching.ResultadoCancelamento.APLICADO
+                        && (ordem.estado() != EstadoOrdem.CANCELADA || !"CANCELADA_MANUAL".equals(ordem.motivoEncerramento()))) {
+                    throw incoerente();
+                }
+                yield ordem;
+            }
             case EventoMatching.Rejeitada rejeitada -> {
                 if ((stop(ordem) && acionada(ordem))
                         // O par rejeitado por falta de vaga pendente rejeita também o Take Profit (v3).
@@ -95,10 +103,13 @@ public final class ProjetarMatching {
         boolean irma = "CANCELADA_OCO".equals(e.motivo());
         // Fim da sessão: expira ofertas DIA e stops ainda pendentes (RF05c.4).
         boolean expirada = "EXPIRADA_DIA".equals(e.motivo());
-        if ((irma && (o.grupoOco() == null || stop(o) && (acionada(o) || e.executada() != 0)))
+        // Retirada manual (v5): nunca OCO; Stop não acionado é elegível e o saldo retirado é o vigente (PRD, ADR-013).
+        boolean manual = "CANCELADA_MANUAL".equals(e.motivo());
+        if ((manual && (o.grupoOco() != null || e.cancelada() <= 0))
+                || (irma && (o.grupoOco() == null || stop(o) && (acionada(o) || e.executada() != 0)))
                 || (excesso && (!stop(o) || acionada(o) || e.executada() != 0))
                 || (expirada && o.validade() != Validade.DIA)
-                || (stop(o) && !excesso && !irma && !expirada && !acionada(o))
+                || (stop(o) && !excesso && !irma && !expirada && !manual && !acionada(o))
                 || o.estado() == EstadoOrdem.REJEITADA || e.executada() != o.quantidadeExecutada()
                 || e.cancelada() != o.quantidadeVigente() - o.quantidadeExecutada()) {
             throw incoerente();

@@ -186,6 +186,7 @@ public class RepositorioCotacaoJpa implements RepositorioCotacao {
             case EventoMatching.Reduzida r -> r.alvo();
             case EventoMatching.Encerrada f -> e.causacao() != null ? f.alvo() : null;
             case EventoMatching.SessaoEncerrada ignorado -> null;
+            case EventoMatching.CancelamentoDecidido d -> d.alvo();
         };
         // Encerrada v1 pode ser a passiva cujo término é causado pela admissão agressora.
         if (alvo != null && !e.correlacao().equals(UUID.nameUUIDFromBytes(

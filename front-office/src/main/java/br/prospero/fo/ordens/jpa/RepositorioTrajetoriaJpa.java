@@ -112,12 +112,14 @@ public class RepositorioTrajetoriaJpa implements RepositorioTrajetoria {
             case EventoMatching.StopAcionado a -> "STOP_ACIONADO";
             case EventoMatching.Reduzida r -> "ORDEM_REDUZIDA";
             case EventoMatching.SessaoEncerrada s -> "SESSAO_ENCERRADA";
+            case EventoMatching.CancelamentoDecidido d -> "CANCELAMENTO_DECIDIDO";
         };
         String negocio = e.detalhe() instanceof EventoMatching.Negocio n ? n.id() : null;
         String quantidade = e.detalhe() instanceof EventoMatching.Negocio n ? Long.toString(n.quantidade()) : null;
         String motivo = switch (e.detalhe()) {
             case EventoMatching.Rejeitada r -> r.motivo().name();
             case EventoMatching.Encerrada f -> f.motivo();
+            case EventoMatching.CancelamentoDecidido d -> d.resultado().name();
             default -> null;
         };
         for (OrdemEntity o : ordens) {
