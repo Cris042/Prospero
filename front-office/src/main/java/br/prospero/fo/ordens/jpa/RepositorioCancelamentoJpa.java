@@ -6,6 +6,7 @@ import br.prospero.fo.comum.kafka.Rastreio;
 import br.prospero.fo.ordens.dominio.EstadoCancelamento;
 import br.prospero.fo.ordens.dominio.EstadoOrdem;
 import br.prospero.fo.ordens.dominio.EventoMatching;
+import br.prospero.fo.ordens.dominio.MarcoCancelamento;
 import br.prospero.fo.ordens.dominio.Ordem;
 import br.prospero.fo.ordens.dominio.OperacaoCancelamento;
 import br.prospero.fo.ordens.dominio.RepositorioCancelamento;
@@ -140,9 +141,10 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
     private void recusarPorRisco(Ordem ordem, Instant agora) {
         atualizar(ordem.id(), EstadoCancelamento.RECUSADO, "RISCO_REJEITADO", agora);
         UUID evento = UUID.nameUUIDFromBytes(("cancelamento-recusa-risco:" + ordem.id()).getBytes(StandardCharsets.UTF_8));
-        trajetoria.registrarCancelamento(ordem.conta(), ordem.id(), "front-office", "CANCELAMENTO_RECUSADO", evento,
+        trajetoria.registrarCancelamento(ordem.conta(), ordem.id(), new MarcoCancelamento("front-office",
+                "CANCELAMENTO_RECUSADO", evento,
                 EnvelopeMatching.assinatura(("RISCO_REJEITADO:" + ordem.id()).getBytes(StandardCharsets.UTF_8)), agora,
-                "RISCO_REJEITADO", null);
+                "RISCO_REJEITADO", null));
     }
 
     private void emitir(Ordem ordem, MensagemSaida comando, Instant agora) {
@@ -156,9 +158,10 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
                 .setParameter("trace", comando.traceparent(), String.class)
                 .setParameter("criado", OffsetDateTime.ofInstant(comando.criadaEm(), ZoneOffset.UTC))
                 .executeUpdate();
-        trajetoria.registrarCancelamento(ordem.conta(), ordem.id(), "front-office", "CANCELAMENTO_SOLICITADO",
-                comando.id(), EnvelopeMatching.assinatura(comando.payload().getBytes(StandardCharsets.UTF_8)), agora,
-                null, comando.traceparent());
+        trajetoria.registrarCancelamento(ordem.conta(), ordem.id(), new MarcoCancelamento("front-office",
+                "CANCELAMENTO_SOLICITADO", comando.id(),
+                EnvelopeMatching.assinatura(comando.payload().getBytes(StandardCharsets.UTF_8)), agora, null,
+                comando.traceparent()));
         avisoOutbox.registrar();
     }
 
@@ -174,9 +177,9 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
             return false;
         }
         atualizar(r.ordem(), novo, r.motivo(), r.ocorridoEm() == null ? Instant.now() : r.ocorridoEm());
-        trajetoria.registrarCancelamento(r.conta(), r.ordem(), "middle-office",
+        trajetoria.registrarCancelamento(r.conta(), r.ordem(), new MarcoCancelamento("middle-office",
                 r.confirmado() ? "CANCELAMENTO_CONFIRMADO" : "CANCELAMENTO_RECUSADO", r.evento(), r.assinatura(),
-                r.ocorridoEm(), r.motivo(), r.traceparent());
+                r.ocorridoEm(), r.motivo(), r.traceparent()));
         return true;
     }
 
@@ -204,11 +207,11 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
 
     @Override
     @Transactional
-    public double pendenteSegundosMax() {
+    public long pendenteSegundosMax() {
         Object max = em().createNativeQuery("""
                 SELECT max(extract(epoch FROM clock_timestamp() - solicitada_em)) FROM cancelamento_operacao
                 WHERE estado IN ('AGUARDANDO_RISCO', 'SOLICITADO', 'DECIDIDO')""").getSingleResult();
-        return max == null ? 0 : Math.max(0, ((Number) max).doubleValue());
+        return max == null ? 0 : Math.max(0, ((Number) max).longValue());
     }
 
     private Optional<OperacaoCancelamento> travar(UUID ordem, String conta) {

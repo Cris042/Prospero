@@ -203,7 +203,7 @@ class CancelamentoOperacaoPostgresIT {
     @Test
     void buscaEmLoteEPendenciaDoGauge() {
         UUID a = ordem("0009", "CONTA-002", "ABERTA", null), b = ordem("000a", "CONTA-002", "ABERTA", null);
-        assertEquals(0.0, cancelamentos.pendenteSegundosMax());
+        assertEquals(0L, cancelamentos.pendenteSegundosMax());
         registrar(a, "CONTA-002", EstadoCancelamento.SOLICITADO, true);
         registrar(b, "CONTA-002", EstadoCancelamento.SOLICITADO, true);
         assertEquals(2, cancelamentos.buscar("CONTA-002", List.of(a, b, UUID.randomUUID())).size());
@@ -211,6 +211,6 @@ class CancelamentoOperacaoPostgresIT {
         assertTrue(cancelamentos.pendenteSegundosMax() >= 0);
         cancelamentos.aplicarResultado(resultado(a, "CONTA-002", true, null));
         cancelamentos.aplicarResultado(resultado(b, "CONTA-002", false, "SEM_SALDO_VIVO"));
-        assertEquals(0.0, cancelamentos.pendenteSegundosMax(), "só operações sem resultado final contam");
+        assertEquals(0L, cancelamentos.pendenteSegundosMax(), "só operações sem resultado final contam");
     }
 }

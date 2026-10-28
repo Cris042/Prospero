@@ -311,3 +311,27 @@ A V9 é aditiva e não é lida por versões anteriores; ao voltar imagem a tabel
 ### Evidências e ADR-004
 
 Fixtures v5 compartilhadas em `contratos/v5/`, com manifesto SHA-256 conferido por `scripts/verificar-contratos.py` e por testes de cada serviço, cobrem válidos e um corpus negativo (versão, campo extra ou duplicado, mais de 16 KiB, conteúdo após o JSON, UUID e data não canônicos, enum fora, ticker diferente da chave, origem errada, quebra de linha e marcador de log no payload). O ME prova que seus bytes reais são iguais às fixtures. Planilha XLSX é dispensada pelo ADR-004 nesta fatia porque nenhum produtor ativo emite os tipos novos nem há API ou efeito externo; a API completa exigirá workbook duas vezes.
+
+## API, interruptor e tela do cancelamento — RF10c3 (2026-10-28)
+
+Última fatia do cancelamento manual: o FO passa a emitir `CANCELAMENTO_SOLICITADO` e a expor a operação canônica. O catálogo, a coordenação do MO e os leitores v5 seguem como nas seções anteriores; aqui ficam o que o FO faz e os desvios pequenos.
+
+### Contrato HTTP e persistência no FO
+
+`PUT /api/v1/ordens/{id}/cancelamento` (escopo `ordens:enviar`) e `GET` na mesma URI (`ordens:leitura`, `Cache-Control: no-store`). A conta vem do JWT. Corpo ausente ou exatamente `{}`; qualquer outro corpo, JSON malformado ou chave duplicada recebe 400 `CORPO_CANCELAMENTO_INVALIDO`, e corpo com tipo diferente de `application/json` também. Ordem inexistente, de outra conta ou com identificador malformado recebe o mesmo 404 `ORDEM_NAO_ENCONTRADA`; o GET sem pedido responde 404 `CANCELAMENTO_NAO_ENCONTRADO` também para ordem alheia. Ordem com `grupoOco` (inclusive a perna que sobrevive) recebe 422 `ORDEM_OCO_NAO_CANCELAVEL` antes de criar operação. O 202 só confirma que a operação foi persistida; o corpo traz `estado`, `decisao`, `motivo` e os instantes.
+
+A tabela `cancelamento_operacao` (V12, aditiva) tem uma linha por ordem (PK = ordem), estados `AGUARDANDO_RISCO`, `SOLICITADO`, `DECIDIDO`, `CONFIRMADO`, `RECUSADO`, e os mesmos CHECKs de motivo do MO. O PUT trava a linha da ordem, devolve a operação existente se houver (cabeçalho `X-Cancelamento-Repetido: true`, sem nova outbox) e, caso contrário, cria uma: `AGUARDANDO_RISCO` sem outbox quando a ordem ainda está `RECEBIDA` (D1), ou `SOLICITADO` com a linha da outbox e o marco `CANCELAMENTO_SOLICITADO` na mesma transação. O resultado do risco que chega depois promove (RESERVADA) ou recusa com `RISCO_REJEITADO` (REJEITADA) as operações que aguardavam, na ordem de locks ordem, operação, revisão da conta. Ordem já terminal no FO ou rejeitada ainda emite o pedido: quem recusa é o MO (`SEM_SALDO_VIVO`, `RISCO_REJEITADO`), sem regra duplicada no FO.
+
+As transições só avançam por ranking (`AGUARDANDO_RISCO` < `SOLICITADO` < `DECIDIDO` < `CONFIRMADO` = `RECUSADO`), porque `CANCELAMENTO_DECIDIDO` (ME) e `RESULTADO_CANCELAMENTO` (MO) vêm de tópicos diferentes. Repetição, regressão, resultado de outra conta e resultado sem operação não alteram nada. O estado `CONFIRMADO` só vem do MO; o FO nunca libera reserva. O consumidor de `risco.resultados.v1` aplica `RESULTADO_CANCELAMENTO` válido e continua bloqueando a partição para o inválido (`RESULTADO_CANCELAMENTO_INVALIDO`); a conta do envelope precisa ser igual à chave Kafka.
+
+### Interruptor (D4) e telemetria
+
+`prospero.cancelamento.emissao-habilitada` (variável `FO_CANCELAMENTO_EMISSAO_HABILITADA`) fica `false` por padrão e protege só a criação de operações: 503 `CANCELAMENTO_INDISPONIVEL`, sem persistir nem emitir. Repetição e GET continuam. O `docker-compose.yml` local liga a flag porque constrói FO, MO, ME e BO juntos; qualquer outro ambiente precisa ter os leitores v5 nos quatro serviços antes de ligá-la. Métricas: `prospero.cancelamento.solicitacoes{resultado}`, `prospero.cancelamento.resultados{resultado,aplicado}` e o gauge `prospero.cancelamento.pendente.segundos.max` (idade da operação mais antiga sem resultado final, índice parcial `cancelamento_pendente`).
+
+### Proxy e tela
+
+Nginx e proxy de desenvolvimento ganharam a rota exata `ordens/{uuid}/cancelamento` com GET e PUT; PUT exige `Origin` local e divide a cota de escrita das ordens, POST/DELETE e PUT nas demais rotas continuam 403. O token continua só no servidor. A lista "Minhas ordens" mostra "Cancelar" para ordens não OCO sem estado terminal, o estado da operação (só `CONFIRMADO` afirma a liberação) e o erro de cada linha em `role="alert"`.
+
+### Evidência e limites
+
+Testes REST Assured sobre repositório em memória, IT PostgreSQL da V12 e dos hooks de risco/matching, `cancelamento.xlsx` pelo runner (ADR-004) em duas execuções na CI e E2E Playwright. A V12 é aditiva; ao voltar a imagem a tabela fica e as operações persistidas deixam de ser promovidas, então a correção segue para frente. ❓ LACUNA: o prazo para uma operação sem resultado (ACK da admissão que nunca vem, partição bloqueada) não tem regra de negócio; ela fica pendente e visível pelo gauge, sem timeout, recusa nem liberação.

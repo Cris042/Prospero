@@ -119,6 +119,9 @@ rodar_workbook cotacao risco
 # Repetição deliberada comprova limpeza por negócios reais, sem apagar reservas/livro.
 rodar_workbook matching risco
 rodar_workbook matching risco
+# RF10: cancelamento manual real (FO, MO e ME); cada cenário termina sem reserva viva, então repete limpo.
+rodar_workbook cancelamento risco
+rodar_workbook cancelamento risco
 # B2 depois de cotação/matching: TunelAntesDoPrimeiroNegocio exige ALFA3 sem negócio na sessão.
 # B2: duas execuções de ORDEM_AGRESSOR (a segunda com o MO parado e religado), reconciliação e conferência financeira.
 # Mesmos privados e controlador do smoke de leituras; relatório público só com contagens.

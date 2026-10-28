@@ -21,7 +21,7 @@ public class MedidorCancelamento {
     }
 
     void iniciar(@Observes StartupEvent evento) {
-        Gauge.builder("prospero.cancelamento.pendente.segundos.max", cancelamentos, RepositorioCancelamento::pendenteSegundosMax)
+        Gauge.builder("prospero.cancelamento.pendente.segundos.max", cancelamentos, c -> (double) c.pendenteSegundosMax())
                 .description("Idade, em segundos, da operação de cancelamento pendente mais antiga").register(metricas);
     }
 }

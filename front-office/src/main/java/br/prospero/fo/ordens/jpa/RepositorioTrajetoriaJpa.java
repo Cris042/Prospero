@@ -1,5 +1,6 @@
 package br.prospero.fo.ordens.jpa;
 
+import br.prospero.fo.ordens.dominio.MarcoCancelamento;
 import br.prospero.fo.ordens.dominio.EstadoOrdem;
 import br.prospero.fo.ordens.dominio.EventoContabilizacao;
 import br.prospero.fo.ordens.dominio.EventoMatching;
@@ -100,10 +101,10 @@ public class RepositorioTrajetoriaJpa implements RepositorioTrajetoria {
     }
 
     /** Marco do cancelamento manual (solicitado, confirmado ou recusado), serializado pelo lock de revisão da conta. */
-    public void registrarCancelamento(String conta, UUID ordem, String origem, String tipo, UUID evento,
-                                      String assinatura, Instant ocorridoEm, String motivo, String traceparent) {
+    public void registrarCancelamento(String conta, UUID ordem, MarcoCancelamento marco) {
         travar(List.of(conta));
-        gravar(conta, ordem, new NovoMarco(origem, tipo, evento, assinatura, null, null, ocorridoEm, null, motivo, traceparent));
+        gravar(conta, ordem, new NovoMarco(marco.origem(), marco.tipo(), marco.evento(), marco.assinatura(), null, null,
+                marco.ocorridoEm(), null, marco.motivo(), marco.traceparent()));
     }
 
     public void registrarMatching(EventoMatching e, List<OrdemEntity> ordens) {

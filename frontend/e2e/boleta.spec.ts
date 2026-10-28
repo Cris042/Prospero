@@ -675,6 +675,104 @@ test('envia Market e Stop Limit e repete com a mesma chave após falha de rede',
   expect(navegacoes).toEqual([]);
 });
 
+test('cancela ordem aberta pela lista: erro acessível, PUT único e saldo liberado pelo backend', async ({
+  page,
+}, testInfo) => {
+  const erros: string[] = [];
+  page.on('pageerror', (erro) => erros.push(erro.message));
+  const puts: { autorizacao?: string; url: string }[] = [];
+  page.on('request', (pedido) => {
+    if (pedido.method() === 'PUT' && pedido.url().includes('/cancelamento')) {
+      puts.push({ autorizacao: pedido.headers()['authorization'], url: pedido.url() });
+    }
+  });
+  await page.goto('/');
+  const boleta = page.getByRole('form', { name: 'Ordem simples' });
+  await boleta.getByLabel('Ativo').selectOption('BETA3');
+  await boleta.getByLabel('Quantidade').fill('3');
+  await boleta.getByLabel('Preço limite (R$)').fill('19.75');
+  const envio = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
+  );
+  await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
+  const registrada: { id: string } = await (await envio).json();
+  const consultar = async () => {
+    const r = await page.request.get(`/servicos/front-office/api/v1/ordens/${registrada.id}`);
+    expect(r.status()).toBe(200);
+    return r.json();
+  };
+  await expect.poll(async () => (await consultar()).estado, { timeout: 15000 }).toBe('ABERTA');
+  await page.getByRole('button', { name: 'Atualizar ordens' }).click();
+  const linha = page
+    .getByRole('row')
+    .filter({ has: page.getByLabel(`Cancelar ordem ${registrada.id}`) });
+  await expect(linha).toContainText('Aberta');
+
+  // Primeira tentativa: 503 contratado do interruptor; a UI mostra o erro na linha e permite repetir.
+  let recusar = true;
+  await page.route('**/servicos/front-office/api/v1/ordens/*/cancelamento', async (rota) => {
+    if (rota.request().method() !== 'PUT' || !recusar) return rota.fallback();
+    recusar = false;
+    await rota.fulfill({
+      status: 503,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ status: 503, codigo: 'CANCELAMENTO_INDISPONIVEL' }),
+    });
+  });
+  await linha.getByRole('button', { name: `Cancelar ordem ${registrada.id}` }).click();
+  await expect(linha.getByRole('alert')).toContainText('temporariamente indisponível');
+  expect(puts).toHaveLength(1);
+
+  await linha.getByRole('button', { name: `Cancelar ordem ${registrada.id}` }).dblclick();
+  await expect(linha).toContainText('Cancelamento confirmado', { timeout: 20000 });
+  expect(puts).toHaveLength(2);
+  expect(puts.every((p) => p.autorizacao === undefined)).toBe(true);
+  expect(await consultar()).toMatchObject({
+    estado: 'CANCELADA',
+    motivoEncerramento: 'CANCELADA_MANUAL',
+    quantidadeExecutada: 0,
+    quantidadeCancelada: 3,
+    cancelamento: { estado: 'CONFIRMADO', decisao: 'APLICADO', motivo: null },
+  });
+  await expect(linha).toContainText('Cancelada · cancelada a pedido');
+  await expect(linha.getByRole('button', { name: /Cancelar ordem/ })).toHaveCount(0);
+  // Repetição pela API devolve a mesma operação confirmada.
+  const repetida = await page.request.put(
+    `/servicos/front-office/api/v1/ordens/${registrada.id}/cancelamento`,
+    { headers: { Origin: new URL(page.url()).origin } },
+  );
+  expect(repetida.status()).toBe(202);
+  expect(await repetida.json()).toMatchObject({ ordem: registrada.id, estado: 'CONFIRMADO' });
+  expect(erros).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await linha.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('cancelamento.png'), fullPage: true });
+});
+
+test('proxy do cancelamento recusa PUT externo, POST/DELETE e PUT fora da rota exata', async ({
+  request,
+}) => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const base = '/servicos/front-office/api/v1/ordens';
+  const externo = await request.put(`${base}/${id}/cancelamento`, {
+    headers: { Origin: 'http://evil.example' },
+  });
+  expect(externo.status()).toBe(403);
+  const semOrigem = await request.put(`${base}/${id}/cancelamento`);
+  expect(semOrigem.status()).toBe(403);
+  expect((await request.delete(`${base}/${id}/cancelamento`)).status()).toBe(403);
+  expect(
+    (await request.put(`${base}/${id}`, { headers: { Origin: 'http://127.0.0.1' } })).status(),
+  ).toBe(403);
+  expect(
+    (
+      await request.put(`${base}/${id}/trajetoria`, { headers: { Origin: 'http://127.0.0.1' } })
+    ).status(),
+  ).toBe(403);
+});
+
 test('proxy recusa escrita de origem externa, método indevido e Host externo', async ({
   request,
 }) => {

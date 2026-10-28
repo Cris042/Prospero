@@ -18,18 +18,21 @@ const tokenOrdens = tokenDoAmbiente('FO_TOKEN_ORDENS');
 const tokenPosicoes = tokenDoAmbiente('BO_TOKEN_POSICOES');
 const tokenRazao = tokenDoAmbiente('BO_TOKEN_RAZAO');
 const ROTA_ORDENS =
-  /^\/servicos\/front-office\/api\/v1\/(?:ordens(?:\/[0-9a-f-]{36}(?:\/trajetoria)?)?|ordens-oco(?:\/[0-9a-f-]{36})?)(?:\?.*)?$/;
+  /^\/servicos\/front-office\/api\/v1\/(?:ordens(?:\/[0-9a-f-]{36}(?:\/(?:trajetoria|cancelamento))?)?|ordens-oco(?:\/[0-9a-f-]{36})?)(?:\?.*)?$/;
 const ROTA_ATUALIZACOES = '/servicos/front-office/api/v1/atualizacoes';
 const ORIGEM_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/;
 
-// Espelha o Nginx (ADR-010): GET/POST apenas; POST exige Origin local; Host local contra DNS rebinding.
+// Espelha o Nginx (ADR-010): GET/POST (e PUT só em /cancelamento); escrita exige Origin local; Host local contra DNS rebinding.
 function ordensPermitidas(req, res) {
   const host = (req.headers.host ?? '').replace(/:[0-9]+$/, '');
   const origemOk = req.method === 'GET' || ORIGEM_LOCAL.test(req.headers.origin ?? '');
+  const cancelamento = /\/cancelamento(?:\?.*)?$/.test(req.url ?? '');
+  const metodoOk = ['GET', 'POST'].includes(req.method) || (req.method === 'PUT' && cancelamento);
   if (
     !ROTA_ORDENS.test(req.url ?? '') ||
-    !['GET', 'POST'].includes(req.method) ||
+    !metodoOk ||
     (req.url?.includes('/trajetoria') && req.method !== 'GET') ||
+    (req.method === 'POST' && cancelamento) ||
     req.headers.upgrade ||
     !['localhost', '127.0.0.1'].includes(host) ||
     !origemOk

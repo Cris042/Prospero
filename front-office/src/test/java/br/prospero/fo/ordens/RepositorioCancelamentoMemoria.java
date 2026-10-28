@@ -72,7 +72,7 @@ public class RepositorioCancelamentoMemoria implements RepositorioCancelamento {
     }
 
     @Override
-    public double pendenteSegundosMax() {
+    public long pendenteSegundosMax() {
         return 0;
     }
 

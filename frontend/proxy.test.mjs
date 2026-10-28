@@ -244,11 +244,66 @@ test('WS atualizações recusa método rota query Origin e Host divergentes ante
 });
 
 test('rotas genéricas não encaminham upgrade autenticado', () => {
-  for (const rota of ['/servicos/front-office', '/servicos/middle-office', '/servicos/back-office']) {
+  for (const rota of [
+    '/servicos/front-office',
+    '/servicos/middle-office',
+    '/servicos/back-office',
+  ]) {
     assert.notEqual(proxy[rota].ws, true);
-    const req = { method: 'GET', url: `${rota}/api/v1/atualizacoes`, headers: { upgrade: 'websocket' } };
+    const req = {
+      method: 'GET',
+      url: `${rota}/api/v1/atualizacoes`,
+      headers: { upgrade: 'websocket' },
+    };
     const res = { statusCode: 200, end() {} };
     assert.equal(proxy[rota].bypass(req, res), false);
     assert.ok(res.statusCode >= 400);
+  }
+});
+
+const ID_ORDEM = '0a1b2c3d-0a1b-4c3d-8a1b-0a1b2c3d4e5f';
+function ordensDev(method, url, origin = 'http://localhost:4200', host = 'localhost:4200') {
+  const req = {
+    method,
+    url,
+    headers: { host, origin, authorization: 'Bearer cliente-nao-confiavel' },
+  };
+  const res = { statusCode: 200, end() {} };
+  const chave = Object.keys(proxy).find((k) => proxy[k].bypass && k.includes('ordens'));
+  return { req, res, resultado: proxy[chave].bypass(req, res) };
+}
+
+test('cancelamento aceita GET e PUT locais; PUT exige Origin local e POST/DELETE são recusados', () => {
+  const rota = `/servicos/front-office/api/v1/ordens/${ID_ORDEM}/cancelamento`;
+  for (const metodo of ['GET', 'PUT']) {
+    const { req, res, resultado } = ordensDev(metodo, rota);
+    assert.equal(resultado, undefined, metodo);
+    assert.equal(res.statusCode, 200);
+    assert.equal(req.headers.authorization, undefined);
+  }
+  for (const [metodo, origem] of [
+    ['PUT', 'https://evil.example'],
+    ['PUT', ''],
+    ['POST', 'http://localhost:4200'],
+    ['DELETE', 'http://localhost:4200'],
+  ]) {
+    const { res, resultado } = ordensDev(metodo, rota, origem);
+    assert.equal(resultado, false, `${metodo} ${origem}`);
+    assert.equal(res.statusCode, 403);
+  }
+});
+
+test('PUT só alcança /cancelamento: ordens, trajetória e ordens-oco continuam sem PUT', () => {
+  for (const caminho of [
+    `/servicos/front-office/api/v1/ordens/${ID_ORDEM}`,
+    `/servicos/front-office/api/v1/ordens/${ID_ORDEM}/trajetoria`,
+    '/servicos/front-office/api/v1/ordens',
+    `/servicos/front-office/api/v1/ordens-oco/${ID_ORDEM}`,
+    `/servicos/front-office/api/v1/ordens/${ID_ORDEM}/cancelamento/extra`,
+    `/servicos/front-office/api/v1/ordens/${ID_ORDEM}/outra?x=/cancelamento`,
+  ]) {
+    const { res, resultado } = ordensDev('PUT', caminho);
+    assert.equal(resultado, false, caminho);
+    assert.equal(res.statusCode, 403);
   }
 });

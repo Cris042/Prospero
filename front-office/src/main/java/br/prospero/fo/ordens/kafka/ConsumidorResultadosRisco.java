@@ -4,10 +4,8 @@ import br.prospero.fo.comum.dominio.MensagemInvalidaException;
 import br.prospero.fo.comum.kafka.ConfiguracaoKafka;
 import br.prospero.fo.comum.kafka.ConsumoKafka;
 import br.prospero.fo.comum.kafka.Rastreio;
-import br.prospero.fo.ordens.actor.AplicarCancelamentoActor;
 import br.prospero.fo.ordens.actor.AplicarRiscoActor;
-import br.prospero.fo.ordens.dominio.ResultadoCancelamento;
-import br.prospero.fo.ordens.dominio.ResultadoRisco;
+import br.prospero.fo.ordens.dominio.MensagemRisco;
 import br.prospero.fo.ordens.helper.EnvelopeRisco;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.opentelemetry.api.OpenTelemetry;
@@ -29,7 +27,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class ConsumidorResultadosRisco {
     private final AplicarRiscoActor actor;
-    private final AplicarCancelamentoActor cancelamento;
     private final EventosRejeitados rejeitados;
     private final ConfiguracaoKafka configuracao;
     private final OpenTelemetry telemetria;
@@ -40,13 +37,11 @@ public class ConsumidorResultadosRisco {
     private Thread linha;
 
     @Inject
-    public ConsumidorResultadosRisco(AplicarRiscoActor actor, AplicarCancelamentoActor cancelamento,
-                                     EventosRejeitados rejeitados,
+    public ConsumidorResultadosRisco(AplicarRiscoActor actor, EventosRejeitados rejeitados,
                                      ConfiguracaoKafka configuracao, OpenTelemetry telemetria, Tracer tracer, MeterRegistry metricas,
                                      @ConfigProperty(name = "prospero.mensageria.habilitada", defaultValue = "true")
                                      boolean habilitada) {
         this.actor = actor;
-        this.cancelamento = cancelamento;
         this.rejeitados = rejeitados;
         this.configuracao = configuracao;
         this.telemetria = telemetria;
@@ -71,27 +66,16 @@ public class ConsumidorResultadosRisco {
         }
     }
 
-    private static void exigirChave(String conta, String chave) {
-        if (!conta.equals(chave)) {
-            throw new MensagemInvalidaException("chave");
-        }
-    }
-
     void processar(ConsumerRecord<String, byte[]> registro) {
         Span span = tracer.spanBuilder("risco.resultado")
                 .setParent(Rastreio.extrair(telemetria.getPropagators().getTextMapPropagator(), registro.headers()))
                 .setSpanKind(SpanKind.CONSUMER).startSpan();
         try (Scope ignorado = span.makeCurrent()) {
-            switch (EnvelopeRisco.ler(registro.value())) {
-                case ResultadoRisco risco -> {
-                    exigirChave(risco.conta(), registro.key());
-                    actor.aplicar(risco);
-                }
-                case ResultadoCancelamento resultado -> {
-                    exigirChave(resultado.conta(), registro.key());
-                    cancelamento.aplicar(resultado);
-                }
+            MensagemRisco mensagem = EnvelopeRisco.ler(registro.value());
+            if (!mensagem.conta().equals(registro.key())) {
+                throw new MensagemInvalidaException("chave");
             }
+            actor.aplicar(mensagem);
         } finally {
             span.end();
         }

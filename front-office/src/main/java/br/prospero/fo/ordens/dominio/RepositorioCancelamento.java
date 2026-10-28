@@ -28,5 +28,5 @@ public interface RepositorioCancelamento {
     boolean aplicarResultado(ResultadoCancelamento resultado);
 
     /** Maior idade, em segundos, entre as operações ainda sem resultado final (0 sem pendência). */
-    double pendenteSegundosMax();
+    long pendenteSegundosMax();
 }

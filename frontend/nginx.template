@@ -1,12 +1,13 @@
 # Processado pelo envsubst da imagem nginx; somente os tokens FO e BO explicitamente permitidos são substituídos.
-# RF02c (ADR-010): escrita só de origem local; GET passa, POST exige Origin de localhost/127.0.0.1.
+# RF02c (ADR-010): escrita só de origem local; GET passa, POST e PUT (cancelamento, RF10) exigem Origin de localhost/127.0.0.1.
 map "$request_method|$http_origin" $ordens_origem_recusada {
   default 1;
   "~^GET\|" 0;
   "~^POST\|https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$" 0;
+  "~^PUT\|https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$" 0;
 }
 # Rate limit só para POST: chave vazia (GET) não é contabilizada, então listagens não esgotam envios.
-map $request_method $ordens_limite { POST $binary_remote_addr; default ""; }
+map $request_method $ordens_limite { POST $binary_remote_addr; PUT $binary_remote_addr; default ""; }
 limit_req_zone $ordens_limite zone=ordens:1m rate=10r/s;
 # Resumo e livro compartilham a cota por IP; inclui outras abas da mesma origem local.
 limit_req_zone $binary_remote_addr zone=mercado:1m rate=5r/s;
@@ -70,6 +71,21 @@ map $http_upgrade $ws_upgrade { default 0; "~*^websocket$" 1; }
     }
     location ~ "^/servicos/front-office/api/v1/ordens/[0-9a-f-]{36}/trajetoria$" {
       limit_except GET { deny all; }
+      set $backend front-office:8080;
+      rewrite ^/servicos/front-office/(.*)$ /$1 break;
+      proxy_pass http://$backend;
+      proxy_set_header Host $host;
+      proxy_set_header X-Request-ID $request_id;
+      proxy_set_header Authorization "Bearer ${FO_TOKEN_ORDENS}";
+    }
+    # RF10: operação canônica de cancelamento por ordem; PUT exige Origin local e compartilha a cota de escrita.
+    location ~ "^/servicos/front-office/api/v1/ordens/[0-9a-f-]{36}/cancelamento$" {
+      limit_except GET PUT { deny all; }
+      if ($ordens_origem_recusada) { return 403 '{"erro":"Origem não permitida para ordens"}'; }
+      limit_req zone=ordens burst=20 nodelay;
+      limit_req_status 429;
+      default_type application/json;
+      client_max_body_size 1k;
       set $backend front-office:8080;
       rewrite ^/servicos/front-office/(.*)$ /$1 break;
       proxy_pass http://$backend;
