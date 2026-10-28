@@ -15,7 +15,7 @@ public class MovimentoActor {
     @Inject LiquidacaoJpa liquidacao;
     @Inject SituacaoPosicoes situacao;
     public MovimentoResultadoDTO avancar(LocalDate alvo, String sub, String jti) {
-        if (!situacao.emDia()) throw new MovimentoInvalidoException(503, "LIQUIDACAO_INDISPONIVEL");
+        if (!situacao.semLag()) throw new MovimentoInvalidoException(503, "LIQUIDACAO_INDISPONIVEL");
         try {
             return liquidacao.avancar(alvo, sub, jti, LocalDate.now(ZoneId.of("America/Sao_Paulo")));
         } catch (RuntimeException erro) {

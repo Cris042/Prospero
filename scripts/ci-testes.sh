@@ -152,9 +152,10 @@ amostrar_recursos_rnf04() {
   done
   cat ".ci-evidencias/rnf04-$variante-recursos.jsonl"
 }
-for variante in baseline candidato; do
-  urgencia=false
-  [ "$variante" = candidato ] && urgencia=true
+# V01-2: só CONTA-002 é compradora preparável (CONTA-001 da tela e CONTA-004 do robô não são). Com o teto de 1000
+# ordens por conta e sessão, a CI mede 600+30 (indicativo); a medição de 1000 amostras é a do modo dedicado, em sessão limpa.
+for variante in candidato; do
+  urgencia=true
   export PROSPERO_OUTBOX_URGENCIA="$urgencia"
   "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 front-office middle-office
   for servico in front-office middle-office; do
@@ -164,8 +165,10 @@ for variante in baseline candidato; do
   fo_origem="http://$("${compose[@]}" port front-office 8080)"
   mo_origem="http://$("${compose[@]}" port middle-office 8080)"
   # Falha funcional/margem insuficiente reprova; resultado de latência hospedada permanece indicativo.
-  timeout 600 python3 scripts/medir-rnf04.py --origem "$fo_origem" --origem-mo "$mo_origem" --origem-me "$me_origem" \
-    --contexto ci-hospedado --variante "$variante" --amostras 150 --aquecimento 30 \
+  jaeger_rnf04="http://$("${compose[@]}" port jaeger 16686)"
+  timeout 900 python3 scripts/medir-rnf04.py --origem "$fo_origem" --origem-mo "$mo_origem" --origem-me "$me_origem" \
+    --origem-jaeger "$jaeger_rnf04" --compradores CONTA-002 \
+    --contexto ci-hospedado --variante "$variante" --amostras 600 --aquecimento 30 \
     > ".ci-evidencias/rnf04-$variante.json"
   cat ".ci-evidencias/rnf04-$variante.json"
   amostrar_recursos_rnf04 "$variante"

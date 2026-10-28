@@ -17,7 +17,9 @@ public final class CicloPosicoes {
     private final IntToLongFunction proximo;
     private final BiConsumer<Coordenada, EventoMatching> aplicar;
     private final RastreioPosicoes rastreio;
+    private final long lagMaximo;
     private volatile boolean emDia;
+    private volatile long lag = Long.MAX_VALUE;
     private volatile long verificadoEm;
     private int particaoFalha = -1;
     private long offsetFalha = -1;
@@ -29,6 +31,12 @@ public final class CicloPosicoes {
 
     public CicloPosicoes(Consumer<String, byte[]> consumidor, String topicoId, IntToLongFunction proximo,
                          BiConsumer<Coordenada, EventoMatching> aplicar, RastreioPosicoes rastreio) {
+        this(consumidor, topicoId, proximo, aplicar, rastreio, 0);
+    }
+
+    public CicloPosicoes(Consumer<String, byte[]> consumidor, String topicoId, IntToLongFunction proximo,
+                         BiConsumer<Coordenada, EventoMatching> aplicar, RastreioPosicoes rastreio, long lagMaximo) {
+        this.lagMaximo = lagMaximo;
         this.rastreio = rastreio;
         this.consumidor = consumidor;
         this.topicoId = topicoId;
@@ -65,7 +73,6 @@ public final class CicloPosicoes {
         try {
             registros = consumidor.poll(Duration.ofMillis(500));
             validarIdentidade.run();
-            if (!registros.isEmpty()) invalidar();
             for (var r : registros) aplicar(r);
             conferirFim();
         } catch (RuntimeException erro) {
@@ -116,22 +123,29 @@ public final class CicloPosicoes {
         });
     }
 
+    /** Lag = registros que o PostgreSQL ainda não aplicou ou que o consumidor ainda não leu, somados nas partições. */
     private void conferirFim() {
         var particoes = consumidor.assignment();
         if (particoes.size() != 3) return;
         var fins = consumidor.endOffsets(particoes, Duration.ofSeconds(5));
-        boolean alcancou = true;
+        long atraso = 0;
         for (var p : particoes) {
             long banco = proximo.applyAsLong(p.partition());
             if (banco > fins.get(p)) throw incoerente("HISTORICO_INCOMPATIVEL");
-            if (banco != fins.get(p) || consumidor.position(p, Duration.ofSeconds(5)) < fins.get(p)) alcancou = false;
+            long lido = consumidor.position(p, Duration.ofSeconds(5));
+            atraso = Math.addExact(atraso, Math.max(fins.get(p) - banco, fins.get(p) - lido));
         }
+        lag = atraso;
         verificadoEm = System.nanoTime();
-        emDia = alcancou;
+        emDia = atraso <= lagMaximo;
     }
 
     public boolean emDia() { return emDia && System.nanoTime() - verificadoEm < Duration.ofSeconds(10).toNanos(); }
-    public void invalidar() { emDia = false; }
+    /** Último lag conferido; {@code Long.MAX_VALUE} enquanto a projeção não foi validada. */
+    public long lag() { return lag; }
+    /** Barreira estrita (avanço de data): em dia e sem nenhum registro pendente. */
+    public boolean semLag() { return emDia() && lag == 0; }
+    public void invalidar() { emDia = false; lag = Long.MAX_VALUE; }
     public int particaoFalha() { return particaoFalha; }
     public long offsetFalha() { return offsetFalha; }
     private static ProjecaoIncoerenteException incoerente(String motivo) { return new ProjecaoIncoerenteException(motivo); }

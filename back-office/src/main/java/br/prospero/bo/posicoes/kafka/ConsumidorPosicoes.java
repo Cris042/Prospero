@@ -29,6 +29,7 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
     private final MeterRegistry metricas;
     private final String servidores;
     private final boolean habilitado;
+    private final long lagMaximo;
     private volatile boolean ativo;
     private volatile KafkaConsumer<String, byte[]> consumidor;
     @Inject io.opentelemetry.api.OpenTelemetry telemetry;
@@ -39,13 +40,16 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
 
     @Inject public ConsumidorPosicoes(AplicarPosicoesActor actor, CheckpointPosicoesJpa checkpoint, MeterRegistry metricas,
             @ConfigProperty(name = "kafka.bootstrap.servers") String servidores,
-            @ConfigProperty(name = "prospero.posicoes.habilitadas", defaultValue = "true") boolean habilitado) {
+            @ConfigProperty(name = "prospero.posicoes.habilitadas", defaultValue = "true") boolean habilitado,
+            @ConfigProperty(name = "prospero.posicoes.lag-maximo", defaultValue = "50") long lagMaximo) {
+        this.lagMaximo = lagMaximo;
         this.actor = actor;
         this.checkpoint = checkpoint;
         this.metricas = metricas;
         this.servidores = servidores;
         this.habilitado = habilitado;
         metricas.gauge("prospero.posicoes.em_dia", this, c -> c.emDia() ? 1 : 0);
+        metricas.gauge("prospero.posicoes.lag_registros", this, ConsumidorPosicoes::lag);
     }
 
     void iniciar(@Observes StartupEvent evento) {
@@ -63,6 +67,14 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
     }
 
     @Override public boolean emDia() { return ativo && ciclo != null && ciclo.emDia(); }
+    @Override public boolean semLag() { return ativo && ciclo != null && ciclo.semLag(); }
+
+    /** Registros pendentes na última conferência; -1 enquanto a projeção não foi validada. */
+    double lag() {
+        var atual = ciclo;
+        long valor = atual == null ? Long.MAX_VALUE : atual.lag();
+        return valor == Long.MAX_VALUE ? -1 : valor;
+    }
 
     /** O Admin recusa timeout de API menor que o de requisição (padrão 30 s); ambos ficam em 5 s. */
     static java.util.Map<String, Object> configuracaoAdmin(String servidores) {
@@ -120,7 +132,7 @@ public class ConsumidorPosicoes implements SituacaoPosicoes {
             }
             topicoId = descricao.topicId().toString();
             checkpoint.iniciar(topicoId);
-            ciclo = new CicloPosicoes(c, topicoId, checkpoint::proximo, actor::aplicar, new RastreioPosicoes(telemetry, tracer));
+            ciclo = new CicloPosicoes(c, topicoId, checkpoint::proximo, actor::aplicar, new RastreioPosicoes(telemetry, tracer), lagMaximo);
             ciclo.iniciar();
         }
         ciclo.rodada(() -> {
