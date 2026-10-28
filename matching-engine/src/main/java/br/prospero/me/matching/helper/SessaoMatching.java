@@ -1,6 +1,7 @@
 package br.prospero.me.matching.helper;
 
 import br.prospero.me.livro.dominio.AdmissaoOco;
+import br.prospero.me.livro.dominio.AlvoCancelamento;
 import br.prospero.me.livro.dominio.MotorMatching;
 import br.prospero.me.livro.dominio.ParametrosAtivo;
 
@@ -18,10 +19,13 @@ public final class SessaoMatching {
     private final Map<UUID, EnvelopeMatching.Comando> ordens = new HashMap<>();
     private final Map<UUID, UUID> intencoes = new HashMap<>();
     private final java.util.Set<String> encerrados = new java.util.HashSet<>();
+    /** Comandos de cancelamento já decididos, por id: limitado ao orçamento do log e reconstruído pelo replay. */
+    private final Map<UUID, AlvoCancelamento> cancelamentos = new HashMap<>();
     private LocalDate sessao;
 
     public List<byte[]> processar(EnvelopeMatching.Comando comando) {
         if (comando.encerramento() != null) return encerrar(comando);
+        if (comando.cancelamento() != null) return cancelar(comando);
         var a = comando.admissao();
         if (sessao != null && !sessao.equals(a.sessao())) throw new IllegalArgumentException("Uma sessão por log.");
         var anterior = ordens.get(a.ordem());
@@ -62,6 +66,22 @@ public final class SessaoMatching {
         return List.copyOf(envelopes);
     }
 
+    /**
+     * Retirada manual (RF10c2): repetição do mesmo comando não tem efeito nem evento; o mesmo id com alvo diferente é
+     * inconsistência. Ordem desconhecida é recusada pelo núcleo sem abrir sessão nem criar estado.
+     */
+    private List<byte[]> cancelar(EnvelopeMatching.Comando comando) {
+        var alvo = comando.cancelamento();
+        var anterior = cancelamentos.get(comando.id());
+        if (anterior != null) {
+            if (!anterior.equals(alvo)) throw new IllegalArgumentException("Cancelamento divergente.");
+            return List.of();
+        }
+        if (cancelamentos.size() >= 30_000) throw new IllegalStateException("Orçamento de cancelamentos esgotado.");
+        cancelamentos.put(comando.id(), alvo);
+        return EnvelopeMatching.cancelamento(comando, motor.cancelarManual(alvo));
+    }
+
     public LocalDate sessao() { return sessao; }
 
     /**
@@ -69,7 +89,9 @@ public final class SessaoMatching {
      * para nem troca a sessão já persistida, e só a fixa quando o log ainda não tem sessão.
      */
     public static LocalDate sessaoDoCheckpoint(EnvelopeMatching.Comando comando, LocalDate persistida) {
-        if (comando.encerramento() != null) return persistida != null ? persistida : comando.sessao();
+        if (comando.encerramento() != null || comando.cancelamento() != null) {
+            return persistida != null ? persistida : comando.sessao();
+        }
         if (persistida != null && !persistida.equals(comando.sessao())) {
             throw new IllegalArgumentException("Sessão do checkpoint divergente.");
         }

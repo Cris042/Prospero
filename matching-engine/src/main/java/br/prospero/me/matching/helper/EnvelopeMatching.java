@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,7 @@ public final class EnvelopeMatching {
 
     private static final Set<String> RAIZ_ENCERRAMENTO = Set.of("id", "tipo", "versao", "origem", "correlacao", "ocorridoEm", "traceparent", "dados");
     private static final Set<String> DADOS_ENCERRAMENTO = Set.of("ticker", "dataSessao");
+    private static final Set<String> DADOS_CANCELAMENTO = Set.of("ordem", "intencao", "conta", "ticker", "dataSessao");
     private static final Set<String> DADOS_OCO = Set.of("ticker", "lado", "dataSessao", "precoMaximo", "pernas");
     private static final Set<String> TAKE_PROFIT = Set.of("papel", "ordem", "tipo", "validade", "quantidade", "precoLimite");
     private static final Set<String> STOP_LOSS = Set.of("papel", "ordem", "tipo", "validade", "quantidade", "precoLimite", "precoGatilho");
@@ -49,18 +51,26 @@ public final class EnvelopeMatching {
      * (sem admissão).
      */
     public record Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao, Admissao stopLoss,
-                          Encerramento encerramento) {
+                          Encerramento encerramento, AlvoCancelamento cancelamento) {
         public Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao) {
-            this(id, ocorridoEm, traceparent, admissao, null, null);
+            this(id, ocorridoEm, traceparent, admissao, null, null, null);
         }
 
         public Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao, Admissao stopLoss) {
-            this(id, ocorridoEm, traceparent, admissao, stopLoss, null);
+            this(id, ocorridoEm, traceparent, admissao, stopLoss, null, null);
+        }
+
+        public Comando(UUID id, Instant ocorridoEm, String traceparent, Admissao admissao, Admissao stopLoss,
+                       Encerramento encerramento) {
+            this(id, ocorridoEm, traceparent, admissao, stopLoss, encerramento, null);
         }
 
         public boolean oco() { return stopLoss != null; }
 
-        public LocalDate sessao() { return encerramento != null ? encerramento.sessao() : admissao.sessao(); }
+        public LocalDate sessao() {
+            if (cancelamento != null) return cancelamento.sessao();
+            return encerramento != null ? encerramento.sessao() : admissao.sessao();
+        }
 
         /** Perna do comando com a ordem informada. */
         public Admissao perna(UUID ordem) {
@@ -78,6 +88,7 @@ public final class EnvelopeMatching {
             if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES) throw invalido();
             JsonNode raiz = JSON.readTree(bytes);
             if (encerramentoDeSessao(raiz)) return encerramento(raiz, chave);
+            if (cancelarOrdem(raiz)) return cancelamento(raiz, chave);
             Cabecalho cabecalho = cabecalho(raiz);
             JsonNode dados = raiz.get("dados");
             if (cabecalho.versao() == 3) return par(cabecalho, dados, chave);
@@ -90,6 +101,82 @@ public final class EnvelopeMatching {
 
     private static boolean encerramentoDeSessao(JsonNode raiz) {
         return raiz != null && raiz.path("tipo").isTextual() && raiz.get("tipo").textValue().equals("ENCERRAR_SESSAO");
+    }
+
+    private static boolean cancelarOrdem(JsonNode raiz) {
+        return raiz != null && raiz.path("tipo").isTextual() && raiz.get("tipo").textValue().equals("CANCELAR_ORDEM");
+    }
+
+    /**
+     * Comando v1 do MO (RF10c2): raiz sem conta, id = uuid("cancelamento:" + ordem) e correlação = admissão alvo; a
+     * conta e o ativo (igual à chave Kafka) vivem em dados, como a identidade completa do alvo.
+     */
+    private static Comando cancelamento(JsonNode raiz, String chave) {
+        campos(raiz, RAIZ_ENCERRAMENTO);
+        if (!raiz.get("versao").isInt() || raiz.get("versao").intValue() != 1 || !daOrigemMiddleOffice(raiz)) {
+            throw invalido();
+        }
+        JsonNode dados = raiz.get("dados");
+        campos(dados, DADOS_CANCELAMENTO);
+        String ticker = ticker(dados, chave);
+        String conta = texto(dados, "conta");
+        if (!CONTAS.contains(conta)) throw invalido();
+        UUID ordem = uuid(dados, "ordem");
+        UUID intencao = uuid(dados, "intencao");
+        LocalDate sessao = sessao(dados);
+        UUID id = uuid(raiz, "id");
+        if (!id.equals(uuidDeterministico("cancelamento:" + ordem))
+                || !uuid(raiz, "correlacao").equals(uuidDeterministico("admissao:" + intencao))) {
+            throw invalido();
+        }
+        return new Comando(id, Instant.parse(texto(raiz, "ocorridoEm")), trace(raiz), null, null, null,
+                new AlvoCancelamento(ordem, intencao, conta, ticker, sessao));
+    }
+
+    /**
+     * Eventos v5 de um CANCELAR_ORDEM (ADR-013 RF10c2): terminal {@code CANCELADA_MANUAL} só quando aplicado (índice 0)
+     * e a decisão como último evento. O fato interno {@link SaldoCanceladoManual} não entra no catálogo {@link Evento}.
+     */
+    public static List<byte[]> cancelamento(Comando comando, ResultadoCancelamentoManual resultado) {
+        AlvoCancelamento alvo = comando.cancelamento();
+        UUID admissao = uuidDeterministico("admissao:" + alvo.intencao());
+        List<byte[]> saida = new ArrayList<>(2);
+        String terminal = null;
+        if (resultado.situacao() == ResultadoCancelamentoManual.Situacao.APLICADO) {
+            SaldoCanceladoManual saldo = resultado.terminais().getFirst();
+            if (!saldo.ordem().equals(alvo.ordem()) || !saldo.ticker().equals(alvo.ticker())) {
+                throw new IllegalStateException("Terminal divergente do alvo.");
+            }
+            ObjectNode raiz = cabecalhoEvento(comando, 0, 5, admissao, alvo.ticker());
+            ObjectNode dados = raiz.putObject("dados");
+            identidade(dados, alvo);
+            dados.put("motivo", "CANCELADA_MANUAL");
+            dados.put("executada", saldo.executada());
+            dados.put("cancelada", saldo.cancelada());
+            raiz.put("tipo", "ORDEM_ENCERRADA");
+            terminal = raiz.get("id").textValue();
+            saida.add(serializar(raiz));
+        }
+        ObjectNode raiz = cabecalhoEvento(comando, saida.size(), 5, admissao, alvo.ticker());
+        ObjectNode dados = raiz.putObject("dados");
+        identidade(dados, alvo);
+        dados.put("resultado", resultado.situacao().name());
+        dados.put("terminal", terminal);
+        raiz.put("tipo", "CANCELAMENTO_DECIDIDO");
+        saida.add(serializar(raiz));
+        return List.copyOf(saida);
+    }
+
+    private static void identidade(ObjectNode dados, AlvoCancelamento alvo) {
+        dados.put("ordem", alvo.ordem().toString());
+        dados.put("intencao", alvo.intencao().toString());
+        dados.put("conta", alvo.conta());
+    }
+
+    private static byte[] serializar(ObjectNode raiz) {
+        byte[] bytes = raiz.toString().getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_BYTES) throw new IllegalStateException("Evento ultrapassa orçamento.");
+        return bytes;
     }
 
     private static Cabecalho cabecalho(JsonNode raiz) {
