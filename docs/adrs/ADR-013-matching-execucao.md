@@ -334,7 +334,7 @@ Nginx e proxy de desenvolvimento ganharam a rota exata `ordens/{uuid}/cancelamen
 
 ### Evidência e limites
 
-Testes REST Assured sobre repositório em memória, IT PostgreSQL da V12 e dos hooks de risco/matching, `cancelamento.xlsx` pelo runner (ADR-004) em duas execuções na CI e E2E Playwright. A V12 é aditiva; ao voltar a imagem a tabela fica e as operações persistidas deixam de ser promovidas, então a correção segue para frente. ❓ LACUNA: o prazo para uma operação sem resultado (ACK da admissão que nunca vem, partição bloqueada) não tem regra de negócio; ela fica pendente e visível pelo gauge, sem timeout, recusa nem liberação.
+Testes REST Assured sobre repositório em memória, IT PostgreSQL da V12 e dos hooks de risco/matching, `cancelamento.xlsx` pelo runner (ADR-004) em duas execuções na CI e E2E Playwright. A V12 é aditiva; ao voltar a imagem a tabela fica e as operações persistidas deixam de ser promovidas, então a correção segue para frente. Decisão do usuário (2026-10-28): operação sem resultado (ACK ausente ou partição bloqueada) permanece pendente, sem timeout, recusa ou liberação automática; o alerta `ProsperoCancelamentoPendente` dispara quando a mais antiga passa de 120 s por 1 min.
 
 ### Leitura do resultado no FO — ajustes da revisão RF10 3/3 (2026-10-28)
 

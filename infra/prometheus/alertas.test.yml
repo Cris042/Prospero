@@ -474,6 +474,32 @@ tests:
     exp_samples:
     - labels: '{}'
       value: 0
+- name: 'cancelamento pendente: limite de 120s, persistência e recuperação'
+  interval: 15s
+  input_series:
+  - series: prospero_cancelamento_pendente_segundos_max{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 0x3 60x3 130x7 0x10
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoCancelamentoPendente",alertstate="pending"}) or vector(0)
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoCancelamentoPendente",alertstate="pending"}) or vector(0)
+    eval_time: 2m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoCancelamentoPendente",alertstate="firing"}) or vector(0)
+    eval_time: 3m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoCancelamentoPendente"}) or vector(0)
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 0
 - name: 'outbox: zero, persistência e recuperação'
   interval: 15s
   input_series:

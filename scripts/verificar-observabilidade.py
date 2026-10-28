@@ -22,7 +22,7 @@ PAINEIS = {'ordens': 'prospero-ordens', 'risco': 'prospero-risco',
            'matching': 'prospero-matching', 'back-office': 'prospero-back-office'}
 ALERTAS = {'ProsperoSemScrape', 'ProsperoProcessamentoIndisponivel',
            'ProsperoMetricaProntidaoAusente', 'ProsperoQuarentenaRecente',
-           'ProsperoOutboxPendente', 'ProsperoCreditoAguardando',
+           'ProsperoOutboxPendente', 'ProsperoCancelamentoPendente', 'ProsperoCreditoAguardando',
            'ProsperoBoletaNegocioP99Alto', 'ProsperoMatchingP99Alto',
            'ProsperoRiscoConsumoBloqueadoOuDescartado'}
 
