@@ -162,6 +162,19 @@ class CancelamentoOperacaoPostgresIT {
     }
 
     @Test
+    void resultadoDoMoQueContradizADecisaoDoMatchingBloqueiaAParticao() {
+        UUID o = ordem("00f1", "CONTA-002", "ABERTA", null);
+        registrar(o, "CONTA-002", EstadoCancelamento.SOLICITADO, true);
+        QuarkusTransaction.requiringNew().call(() ->
+                cancelamentos.aplicarDecisao(o, "CONTA-002", EventoMatching.ResultadoCancelamento.SEM_SALDO_VIVO));
+        var bloqueio = org.junit.jupiter.api.Assertions.assertThrows(
+                br.prospero.fo.comum.dominio.ParticaoBloqueadaException.class,
+                () -> cancelamentos.aplicarResultado(resultado(o, "CONTA-002", true, null)));
+        assertEquals("RESULTADO_CANCELAMENTO_INVALIDO", bloqueio.getMessage());
+        assertEquals(EstadoCancelamento.DECIDIDO, cancelamentos.buscar("CONTA-002", o).orElseThrow().estado());
+    }
+
+    @Test
     void resultadoDoMoPodeChegarAntesDaDecisaoDoMatchingSemRegredirADecisao() {
         UUID o = ordem("0005", "CONTA-002", "ABERTA", null);
         registrar(o, "CONTA-002", EstadoCancelamento.SOLICITADO, true);
