@@ -175,13 +175,15 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
         if (atual.isEmpty()) {
             return false;
         }
-        var decisao = atual.get().decisao();
-        if (decisao != null && r.confirmado() != (decisao == EventoMatching.ResultadoCancelamento.APLICADO)) {
-            throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_INVALIDO");
-        }
         EstadoCancelamento novo = r.confirmado() ? EstadoCancelamento.CONFIRMADO : EstadoCancelamento.RECUSADO;
         if (!atual.get().estado().avancaPara(novo)) {
             return false;
+        }
+        // Só um resultado que seria aplicado é conferido contra a decisão já registrada do ME; repetição e
+        // regressão depois de um estado final continuam ignoradas.
+        var decisao = atual.get().decisao();
+        if (decisao != null && r.confirmado() != (decisao == EventoMatching.ResultadoCancelamento.APLICADO)) {
+            throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_INVALIDO");
         }
         atualizar(r.ordem(), novo, r.motivo(), r.ocorridoEm() == null ? relogio.instant() : r.ocorridoEm());
         trajetoria.registrarCancelamento(r.conta(), r.ordem(), new MarcoCancelamento("middle-office",
