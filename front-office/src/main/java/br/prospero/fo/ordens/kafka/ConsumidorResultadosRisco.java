@@ -1,11 +1,13 @@
 package br.prospero.fo.ordens.kafka;
 
 import br.prospero.fo.comum.dominio.MensagemInvalidaException;
+import br.prospero.fo.comum.dominio.ParticaoBloqueadaException;
 import br.prospero.fo.comum.kafka.ConfiguracaoKafka;
 import br.prospero.fo.comum.kafka.ConsumoKafka;
 import br.prospero.fo.comum.kafka.Rastreio;
 import br.prospero.fo.ordens.actor.AplicarRiscoActor;
 import br.prospero.fo.ordens.dominio.MensagemRisco;
+import br.prospero.fo.ordens.dominio.ResultadoCancelamento;
 import br.prospero.fo.ordens.helper.EnvelopeRisco;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.opentelemetry.api.OpenTelemetry;
@@ -73,6 +75,10 @@ public class ConsumidorResultadosRisco {
         try (Scope ignorado = span.makeCurrent()) {
             MensagemRisco mensagem = EnvelopeRisco.ler(registro.value());
             if (!mensagem.conta().equals(registro.key())) {
+                // Cancelamento reconhecido e inválido bloqueia a partição; só o resultado de risco legado é descartável.
+                if (mensagem instanceof ResultadoCancelamento) {
+                    throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_INVALIDO");
+                }
                 throw new MensagemInvalidaException("chave");
             }
             actor.aplicar(mensagem);

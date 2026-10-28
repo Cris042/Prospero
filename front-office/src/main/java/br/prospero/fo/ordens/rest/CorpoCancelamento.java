@@ -21,8 +21,9 @@ final class CorpoCancelamento {
         if (corpo == null || corpo.isBlank()) {
             return;
         }
-        if (tipoConteudo == null || !tipoConteudo.toLowerCase(java.util.Locale.ROOT).startsWith("application/json")) {
-            throw new RegraNegocioException(Categoria.ENTRADA_INVALIDA, "TIPO_NAO_SUPORTADO",
+        if (tipoConteudo == null
+                || !"application/json".equals(tipoConteudo.split(";", 2)[0].trim().toLowerCase(java.util.Locale.ROOT))) {
+            throw new RegraNegocioException(Categoria.ENTRADA_INVALIDA, "CORPO_CANCELAMENTO_INVALIDO",
                     "Corpo, quando enviado, deve ser application/json.");
         }
         try {

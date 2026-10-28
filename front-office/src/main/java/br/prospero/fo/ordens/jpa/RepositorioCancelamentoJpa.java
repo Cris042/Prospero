@@ -1,5 +1,7 @@
 package br.prospero.fo.ordens.jpa;
 
+import br.prospero.fo.comum.dominio.ParticaoBloqueadaException;
+
 import br.prospero.fo.comum.dominio.MensagemSaida;
 import br.prospero.fo.comum.kafka.AvisoOutbox;
 import br.prospero.fo.comum.kafka.Rastreio;
@@ -44,6 +46,7 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
     private final Instance<EntityManager> gerenciadores;
     @Inject RepositorioTrajetoriaJpa trajetoria;
     @Inject AvisoOutbox avisoOutbox;
+    @Inject java.time.Clock relogio;
 
     @Inject
     public RepositorioCancelamentoJpa(Instance<EntityManager> gerenciadores) {
@@ -118,7 +121,7 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
     /** Hook do risco, parte 2: promove (RESERVADA) ou recusa (REJEITADA) os cancelamentos travados. */
     @Transactional
     public void aposRisco(ResultadoRisco risco, List<UUID> operacoes) {
-        Instant agora = Instant.now();
+        Instant agora = relogio.instant();
         for (UUID id : operacoes) {
             Ordem ordem = RepositorioOrdensJpa.ordem(em().find(OrdemEntity.class, id));
             if (risco.estado() == EstadoOrdem.RESERVADA) {
@@ -172,11 +175,15 @@ public class RepositorioCancelamentoJpa implements RepositorioCancelamento {
         if (atual.isEmpty()) {
             return false;
         }
+        var decisao = atual.get().decisao();
+        if (decisao != null && r.confirmado() != (decisao == EventoMatching.ResultadoCancelamento.APLICADO)) {
+            throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_INVALIDO");
+        }
         EstadoCancelamento novo = r.confirmado() ? EstadoCancelamento.CONFIRMADO : EstadoCancelamento.RECUSADO;
         if (!atual.get().estado().avancaPara(novo)) {
             return false;
         }
-        atualizar(r.ordem(), novo, r.motivo(), r.ocorridoEm() == null ? Instant.now() : r.ocorridoEm());
+        atualizar(r.ordem(), novo, r.motivo(), r.ocorridoEm() == null ? relogio.instant() : r.ocorridoEm());
         trajetoria.registrarCancelamento(r.conta(), r.ordem(), new MarcoCancelamento("middle-office",
                 r.confirmado() ? "CANCELAMENTO_CONFIRMADO" : "CANCELAMENTO_RECUSADO", r.evento(), r.assinatura(),
                 r.ocorridoEm(), r.motivo(), r.traceparent()));

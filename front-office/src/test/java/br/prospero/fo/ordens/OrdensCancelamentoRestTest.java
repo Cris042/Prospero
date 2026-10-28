@@ -128,6 +128,17 @@ class OrdensCancelamentoRestTest {
     }
 
     @Test
+    void corpoComTipoDiferenteDeJsonRecebeCodigoDoContrato() {
+        String rota = "/api/v1/ordens/" + ordem("CONTA-002", "cancela-tipo-0001") + "/cancelamento";
+        for (String tipo : new String[]{"text/plain", "application/jsonx"}) {
+            given().auth().oauth2(completo("CONTA-002")).contentType(tipo).body("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8)).when().put(rota).then()
+                    .statusCode(400).body("codigo", equalTo("CORPO_CANCELAMENTO_INVALIDO"));
+        }
+        given().auth().oauth2(completo("CONTA-002")).contentType("application/json; charset=utf-8").body("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .when().put(rota).then().statusCode(202);
+    }
+
+    @Test
     void getSemPedidoDevolve404() {
         String id = ordem("CONTA-002", "cancela-0005");
         given().auth().oauth2(completo("CONTA-002")).get("/api/v1/ordens/" + id + "/cancelamento").then().statusCode(404)

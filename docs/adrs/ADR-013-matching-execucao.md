@@ -335,3 +335,11 @@ Nginx e proxy de desenvolvimento ganharam a rota exata `ordens/{uuid}/cancelamen
 ### Evidência e limites
 
 Testes REST Assured sobre repositório em memória, IT PostgreSQL da V12 e dos hooks de risco/matching, `cancelamento.xlsx` pelo runner (ADR-004) em duas execuções na CI e E2E Playwright. A V12 é aditiva; ao voltar a imagem a tabela fica e as operações persistidas deixam de ser promovidas, então a correção segue para frente. ❓ LACUNA: o prazo para uma operação sem resultado (ACK da admissão que nunca vem, partição bloqueada) não tem regra de negócio; ela fica pendente e visível pelo gauge, sem timeout, recusa nem liberação.
+
+### Leitura do resultado no FO — ajustes da revisão RF10 3/3 (2026-10-28)
+
+- `RESULTADO_CANCELAMENTO` com conta diferente da chave Kafka bloqueia a partição (`RESULTADO_CANCELAMENTO_INVALIDO`), como os demais desvios de tipo reconhecido; não é descartado.
+- Resultado do MO incompatível com a decisão do ME já registrada (`CONFIRMADO` sem `APLICADO`, ou recusa com `APLICADO`) também bloqueia a partição.
+- O FO não recalcula a `correlacao` da admissão alvo no resultado: o `id` derivado de `resultado-cancelamento:` + ordem, verificado na leitura, e a trava por ordem e conta já amarram o resultado à operação. Desvio consciente do "leitores recalculam" do RF10c2, limitado ao FO.
+- Corpo do `PUT` com Content-Type diferente de `application/json` (tipo de mídia exato, parâmetros permitidos) responde `CORPO_CANCELAMENTO_INVALIDO`.
+- Riscos aceitos: o token injetado pelo nginx vale também para o cancelamento, no mesmo modelo de origem local do ADR-010; o 503 do interruptor não envia `Retry-After`; não há teste com duas requisições `PUT` realmente simultâneas (a proteção é a trava pessimista da ordem e a chave primária por ordem).

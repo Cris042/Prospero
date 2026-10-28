@@ -26,7 +26,7 @@ class ConsumoKafkaBloqueioTest {
         var metricas = new SimpleMeterRegistry();
         var rejeitados = new ArrayList<String>();
         var consumo = new ConsumoKafka(() -> consumidor, TOPICO, registro -> {
-            throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_SEM_LEITOR");
+            throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_INVALIDO");
         }, (topico, particao, offset, motivo) -> rejeitados.add(motivo), metricas);
         int tentativas = ConsumoKafka.TENTATIVAS_MAXIMAS + 5;
         for (int i = 0; i < tentativas; i++) {
@@ -38,7 +38,7 @@ class ConsumoKafkaBloqueioTest {
         }
         assertEquals(List.of(), rejeitados, "nada é descartado");
         assertEquals(tentativas, metricas.counter("prospero.consumo.bloqueadas", "topico", TOPICO,
-                "motivo", "RESULTADO_CANCELAMENTO_SEM_LEITOR").count());
+                "motivo", "RESULTADO_CANCELAMENTO_INVALIDO").count());
         assertNull(metricas.find("prospero.consumo.descartadas").counter());
     }
 }
