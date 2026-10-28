@@ -22,6 +22,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from decimal import Decimal
 
 AQUI = Path(__file__).resolve().parent
@@ -169,9 +170,9 @@ def relatorio_publico(execucoes):
 
 # --- Operação contra o ambiente real (exercitada pela CI; sem teste local) ---
 
-def _pedido(metodo, url, tok, corpo=None):
+def _pedido(metodo, url, tok, corpo=None, extras=None):
     """Devolve (status, cabeçalhos, corpo JSON); corpo de erro nunca é lido nem exposto."""
-    cab = {'Authorization': 'Bearer ' + tok}
+    cab = {'Authorization': 'Bearer ' + tok, **(extras or {})}
     dados = None
     if corpo is not None:
         dados = json.dumps(corpo).encode()
@@ -215,6 +216,15 @@ def _operacao(origem, tok, ordem):
     if status != 200 or not isinstance(corpo, dict):
         raise ValueError('consulta do cancelamento recusada')
     return corpo
+
+
+def _criar_ordem(origem, tok, corpo):
+    """POST de ordem exigindo 202; recusa explícita em vez de TypeError ao ler o id de um corpo ausente."""
+    status, _, resposta = _pedido('POST', origem + '/api/v1/ordens', tok, corpo,
+                                  {'X-Idempotency-Key': 'canc-' + uuid.uuid4().hex})
+    if status != 202 or not isinstance(resposta, dict) or not isinstance(resposta.get('id'), str):
+        raise ValueError('envio de ordem recusado (HTTP ' + str(status) + ')')
+    return resposta['id']
 
 
 def _pedir_cancelamento(origem, tok, ordem):
@@ -274,13 +284,13 @@ def rodar_execucao(ctx, n, m, falha):
         mercado.sem_pendencias(origem, conta)
     mercado.preparar_carteira(origem_mo, 'CONTA-002', INICIAL, {}, prazo=60)
     mercado.preparar_carteira(origem_mo, 'CONTA-003', '0.00', {TICKER: m}, prazo=60)
-    oferta = _pedido('POST', origem + '/api/v1/ordens', tok_venda,
-                     {'ticker': TICKER, 'lado': 'VENDA', 'tipo': 'LIMIT', 'validade': 'DIA', 'quantidade': m,
-                      'precoLimite': PRECO})[2]
+    oferta = {'id': _criar_ordem(origem, tok_venda,
+                                 {'ticker': TICKER, 'lado': 'VENDA', 'tipo': 'LIMIT', 'validade': 'DIA',
+                                  'quantidade': m, 'precoLimite': PRECO})}
     mercado.aguardar_campos(origem, tok_venda, '/api/v1/ordens/' + oferta['id'], {'estado': 'ABERTA'})
-    ordens = [_pedido('POST', origem + '/api/v1/ordens', tok_compra,
-                      {'ticker': TICKER, 'lado': 'COMPRA', 'tipo': 'LIMIT', 'validade': 'DIA', 'quantidade': 1,
-                       'precoLimite': PRECO}, )[2]['id'] for _ in range(n)]
+    ordens = [_criar_ordem(origem, tok_compra,
+                           {'ticker': TICKER, 'lado': 'COMPRA', 'tipo': 'LIMIT', 'validade': 'DIA', 'quantidade': 1,
+                            'precoLimite': PRECO}) for _ in range(n)]
 
     def assentadas():
         atuais = {i: esc.estado_ordem(origem, tok_compra, i) for i in ordens}
@@ -331,7 +341,8 @@ def rodar_execucao(ctx, n, m, falha):
     executadas, canceladas = conferir_quantidades([_ordem(origem, tok_compra, i) for i in ordens], n)
 
     def liberado():
-        carteira = _carteira(origem_mo, tok_risco)
+        # A porta publicada do MO pode mudar depois do stop/start da falha ensaiada: resolve de novo.
+        carteira = _carteira(ctx['origem_mo'](), tok_risco)
         conferir_liberacao(carteira, executadas, PRECO, INICIAL)
         conferir_custodia(custodia_repouso, custodia_compradora(carteira))
         return carteira
@@ -362,7 +373,7 @@ def main(argv=None):
         esperado = 'prospero-ci-' + os.environ.get('GITHUB_RUN_ID', '') + '-' + os.environ.get('GITHUB_RUN_ATTEMPT', '')
         if args.projeto != esperado or not re.fullmatch(r'http://127\.0\.0\.1:[0-9]{1,5}', args.origem):
             raise ValueError('projeto ou origem divergem da execucao')
-        ctx = {'origem': args.origem, 'origem_mo': esc._origem_mo(args.projeto),
+        ctx = {'origem': args.origem, 'origem_mo': lambda: esc._origem_mo(args.projeto),
                'parar_mo': lambda: subprocess.run(esc.comando_compose(args.projeto)
                                                   + ['stop', '--timeout', '8', 'middle-office'],
                                                   check=True, capture_output=True, timeout=60),
