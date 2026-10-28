@@ -976,3 +976,63 @@ tests:
     exp_samples:
     - labels: '{}'
       value: 0
+- name: 'risco: bloqueio de partição por tipo sem leitor dispara e se recolhe quando o contador estabiliza'
+  interval: 15s
+  input_series:
+  - series: prospero_consumo_bloqueadas_total{job="prospero",instance="alvo:8080",servico="middle-office",topico="risco.comandos.v1",motivo="CANCELAMENTO_SOLICITADO_SEM_COORDENACAO"}
+    values: 0x3 1+1x7 8x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing"}) or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing"}) or vector(0)
+    eval_time: 1m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing"}) or vector(0)
+    eval_time: 12m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'risco: descarte de mensagem em risco.* dispara, inclusive na primeira exposição sem baseline'
+  interval: 15s
+  input_series:
+  - series: prospero_consumo_descartadas_total{job="prospero",instance="alvo:8080",servico="front-office",topico="risco.resultados.v1"}
+    values: 0x8 1x80
+  - series: prospero_consumo_descartadas_total{job="prospero",instance="alvo:8080",servico="back-office",topico="risco.resultados.v1"}
+    values: _x40 2x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing",servico="front-office"}) or vector(0)
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing",servico="front-office"}) or vector(0)
+    eval_time: 2m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing",servico="front-office"}) or vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing",servico="back-office"}) or vector(0)
+    eval_time: 10m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'risco: descarte em tópico que não é risco.* não aciona o alerta'
+  interval: 15s
+  input_series:
+  - series: prospero_consumo_descartadas_total{job="prospero",instance="alvo:8080",servico="front-office",topico="matching.eventos.v1"}
+    values: 0x3 1+1x30
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
