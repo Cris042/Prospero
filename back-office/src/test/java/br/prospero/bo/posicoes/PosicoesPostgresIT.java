@@ -1,5 +1,6 @@
 package br.prospero.bo.posicoes;
 
+import br.prospero.bo.comum.ContratosV5;
 import br.prospero.bo.posicoes.actor.AplicarPosicoesActor;
 import br.prospero.bo.posicoes.dominio.*;
 import br.prospero.bo.posicoes.helper.EnvelopeMatching;
@@ -104,6 +105,27 @@ class PosicoesPostgresIT {
         assertEquals(1, numero("SELECT count(*) FROM bo_outbox WHERE tipo='NEGOCIO_CONTABILIZADO'"));
         assertEquals(1, numero("SELECT count(*) FROM bo_outbox WHERE topico='acompanhamento.eventos.v1' AND chave='ALFA3'"));
         assertEquals(1, numero("SELECT revisao FROM bo_cotacao WHERE ticker='ALFA3'"));
+    }
+
+    /** RF10c2a: o BO registra o fato e avança o checkpoint, sem razão, posição, cotação nem outbox. */
+    @Test
+    void eventosDeCancelamentoV5AvancamOCheckpointSemEfeitoFinanceiro() throws Exception {
+        long cotacao = numero("SELECT revisao FROM bo_cotacao WHERE ticker='ALFA3'");
+        var fixtures = new String[]{"ordem-encerrada-cancelada-manual", "cancelamento-decidido-aplicado"};
+        long offset = 0;
+        for (String nome : fixtures) {
+            var e = EnvelopeMatching.evento(ContratosV5.ler("matching.eventos.v1/ALFA3/" + nome + ".json"), "ALFA3");
+            aplicar.aplicar(coordenada(offset, e), e);
+            aplicar.aplicar(coordenada(offset, e), e);
+            offset++;
+        }
+        assertEquals(2, checkpoint.proximo(0));
+        assertEquals(2, numero("SELECT count(*) FROM bo_evento"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_lancamento"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_negocio"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_outbox"));
+        assertEquals(0, numero("SELECT count(*) FROM bo_posicao WHERE quantidade<>0"));
+        assertEquals(cotacao, numero("SELECT revisao FROM bo_cotacao WHERE ticker='ALFA3'"));
     }
 
     @Test

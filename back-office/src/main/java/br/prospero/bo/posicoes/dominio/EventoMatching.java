@@ -28,7 +28,18 @@ public record EventoMatching(UUID id, UUID correlacao, String ticker, LocalDate 
     }
 
     public sealed interface Detalhe permits Aceita, Oferta, Rejeitada, Encerrada, Negocio, StopPendente, StopAcionado,
-            Reduzida, SessaoEncerrada {
+            Reduzida, SessaoEncerrada, CancelamentoDecidido {
+    }
+
+    /** Resultado do ME para o comando de cancelamento (v5); recusa não é encerramento nem rejeição de admissão. */
+    public enum ResultadoCancelamento { APLICADO, SEM_SALDO_VIVO, ALVO_DIVERGENTE, ORIGEM_OCO }
+
+    /** Último evento do comando de cancelamento; {@code terminal} é o id do ORDEM_ENCERRADA, só em APLICADO. */
+    public record CancelamentoDecidido(Alvo alvo, ResultadoCancelamento resultado, UUID terminal) implements Detalhe { }
+
+    /** Causação determinística do comando de cancelamento da ordem (ADR-013 RF10c2). */
+    public static UUID comandoCancelamento(UUID ordem) {
+        return UUID.nameUUIDFromBytes(("cancelamento:" + ordem).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /** Marco v4 do encerramento de um ativo/data (RF05c.4); não altera ordens. */
