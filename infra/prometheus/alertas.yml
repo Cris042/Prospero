@@ -55,6 +55,14 @@ groups:
     annotations:
       summary: 'Pendências observadas na outbox de {{ $labels.servico }}'
       description: 'Gauge positivo por 2min, amostrado pela manutenção e sujeito a valor antigo após erro. Conferir relay/broker; não mede idade exata nem autoriza desfazer negócio.'
+  - alert: ProsperoCancelamentoPendente
+    expr: prospero_cancelamento_pendente_segundos_max{job="prospero",servico="front-office"} > 120
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Cancelamento manual sem resultado há mais de 2min'
+      description: 'Operação de cancelamento mais antiga sem resposta do MO/ME. Decisão do usuário (RF10, 2026-10-28): só alerta, sem recusa ou liberação automática; investigar ACK da admissão, outbox e partições bloqueadas.'
   - alert: ProsperoCreditoAguardando
     expr: >-
       (prospero_liquidacao_aguardando_idade_segundos{job="prospero",servico="middle-office"} > 120)
