@@ -147,15 +147,26 @@ class CompradoresMedidosEAquecimento(unittest.TestCase):
                                comprador=comprador, comprador_aquecimento=aquecedor, origem_jaeger=None)
 
     def test_recusa_comprador_medido_que_nao_seja_conta_005_antes_de_qualquer_http(self):
+        # Isolado do ambiente: sem .env, uma validação furada aparece como AssertionError (FAIL), não como ERROR de ambiente.
+        proibido = AssertionError("token, carteira ou HTTP antes da validação")
         for conta in ("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"):
-            with self.subTest(conta=conta), patch.object(medir.mercado, "http", side_effect=AssertionError("HTTP antes da validação")):
+            with self.subTest(conta=conta), \
+                    patch.object(medir.mercado, "token", side_effect=proibido), \
+                    patch.object(medir.mercado, "http", side_effect=proibido), \
+                    patch.object(medir.mercado, "preparar_carteira", side_effect=proibido), \
+                    patch.object(medir, "verificar_orcamento", side_effect=proibido):
                 with self.assertRaises(SystemExit) as erro:
                     medir.executar(self.argumentos(comprador=conta))
                 self.assertIn("CONTA-005", str(erro.exception))
 
     def test_recusa_aquecedor_que_nao_seja_conta_002_antes_de_qualquer_http(self):
+        proibido = AssertionError("token, carteira ou HTTP antes da validação")
         for conta in ("CONTA-001", "CONTA-003", "CONTA-004", "CONTA-005"):
-            with self.subTest(conta=conta), patch.object(medir.mercado, "http", side_effect=AssertionError("HTTP antes da validação")):
+            with self.subTest(conta=conta), \
+                    patch.object(medir.mercado, "token", side_effect=proibido), \
+                    patch.object(medir.mercado, "http", side_effect=proibido), \
+                    patch.object(medir.mercado, "preparar_carteira", side_effect=proibido), \
+                    patch.object(medir, "verificar_orcamento", side_effect=proibido):
                 with self.assertRaises(SystemExit) as erro:
                     medir.executar(self.argumentos(aquecedor=conta))
                 self.assertIn("CONTA-002", str(erro.exception))

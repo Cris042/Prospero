@@ -252,5 +252,46 @@ class RecuperacaoTest(unittest.TestCase):
             self.assertIn(self.compose + ['start', 'middle-office'], [c.args[0] for c in rodar.call_args_list])
 
 
+class ContaMedicaoTest(unittest.TestCase):
+    """CONTA-005 (medição, V01-2): conta de negócio no BO, com liquidação D+2 consultável e conciliada como as demais."""
+
+    def test_conjunto_de_contas_da_liquidacao_inclui_a_conta_005(self):
+        self.assertEqual({f"CONTA-00{i}" for i in range(1, 6)}, liquidacao.CONTAS)
+
+    def test_snapshot_aceita_a_conta_005_e_recusa_contas_fora_do_conjunto(self):
+        liquidacao.snapshot("CONTA-005", carteira("CONTA-005", "8000.00", 0))
+        with self.assertRaises(ValueError):
+            liquidacao.snapshot("CONTA-999", carteira("CONTA-999", "8000.00", 0))
+
+    def test_negocio_da_conta_005_concilia_com_a_contraparte_003(self):
+        negocios = [participacao("CONTA-005", "COMPRADOR"), participacao("CONTA-003", "VENDEDOR")]
+        lancamentos = [p for n in negocios for p in partidas(n)]
+        antes = {"CONTA-005": carteira("CONTA-005", "8000.00", 0), "CONTA-003": carteira("CONTA-003", "5000.00", 100)}
+        depois = {"CONTA-005": carteira("CONTA-005", "8000.00", 100), "CONTA-003": carteira("CONTA-003", "7000.00", 100)}
+        self.assertEqual([], liquidacao.conciliar(negocios, lancamentos, antes, depois)["diferencas"])
+
+    def test_negocio_da_conta_005_sem_credito_do_mo_aparece_como_diferenca(self):
+        negocios = [participacao("CONTA-005", "COMPRADOR"), participacao("CONTA-003", "VENDEDOR")]
+        lancamentos = [p for n in negocios for p in partidas(n)]
+        antes = {"CONTA-005": carteira("CONTA-005", "8000.00", 0), "CONTA-003": carteira("CONTA-003", "5000.00", 100)}
+        depois = {"CONTA-005": carteira("CONTA-005", "8000.00", 0), "CONTA-003": carteira("CONTA-003", "7000.00", 100)}
+        diferencas = liquidacao.conciliar(negocios, lancamentos, antes, depois)["diferencas"]
+        self.assertIn({"conta": "CONTA-005", "unidade": "ALFA3", "esperado": "100", "observado": "0"}, diferencas)
+
+    def test_participantes_e_carteiras_consultam_a_conta_005(self):
+        consultadas = []
+
+        def chamar(caminho, escopo, conta=None, corpo=None, metodo=None):
+            consultadas.append((caminho.split("?")[0], conta))
+            if escopo == "risco":
+                return {"conta": conta}
+            return {"conta": conta, "negocios": [], "proximoCursor": None}
+
+        servico = SimpleNamespace(chamar=chamar)
+        liquidacao.participantes(servico)
+        self.assertIn(("/api/v1/negocios", "CONTA-005"), consultadas)
+        self.assertIn("CONTA-005", liquidacao.carteiras(servico))
+
+
 if __name__ == "__main__":
     unittest.main()

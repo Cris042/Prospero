@@ -233,6 +233,16 @@ class OrdensResourceTest {
                 .body("x").when().post("/api/v1/ordens").then().statusCode(415);
     }
 
+    @Test
+    void contaDeMedicao005EnviaELeOrdensComoAsDemais() {
+        // V01 (RF05d/RNF04): a CONTA-005 é conta de negócio do FO; conta inexistente continua recusada.
+        enviar(conta("CONTA-005"), "medicao-00001", limit("10.00")).then().statusCode(202).body("estado", equalTo("RECEBIDA"));
+        given().auth().oauth2(conta("CONTA-005")).when().get("/api/v1/ordens").then().statusCode(200)
+                .body("ordens.size()", equalTo(1));
+        enviar(conta("CONTA-999"), "medicao-00002", limit("10.00")).then().statusCode(403)
+                .body("codigo", equalTo("CONTA_DESCONHECIDA"));
+    }
+
     private static Map<String, Object> ordem(String ticker, String lado, String tipo, String validade, long quantidade,
                                              String limite, String gatilho) {
         Map<String, Object> corpo = new HashMap<>(Map.of("ticker", ticker, "lado", lado, "tipo", tipo,

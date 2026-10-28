@@ -79,6 +79,12 @@ class AtualizacoesWebSocketTest {
     }
 
     @Test
+    void handshakeRecusaAContaDeMedicao005() {
+        // V01: a CONTA-005 fica fora do WebSocket (só 001 a 004); com JWT válido, a recusa vem da lista de contas.
+        assertEquals(403, recusar(builder(token("CONTA-005"), origem()), ""));
+    }
+
+    @Test
     void handshakeRecusaOriginAusenteExternoQueryESubprotocolo() {
         assertEquals(403, recusar(builder(token("CONTA-002"), null), ""));
         assertEquals(403, recusar(builder(token("CONTA-002"), "http://evil.example"), ""));
