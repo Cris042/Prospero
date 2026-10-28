@@ -27,5 +27,7 @@ public record OrdemResponseDTO(
         long quantidadeExecutada, long quantidadeCancelada,
         @Schema(nullable = true, description = "Motivo terminal do matching; não implica liquidação.") String motivoEncerramento,
         @Schema(description = "Quantidade retirada do Stop Loss OCO pela execução do Take Profit (RF05c.3b); 0 nas demais.")
-        long quantidadeReduzida) {
+        long quantidadeReduzida,
+        @Schema(nullable = true, description = "Cancelamento manual solicitado (RF10); null sem pedido.")
+        CancelamentoResumoDTO cancelamento) {
 }

@@ -4,7 +4,9 @@ import br.prospero.fo.comum.dominio.MensagemInvalidaException;
 import br.prospero.fo.comum.dominio.ParticaoBloqueadaException;
 import br.prospero.fo.ordens.dominio.EstadoOrdem;
 import br.prospero.fo.ordens.dominio.MotivoRejeicao;
+import br.prospero.fo.ordens.dominio.MensagemRisco;
 import br.prospero.fo.ordens.dominio.Ordem;
+import br.prospero.fo.ordens.dominio.ResultadoCancelamento;
 import br.prospero.fo.ordens.dominio.ResultadoRisco;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -30,6 +32,7 @@ import java.util.regex.Pattern;
 public final class EnvelopeRisco {
     public static final String TOPICO_COMANDOS = "risco.comandos.v1";
     public static final String TOPICO_RESULTADOS = "risco.resultados.v1";
+    public static final String TIPO_CANCELAMENTO_SOLICITADO = "CANCELAMENTO_SOLICITADO";
     public static final int TAMANHO_MAXIMO = 16 * 1024;
     private static final ObjectMapper JSON = new ObjectMapper().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     private static final Set<String> CAMPOS = Set.of("id", "tipo", "versao", "origem", "correlacao", "ocorridoEm",
@@ -79,7 +82,16 @@ public final class EnvelopeRisco {
         return raiz.toString();
     }
 
+    /** Leitura do risco.resultados.v1 para o fluxo de risco; resultado de cancelamento aqui é tipo inesperado. */
     public static ResultadoRisco resultado(byte[] bytes) {
+        if (ler(bytes) instanceof ResultadoRisco risco) {
+            return risco;
+        }
+        throw new MensagemInvalidaException("tipo");
+    }
+
+    /** Lê RESULTADO_RISCO ou RESULTADO_CANCELAMENTO; cancelamento ilegível bloqueia a partição, nunca é descartado. */
+    public static MensagemRisco ler(byte[] bytes) {
         if (bytes == null || bytes.length > TAMANHO_MAXIMO) {
             throw new MensagemInvalidaException("tamanho");
         }
@@ -91,9 +103,16 @@ public final class EnvelopeRisco {
         }
         if (raiz != null && raiz.path("tipo").isTextual() && "RESULTADO_CANCELAMENTO".equals(raiz.get("tipo").textValue())) {
             // Perder um resultado de cancelamento seria silencioso (retenção de 7 dias): bloquear, nunca descartar.
-            throw new ParticaoBloqueadaException(resultadoCancelamentoValido(bytes)
-                    ? "RESULTADO_CANCELAMENTO_SEM_LEITOR" : "RESULTADO_CANCELAMENTO_INVALIDO");
+            try {
+                return resultadoCancelamento(bytes);
+            } catch (IOException | RuntimeException erro) {
+                throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_INVALIDO");
+            }
         }
+        return resultadoRisco(raiz, bytes);
+    }
+
+    private static ResultadoRisco resultadoRisco(JsonNode raiz, byte[] bytes) {
         String conta = exigirEnvelope(raiz);
         JsonNode dados = raiz.get("dados");
         exigirCampos(dados, CAMPOS_RESULTADO, "dados");
@@ -153,34 +172,76 @@ public final class EnvelopeRisco {
     }
 
     /**
-     * Contrato v1 do RESULTADO_CANCELAMENTO (ADR-013 RF10c2), lido de forma estrita só para escolher o motivo do
-     * bloqueio: id derivado da ordem, correlação UUID canônica, resultado e motivo coerentes.
+     * Contrato v1 do RESULTADO_CANCELAMENTO (ADR-013 RF10c2), lido de forma estrita: id derivado da ordem, correlação
+     * UUID canônica, resultado e motivo coerentes. Qualquer desvio levanta exceção.
      */
-    private static boolean resultadoCancelamentoValido(byte[] bytes) {
-        try {
-            JsonNode raiz = JSON_ESTRITO.readTree(new String(bytes, StandardCharsets.UTF_8));
-            exigirCampos(raiz, CAMPOS, "envelope");
-            JsonNode dados = raiz.get("dados");
-            exigirCampos(dados, CAMPOS_RESULTADO_CANCELAMENTO, "dados");
-            UUID ordem = uuid(dados, "ordem");
-            String resultado = texto(dados, "resultado");
-            JsonNode motivo = dados.get("motivo");
-            boolean coerente = switch (resultado) {
-                case "CONFIRMADO" -> motivo.isNull();
-                case "RECUSADO" -> motivo.isTextual() && MOTIVOS_CANCELAMENTO.contains(motivo.textValue());
-                default -> false;
-            };
-            uuid(raiz, "correlacao");
-            Instant.parse(texto(raiz, "ocorridoEm"));
-            return coerente && raiz.get("versao").isInt() && raiz.get("versao").intValue() == 1
-                    && "middle-office".equals(texto(raiz, "origem"))
-                    && CONTA.matcher(texto(raiz, "conta")).matches()
-                    && (raiz.get("traceparent").isNull() || TRACEPARENT.matcher(texto(raiz, "traceparent")).matches())
-                    && uuid(raiz, "id").equals(UUID.nameUUIDFromBytes(("resultado-cancelamento:" + ordem)
-                            .getBytes(StandardCharsets.UTF_8)));
-        } catch (IOException | RuntimeException erro) {
-            return false;
+    private static ResultadoCancelamento resultadoCancelamento(byte[] bytes) throws IOException {
+        JsonNode raiz = JSON_ESTRITO.readTree(new String(bytes, StandardCharsets.UTF_8));
+        exigirCampos(raiz, CAMPOS, "envelope");
+        JsonNode dados = raiz.get("dados");
+        exigirCampos(dados, CAMPOS_RESULTADO_CANCELAMENTO, "dados");
+        UUID ordem = uuid(dados, "ordem");
+        boolean confirmado = confirmado(dados);
+        uuid(raiz, "correlacao");
+        Instant ocorrido = Instant.parse(texto(raiz, "ocorridoEm"));
+        String conta = texto(raiz, "conta");
+        boolean identidade = raiz.get("versao").isInt() && raiz.get("versao").intValue() == 1
+                && "middle-office".equals(texto(raiz, "origem")) && CONTA.matcher(conta).matches()
+                && (raiz.get("traceparent").isNull() || TRACEPARENT.matcher(texto(raiz, "traceparent")).matches())
+                && uuid(raiz, "id").equals(UUID.nameUUIDFromBytes(("resultado-cancelamento:" + ordem)
+                        .getBytes(StandardCharsets.UTF_8)));
+        if (!identidade) {
+            throw new MensagemInvalidaException("identidade");
         }
+        return new ResultadoCancelamento(uuid(raiz, "id"), ordem, conta, confirmado,
+                confirmado ? null : dados.get("motivo").textValue(), ocorrido,
+                raiz.get("traceparent").isNull() ? null : texto(raiz, "traceparent"), EnvelopeMatching.assinatura(bytes));
+    }
+
+    private static boolean confirmado(JsonNode dados) {
+        JsonNode motivo = dados.get("motivo");
+        return switch (texto(dados, "resultado")) {
+            case "CONFIRMADO" -> {
+                if (!motivo.isNull()) {
+                    throw new MensagemInvalidaException("motivo");
+                }
+                yield true;
+            }
+            case "RECUSADO" -> {
+                if (!motivo.isTextual() || !MOTIVOS_CANCELAMENTO.contains(motivo.textValue())) {
+                    throw new MensagemInvalidaException("motivo");
+                }
+                yield false;
+            }
+            default -> throw new MensagemInvalidaException("resultado");
+        };
+    }
+
+    /**
+     * CANCELAMENTO_SOLICITADO v1 (ADR-013): id derivado da ordem, correlação = admissão alvo da intenção. Só é emitido
+     * depois da decisão RESERVADA do risco.
+     */
+    public static String cancelamentoSolicitado(Ordem ordem, Instant agora, String traceparent) {
+        ObjectNode raiz = JSON.createObjectNode();
+        raiz.put("id", idCancelamentoSolicitado(ordem.id()).toString());
+        raiz.put("tipo", TIPO_CANCELAMENTO_SOLICITADO);
+        raiz.put("versao", 1);
+        raiz.put("origem", "front-office");
+        raiz.put("correlacao", UUID.nameUUIDFromBytes(("admissao:" + ordem.grupoEnvio())
+                .getBytes(StandardCharsets.UTF_8)).toString());
+        raiz.put("ocorridoEm", agora.toString());
+        raiz.put("conta", ordem.conta());
+        raiz.put("traceparent", traceparent);
+        ObjectNode dados = raiz.putObject("dados");
+        dados.put("ordem", ordem.id().toString());
+        dados.put("intencao", ordem.grupoEnvio().toString());
+        dados.put("ticker", ordem.ticker());
+        dados.put("dataSessao", ordem.dataSessao().toString());
+        return raiz.toString();
+    }
+
+    public static UUID idCancelamentoSolicitado(UUID ordem) {
+        return UUID.nameUUIDFromBytes(("cancelamento-solicitado:" + ordem).getBytes(StandardCharsets.UTF_8));
     }
 
     /** RESERVADA traz exatamente um recurso (valor em texto decimal ou quantidade inteira); REJEITADA, nenhum. */

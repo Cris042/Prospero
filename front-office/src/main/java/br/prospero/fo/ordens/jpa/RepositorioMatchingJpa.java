@@ -32,6 +32,8 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
     private final Timer boletaNegocio;
     @Inject
     RepositorioTrajetoriaJpa trajetoria;
+    @Inject
+    RepositorioCancelamentoJpa cancelamentos;
 
     @Inject
     public RepositorioMatchingJpa(Instance<EntityManager> gerenciadores, MeterRegistry metricas) {
@@ -83,6 +85,10 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
                     .setParameter("id", n.id()).setParameter("assinatura", EnvelopeMatching.assinaturaNegocio(e, n)).executeUpdate();
         }
         registrar(e);
+        // Antes da trajetória: ordem → operação → revisão da conta, a mesma ordem de lock do resultado do MO.
+        if (e.detalhe() instanceof EventoMatching.CancelamentoDecidido d) {
+            cancelamentos.aplicarDecisao(d.alvo().ordem(), d.alvo().conta(), d.resultado());
+        }
         trajetoria.registrarMatching(e, entidades);
         return true;
     }

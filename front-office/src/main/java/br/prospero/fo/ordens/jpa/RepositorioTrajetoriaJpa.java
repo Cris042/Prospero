@@ -99,6 +99,13 @@ public class RepositorioTrajetoriaJpa implements RepositorioTrajetoria {
         }
     }
 
+    /** Marco do cancelamento manual (solicitado, confirmado ou recusado), serializado pelo lock de revisão da conta. */
+    public void registrarCancelamento(String conta, UUID ordem, String origem, String tipo, UUID evento,
+                                      String assinatura, Instant ocorridoEm, String motivo, String traceparent) {
+        travar(List.of(conta));
+        gravar(conta, ordem, new NovoMarco(origem, tipo, evento, assinatura, null, null, ocorridoEm, null, motivo, traceparent));
+    }
+
     public void registrarMatching(EventoMatching e, List<OrdemEntity> ordens) {
         if (ordens.isEmpty()) return;
         travar(ordens.stream().map(o -> o.conta).toList());
