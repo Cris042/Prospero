@@ -317,7 +317,7 @@ def main(argv=None):
                                                   check=True, capture_output=True, timeout=60),
                'religar_mo': lambda: _religar_mo(args.projeto)}
         execucoes = []
-        for n, rps, falha in ((4, 2, False), (6, 2, True)):
+        for n, rps, falha in ((4, 2, False), (12, 2, True)):
             execucoes.append(rodar_execucao(ctx, n, rps, falha))
             time.sleep(1.2)  # intervalo mínimo entre execuções do controlador
         print(json.dumps(relatorio_publico(execucoes, orcamento.usadas), ensure_ascii=False))
