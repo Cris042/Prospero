@@ -1,5 +1,6 @@
 package br.prospero.mo.mensageria.kafka;
 
+import br.prospero.mo.mensageria.jpa.PublicacoesAdmissaoJpa;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityManager;
 import org.apache.kafka.clients.producer.Producer;
@@ -30,10 +31,11 @@ public final class PublicadorOutbox {
     /** FALHOU também pausa lote interrompido/esgotado no tempo; não é rejeição financeira. */
     public AgendadorOutbox.Resultado publicarLote() {
         List<?> linhas = em.createNativeQuery("""
-                        SELECT id, topico, chave, payload, traceparent FROM outbox WHERE publicado_em IS NULL
+                        SELECT id, topico, chave, payload, traceparent, tipo FROM outbox WHERE publicado_em IS NULL
                         ORDER BY criado_em, id LIMIT :n FOR UPDATE SKIP LOCKED""")
                 .setParameter("n", LOTE).getResultList();
         List<UUID> publicados = new ArrayList<>();
+        List<PublicacoesAdmissaoJpa.Confirmada> confirmadas = new ArrayList<>();
         long limite = System.nanoTime() + LOTE_MAXIMO.toNanos();
         boolean interrompido = false;
         for (Object linha : linhas) {
@@ -42,12 +44,15 @@ public final class PublicadorOutbox {
                 break;
             }
             Object[] c = (Object[]) linha;
+            var mensagem = new PublicacoesAdmissaoJpa.Confirmada((UUID) c[0], (String) c[1], (String) c[2],
+                    (String) c[5], (String) c[3], (String) c[4]);
             ProducerRecord<String, byte[]> registro = new ProducerRecord<>((String) c[1], (String) c[2],
                     ((String) c[3]).getBytes(StandardCharsets.UTF_8));
             if (c[4] != null) registro.headers().add("traceparent", ((String) c[4]).getBytes(StandardCharsets.UTF_8));
             try {
                 produtor.send(registro).get(10, TimeUnit.SECONDS);
                 publicados.add((UUID) c[0]);
+                confirmadas.add(mensagem);
             } catch (InterruptedException erro) {
                 Thread.currentThread().interrupt();
                 interrompido = true;
@@ -63,6 +68,7 @@ public final class PublicadorOutbox {
         if (!publicados.isEmpty()) {
             em.createNativeQuery("UPDATE outbox SET publicado_em = now() WHERE id IN (:ids)")
                     .setParameter("ids", publicados).executeUpdate();
+            new PublicacoesAdmissaoJpa(em).confirmar(confirmadas);
             metricas.counter("prospero.outbox.publicados").increment(publicados.size());
         }
         if (interrompido) return AgendadorOutbox.Resultado.FALHOU;
