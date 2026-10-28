@@ -1,5 +1,6 @@
 package br.prospero.mo.mensageria.kafka;
 
+import br.prospero.mo.mensageria.dominio.PromotorCancelamento;
 import br.prospero.mo.mensageria.jpa.PublicacoesAdmissaoJpa;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityManager;
@@ -21,11 +22,18 @@ public final class PublicadorOutbox {
     private final EntityManager em;
     private final Producer<String, byte[]> produtor;
     private final MeterRegistry metricas;
+    private final PromotorCancelamento promotor;
 
     public PublicadorOutbox(EntityManager em, Producer<String, byte[]> produtor, MeterRegistry metricas) {
+        this(em, produtor, metricas, PromotorCancelamento.NENHUM);
+    }
+
+    public PublicadorOutbox(EntityManager em, Producer<String, byte[]> produtor, MeterRegistry metricas,
+                            PromotorCancelamento promotor) {
         this.em = em;
         this.produtor = produtor;
         this.metricas = metricas;
+        this.promotor = promotor;
     }
 
     /** FALHOU também pausa lote interrompido/esgotado no tempo; não é rejeição financeira. */
@@ -68,7 +76,7 @@ public final class PublicadorOutbox {
         if (!publicados.isEmpty()) {
             em.createNativeQuery("UPDATE outbox SET publicado_em = now() WHERE id IN (:ids)")
                     .setParameter("ids", publicados).executeUpdate();
-            new PublicacoesAdmissaoJpa(em).confirmar(confirmadas);
+            new PublicacoesAdmissaoJpa(em, promotor).confirmar(confirmadas);
             metricas.counter("prospero.outbox.publicados").increment(publicados.size());
         }
         if (interrompido) return AgendadorOutbox.Resultado.FALHOU;

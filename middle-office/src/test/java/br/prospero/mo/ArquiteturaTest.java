@@ -33,4 +33,16 @@ class ArquiteturaTest {
     @ArchTest
     static final ArchRule dominioSemDoubleWrapper = noFields().that().areDeclaredInClassesThat()
             .resideInAPackage("..dominio..").should().haveRawType(Double.class).allowEmptyShould(true);
+
+    /** A promoção no ACK entra por porta em mensageria.dominio; mensageria nunca conhece o contexto de cancelamento. */
+    @ArchTest
+    static final ArchRule mensageriaNaoDependeDeCancelamento = noClasses().that().resideInAPackage("..mensageria..")
+            .should().dependOnClassesThat().resideInAPackage("..cancelamento..");
+
+    /** Nenhum timeout, agendador nem chamada HTTP participa do cancelamento: só ACK, terminal e decisão liberam saldo. */
+    @ArchTest
+    static final ArchRule cancelamentoSemTimerNemHttp = noClasses().that().resideInAPackage("..cancelamento..")
+            .should().dependOnClassesThat().resideInAnyPackage("java.net..", "jakarta.ws.rs..", "io.quarkus.scheduler..",
+                    "java.util.concurrent..", "org.eclipse.microprofile.rest.client..", "org.eclipse.microprofile.faulttolerance..")
+            .allowEmptyShould(true);
 }

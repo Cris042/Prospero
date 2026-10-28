@@ -1,5 +1,7 @@
 package br.prospero.mo.risco.kafka;
 
+import br.prospero.mo.cancelamento.actor.SolicitarCancelamentoActor;
+import br.prospero.mo.mensageria.dominio.ParticaoBloqueadaException;
 import br.prospero.mo.mensageria.kafka.ConfiguracaoKafka;
 import br.prospero.mo.mensageria.kafka.ConsumoKafka;
 import br.prospero.mo.mensageria.kafka.Rastreio;
@@ -27,6 +29,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class ConsumidorComandosRisco {
     private final AvaliarRiscoActor actor;
+    private final SolicitarCancelamentoActor cancelamentos;
     private final EventosRejeitados rejeitados;
     private final ConfiguracaoKafka configuracao;
     private final OpenTelemetry telemetria;
@@ -37,15 +40,16 @@ public class ConsumidorComandosRisco {
     private Thread linha;
 
     @Inject
-    public ConsumidorComandosRisco(AvaliarRiscoActor actor, EventosRejeitados rejeitados,
-                                   ConfiguracaoKafka configuracao, OpenTelemetry telemetria, Tracer tracer, MeterRegistry metricas,
+    public ConsumidorComandosRisco(AvaliarRiscoActor actor, SolicitarCancelamentoActor cancelamentos, EventosRejeitados rejeitados,
+                                   ConfiguracaoKafka configuracao, OpenTelemetry telemetria, MeterRegistry metricas,
                                    @ConfigProperty(name = "prospero.mensageria.habilitada", defaultValue = "true")
                                    boolean habilitada) {
         this.actor = actor;
+        this.cancelamentos = cancelamentos;
         this.rejeitados = rejeitados;
         this.configuracao = configuracao;
         this.telemetria = telemetria;
-        this.tracer = tracer;
+        this.tracer = telemetria.getTracer("br.prospero.mo.risco");
         this.metricas = metricas;
         this.habilitada = habilitada;
     }
@@ -71,6 +75,15 @@ public class ConsumidorComandosRisco {
                 .setParent(Rastreio.extrair(telemetria.getPropagators().getTextMapPropagator(), registro.headers()))
                 .setSpanKind(SpanKind.CONSUMER).startSpan();
         try (Scope ignorado = span.makeCurrent()) {
+            var pedido = EnvelopeRisco.solicitacao(registro.value());
+            if (pedido.isPresent()) {
+                // Chave divergente é produtor fora do contrato; perder o pedido seria silencioso, então bloqueia.
+                if (!pedido.get().conta().equals(registro.key())) {
+                    throw new ParticaoBloqueadaException("CANCELAMENTO_CHAVE_DIVERGENTE");
+                }
+                cancelamentos.solicitar(pedido.get(), Rastreio.traceparent(span.getSpanContext()));
+                return;
+            }
             ComandoRisco comando = EnvelopeRisco.comando(registro.value());
             // A chave de partição é a conta: divergência indica produtor fora do contrato.
             if (!comando.conta().equals(registro.key())) {

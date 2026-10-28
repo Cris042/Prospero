@@ -45,6 +45,17 @@ public record ReservaMatching(UUID intencao, UUID ordem, String conta, String ti
         };
     }
 
+    /**
+     * Terminal CANCELADA_MANUAL (v5): ordem simples ainda viva, executada coerente com o restante e todo o restante
+     * cancelado. Vale também para Stop pendente, que a regra geral de terminais não admite sem acionamento.
+     */
+    public void exigirCancelamentoManual(long executada, long cancelada) {
+        exigir(!oco, "cancelamento oco");
+        exigir(!estado.equals("ENCERRADA"), "reserva encerrada");
+        exigir(executada == inicial - restante, "executada");
+        exigir(cancelada == restante, "cancelada");
+    }
+
     private Transicao pendente(FatoMatching fato) {
         exigir(stop() && !acionada && estado.equals("ATIVA"), "stop pendente");
         exigir(gatilho != null && gatilho.compareTo(fato.precoGatilho()) == 0, "gatilho");

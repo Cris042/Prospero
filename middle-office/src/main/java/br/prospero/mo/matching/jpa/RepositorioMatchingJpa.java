@@ -1,5 +1,9 @@
 package br.prospero.mo.matching.jpa;
 
+import br.prospero.mo.cancelamento.actor.ConfirmarCancelamentoActor;
+import br.prospero.mo.cancelamento.dominio.EstadoCancelamento;
+import br.prospero.mo.cancelamento.dominio.MotivoRecusa;
+import br.prospero.mo.cancelamento.dominio.OperacaoCancelamento;
 import br.prospero.mo.liquidacao.dominio.CreditoEsperado;
 import br.prospero.mo.liquidacao.dominio.RepositorioLiquidacao;
 import br.prospero.mo.matching.dominio.FatoMatching;
@@ -31,6 +35,7 @@ import static br.prospero.mo.matching.helper.EnvelopeMatching.*;
 public class RepositorioMatchingJpa {
     @Inject Instance<EntityManager> gerenciadores;
     @Inject RepositorioLiquidacao liquidacao;
+    @Inject ConfirmarCancelamentoActor cancelamento;
 
     private EntityManager em() {
         return gerenciadores.get();
@@ -38,9 +43,10 @@ public class RepositorioMatchingJpa {
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void aplicar(JsonNode evento) {
-        // v5 (cancelamento manual) já foi validado por ler(); sem solicitação persistida não há o que liberar. Bloqueia antes
-        // de travar conta, tocar reserva ou deduplicar, para que a versão com coordenação processe o mesmo offset.
-        if (evento.get("versao").intValue() == 5) throw new ParticaoBloqueadaException("CANCELAMENTO_SEM_COORDENACAO");
+        if (evento.get("versao").intValue() == 5) {
+            aplicarCancelamento(evento);
+            return;
+        }
         if (texto(evento,"tipo").equals("SESSAO_ENCERRADA")) {
             aplicarMarco(evento);
             return;
@@ -61,6 +67,58 @@ public class RepositorioMatchingJpa {
             aplicarFatoDeOrdem(evento,d,v2,v4);
         }
         inserir("matching_evento","id",uuid(evento,"id"),hash);
+    }
+
+    /**
+     * v5 (cancelamento manual, ADR-013 RF10c2), já validado por ler(). Sem operação persistida não há o que liberar:
+     * bloqueia antes de travar conta, tocar reserva ou deduplicar. Com operação, o terminal libera a reserva pelo mesmo
+     * encerrar() dos demais terminais e a decisão fecha a operação, tudo na transação do consumidor.
+     */
+    private void aplicarCancelamento(JsonNode evento) {
+        JsonNode d=evento.get("dados");
+        UUID ordem=uuid(d,"ordem");
+        if (cancelamento.operacao(ordem).isEmpty()) throw new ParticaoBloqueadaException("CANCELAMENTO_SEM_COORDENACAO");
+        travarContas(d,false);
+        String hash=assinatura(evento);
+        if (duplicado("matching_evento","id",uuid(evento,"id"),hash)) return;
+        OperacaoCancelamento operacao=cancelamento.travar(ordem);
+        exigirOperacaoDoEvento(evento,d,operacao);
+        if (texto(evento,"tipo").equals("ORDEM_ENCERRADA")) {
+            encerrarPorCancelamento(evento,d,operacao);
+        } else {
+            decidirCancelamento(d,operacao);
+        }
+        inserir("matching_evento","id",uuid(evento,"id"),hash);
+    }
+
+    /** Causação, correlação e alvo do evento são exatamente os da operação coordenada. */
+    private static void exigirOperacaoDoEvento(JsonNode evento, JsonNode d, OperacaoCancelamento operacao) {
+        exigir(uuid(evento,"causacao").equals(operacao.comando()),"causacao cancelamento");
+        exigir(uuid(evento,"correlacao").equals(operacao.admissao()),"correlacao cancelamento");
+        exigir(operacao.intencao().equals(uuid(d,"intencao")) && operacao.conta().equals(texto(d,"conta"))
+                && operacao.ticker().equals(texto(evento,"ticker"))
+                && operacao.dataSessao().equals(LocalDate.parse(texto(evento,"dataSessao"))),"alvo cancelamento");
+    }
+
+    private void encerrarPorCancelamento(JsonNode evento, JsonNode d, OperacaoCancelamento operacao) {
+        exigir(operacao.estado()==EstadoCancelamento.COMANDO_EMITIDO,"estado cancelamento");
+        exigirAdmissaoDaSessao(evento,"correlacao");
+        ReservaMatching r=reserva(operacao.intencao());
+        validar(r,evento,d,"");
+        r.exigirCancelamentoManual(inteiro(d,"executada",0,1000000),inteiro(d,"cancelada",1,1000000));
+        encerrar(r);
+        cancelamento.terminalAplicado(operacao,uuid(evento,"id"));
+    }
+
+    private void decidirCancelamento(JsonNode d, OperacaoCancelamento operacao) {
+        String resultado=texto(d,"resultado");
+        if (resultado.equals("APLICADO")) {
+            exigir(operacao.estado()==EstadoCancelamento.TERMINAL_APLICADO && operacao.terminal().equals(uuid(d,"terminal")),"decisao sem terminal");
+            cancelamento.confirmar(operacao);
+            return;
+        }
+        exigir(operacao.estado()==EstadoCancelamento.COMANDO_EMITIDO,"recusa do matching");
+        cancelamento.recusar(operacao,MotivoRecusa.valueOf(resultado));
     }
 
     private void travarContas(JsonNode d, boolean negocio) {

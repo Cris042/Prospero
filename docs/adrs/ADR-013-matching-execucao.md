@@ -245,9 +245,9 @@ Cinco pareceres medium independentes (arquitetura, QA, segurança, operação e 
 | FO ordens e trajetória | Marca a ordem `CANCELADA` com o motivo, se não há OCO, a executada e o saldo conferem exatamente e a causação é a derivada; Stop não acionado é elegível (PRD) | Valida identidade e, em `APLICADO`, exige a ordem já cancelada manualmente; registra o id para deduplicação e o marco `CANCELAMENTO_DECIDIDO` na trajetória, sem alterar estado |
 | FO cotação | `Retirar` da oferta, como os demais terminais; Stop pendente não repousa e nada muda | Ignora sem negócio fictício |
 | BO | Valida a coerência v5 e ignora | Valida e ignora |
-| MO reservas | Valida estritamente e **bloqueia** com `CANCELAMENTO_SEM_COORDENACAO`, sem tocar reserva nem deduplicação; liberar só com solicitação persistida (fatia de coordenação) | Idem |
+| MO reservas | Valida estritamente. Sem operação de cancelamento persistida **bloqueia** com `CANCELAMENTO_SEM_COORDENACAO`, sem tocar reserva nem deduplicação. Com operação `COMANDO_EMITIDO`, libera a reserva uma vez e vai a `TERMINAL_APLICADO` ([coordenação no MO](#coordenação-do-cancelamento-no-mo--rf10c2b-2026-10-27)) | Idem sem operação. Com operação: `APLICADO` exige `TERMINAL_APLICADO` e confirma; as três recusas exigem `COMANDO_EMITIDO` e recusam sem tocar a reserva |
 | ME | Produz os dois eventos | Produz |
-| Parser de risco do MO | `CANCELAMENTO_SOLICITADO` reconhecido bloqueia a partição | n/a |
+| Parser de risco do MO | `CANCELAMENTO_SOLICITADO` válido entra na coordenação do MO; reconhecido e inválido continua bloqueando a partição | n/a |
 | Parser de risco do FO | `RESULTADO_CANCELAMENTO` reconhecido bloqueia a partição | n/a |
 
 Os consumidores de `risco.*` usam `ConsumoKafka` não financeiro, que descarta mensagem inválida confirmando o offset, com retenção de 7 dias. Perder um pedido ou resultado de cancelamento seria silencioso, então os tipos novos lançam `ParticaoBloqueadaException`: o offset não avança, a tentativa repete com espera crescente, nunca há descarte por falha persistente e a métrica `prospero_consumo_bloqueadas_total{topico,motivo}` conta cada ocorrência. Um alerta Prometheus cobre bloqueio e qualquer descarte em `risco.*`. Os motivos são constantes: `CANCELAMENTO_SOLICITADO_SEM_COORDENACAO` e `RESULTADO_CANCELAMENTO_SEM_LEITOR` para mensagem válida, `..._INVALIDO` para a de tipo reconhecido que falha na leitura estrita (versão, campo extra, id ou correlação não derivados, conteúdo após o JSON). JSON ilegível ou acima de 16 KiB não permite reconhecer o tipo e segue o descarte existente; um emissor legítimo nunca produz esses casos. O leitor de matching do MO usa o mesmo mecanismo com `CANCELAMENTO_SEM_COORDENACAO`, sem gravar nada: o consumidor financeiro fica fora de prontidão e retoma sozinho no mesmo offset quando a versão com coordenação for implantada. Parar a partição é intencional: a recuperação é implantar essa versão, não descartar. O alerta `ProsperoRiscoConsumoBloqueadoOuDescartado` cobre `prospero_consumo_bloqueadas_total` e `prospero_consumo_descartadas_total` em `risco.*`, inclusive a primeira exposição sem baseline.
@@ -265,11 +265,48 @@ O desenho do bloco RF10 simplificou quatro pontos do texto aceito em "Contrato t
 - **D3.** Uma linha de operação por ordem nos dois serviços (PK = ordem). Repetição devolve a mesma linha, sem nova outbox; recusa é final. Elimina chaves de idempotência e aliases.
 - **D4.** A flag `prospero.cancelamento.emissao-habilitada` protege só a criação de operações, fica `false` por padrão e responde 503 `CANCELAMENTO_INDISPONIVEL`. Operações já persistidas continuam sendo promovidas. É um interruptor de novas emissões, não uma máquina de estados.
 
-D2 a D4 só entram em vigor nas fatias de coordenação e API; esta fatia apenas as registra.
+D1 a D3 passam a valer no MO com a coordenação (seção seguinte); D4 e a pendência do FO entram com a fatia da API.
 
 ### Compatibilidade e recuperação
 
-Os leitores desta fatia precisam estar implantados em FO, BO, MO e ME antes de qualquer emissão futura. Depois da primeira emissão v5 não há retorno de imagem: preservar bancos e logs e corrigir para frente. Os fatos históricos v1–v4 e seus ids permanecem byte a byte; o ME mantém os vetores congelados (3 de 3) e ganha replay misto v1–v5. Não há migração SQL em FO, BO nem MO: as colunas de motivo não têm CHECK.
+Os leitores desta fatia precisam estar implantados em FO, BO, MO e ME antes de qualquer emissão futura. Depois da primeira emissão v5 não há retorno de imagem: preservar bancos e logs e corrigir para frente. Os fatos históricos v1–v4 e seus ids permanecem byte a byte; o ME mantém os vetores congelados (3 de 3) e ganha replay misto v1–v5. Esta fatia não tem migração SQL em FO, BO nem MO: as colunas de motivo não têm CHECK. A tabela de coordenação do MO chega na V9, descrita a seguir.
+
+## Coordenação do cancelamento no MO — RF10c2b (2026-10-27)
+
+O MO passa a coordenar o cancelamento: aceita `CANCELAMENTO_SOLICITADO`, escreve `CANCELAR_ORDEM` e `RESULTADO_CANCELAMENTO` e libera a reserva com o terminal do ME. Nenhum produtor liga ainda: o MO só emite essas mensagens em resposta a um `CANCELAMENTO_SOLICITADO`, e o FO continua sem emiti-lo até a fatia da API. Vale o catálogo acima; aqui ficam o estado, a ordem dos locks e os desvios do texto anterior.
+
+### Tabela `cancelamento_operacao` (V9, aditiva)
+
+Uma linha por ordem (PK = ordem). Estados: `AGUARDANDO_ACK`, `COMANDO_EMITIDO`, `TERMINAL_APLICADO`, `CONFIRMADO`, `RECUSADO`. Os CHECKs garantem que `motivo` existe só em `RECUSADO` e pertence ao conjunto fechado de cinco, que `terminal` existe só em `TERMINAL_APLICADO` e `CONFIRMADO`, que `decisao` (o resultado do ME) é `APLICADO` só em `CONFIRMADO` e igual ao `motivo` nas recusas do ME, e que `decidida_em` existe só nos estados finais. `solicitacao` e `comando` são únicos; `assinatura` (SHA-256 de id, ordem, intenção, conta, ativo e sessão) distingue repetição de inconsistência.
+
+Dois desvios pequenos do desenho: `intencao` referencia `decisao_risco` e não `reserva`, porque a ordem rejeitada pelo risco não tem reserva e ainda assim precisa de uma recusa `RISCO_REJEITADO`; e a tabela guarda `traceparent`, pois a promoção no ACK acontece em outra transação e outra thread e o `CANCELAR_ORDEM` precisa continuar o trace do pedido.
+
+### Solicitação
+
+`SolicitarCancelamentoActor` roda numa transação, na ordem de locks conta, depois recibo da admissão, a mesma de `AvaliarRiscoActor` e do publicador.
+
+1. Se a operação da ordem já existe, assinatura igual devolve a mesma, sem nova outbox; assinatura diferente bloqueia a partição (`CANCELAMENTO_INCONSISTENTE`).
+2. Sem decisão de risco para a intenção, bloqueia (`CANCELAMENTO_SEM_DECISAO_DE_RISCO`), conforme D1.
+3. Recusa local, na primeira regra que falhar: decisão `REJEITADA` (`RISCO_REJEITADO`); reserva sem ordem, sessão ou recibo da admissão derivada (`ADMISSAO_NAO_COMPROVADA`); reserva de grupo OCO (`ORIGEM_OCO`); ordem, conta, ativo ou sessão divergentes (`ALVO_DIVERGENTE`); reserva `ENCERRADA` (`SEM_SALDO_VIVO`). Toda recusa grava `RECUSADO` e o `RESULTADO_CANCELAMENTO` na mesma transação.
+4. Caso contrário trava a linha do recibo (`SELECT ... FOR UPDATE`). Com `confirmada_em` preenchido grava `COMANDO_EMITIDO` e o `CANCELAR_ORDEM` (chave = ativo, tópico `matching.comandos.v1`). Sem ele grava `AGUARDANDO_ACK`.
+
+### Promoção no primeiro ACK (D2)
+
+`PublicacoesAdmissaoJpa.confirmar` chama a porta `PromotorCancelamento`, declarada em `mensageria.dominio`, na mesma transação que marca a outbox. A implementação do contexto de cancelamento muda `AGUARDANDO_ACK` para `COMANDO_EMITIDO` e grava o `CANCELAR_ORDEM`. Como `mensageria` só conhece a porta, o ArchUnit proíbe qualquer dependência dela para `cancelamento`. O lock do recibo faz da corrida solicitação × ACK uma serialização: quem chega depois bloqueia no recibo e enxerga o efeito do outro, então sai exatamente um `CANCELAR_ORDEM` e nenhuma operação fica presa em `AGUARDANDO_ACK`. A queda depois do ACK e antes do commit desfaz marcação e promoção juntas; a reentrega repete as duas. Não há varredura nem timer, e nenhum tempo decorrido promove, recusa ou libera: um ACK que nunca vem deixa a operação pendente e visível, não vira sucesso nem recusa.
+
+### Confirmação e liberação única
+
+Dentro de `RepositorioMatchingJpa.aplicar`, depois da deduplicação por id do evento e com os locks da conta já tomados, na ordem conta, reserva, operação:
+
+- `ORDEM_ENCERRADA CANCELADA_MANUAL` exige operação `COMANDO_EMITIDO`, causação igual ao `comando`, correlação igual à admissão, e ordem, conta, ativo e sessão iguais aos da operação. A reserva precisa ser de ordem simples, viva, com `executada = inicial - restante` e `cancelada = restante`; vale também para Stop pendente, que a regra geral de terminais não admite. Chama o mesmo `encerrar` dos demais terminais, cuja guarda impede a segunda liberação, e move a operação para `TERMINAL_APLICADO` guardando o id do terminal.
+- `CANCELAMENTO_DECIDIDO APLICADO` exige `TERMINAL_APLICADO` com o mesmo `terminal` e vai a `CONFIRMADO`, gravando um único `RESULTADO_CANCELAMENTO CONFIRMADO`.
+- `SEM_SALDO_VIVO`, `ALVO_DIVERGENTE` e `ORIGEM_OCO` exigem `COMANDO_EMITIDO` e `terminal` nulo, vão a `RECUSADO` com o mesmo motivo e não tocam a reserva.
+
+Qualquer incoerência (estado, causação, alvo, quantidades) bloqueia a partição sem liberar. Evento v5 sem operação correspondente continua bloqueando com `CANCELAMENTO_SEM_COORDENACAO`. Nenhuma chamada HTTP, timer nem job participa: só o terminal do ME libera saldo, o que o ArchUnit protege proibindo `java.net`, JAX-RS, scheduler e concorrência no pacote `cancelamento`.
+
+### Compatibilidade
+
+A V9 é aditiva e não é lida por versões anteriores; ao voltar imagem a tabela fica. Como o MO só emite em resposta a um pedido que ainda ninguém faz, a ordem de implantação (leitores de todos os serviços antes de qualquer emissão) continua a do bloco. O volume do V8 sem recibo (ordens abertas antes dele) terá o cancelamento recusado de forma permanente com `ADMISSAO_NAO_COMPROVADA`.
 
 ### Evidências e ADR-004
 
