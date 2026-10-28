@@ -1,5 +1,6 @@
 package br.prospero.mo.mensageria.kafka;
 
+import br.prospero.mo.mensageria.dominio.PromotorCancelamento;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.ShutdownEvent;
@@ -23,6 +24,7 @@ public class RelayOutbox {
     private final ConfiguracaoKafka configuracao;
     private final MeterRegistry metricas;
     private final boolean habilitada;
+    private final PromotorCancelamento promotor;
     private final AtomicLong pendentes = new AtomicLong();
     private KafkaProducer<String, byte[]> produtor;
     private volatile AgendadorOutbox agendador;
@@ -31,10 +33,12 @@ public class RelayOutbox {
 
     @Inject
     public RelayOutbox(Instance<EntityManager> ems, ConfiguracaoKafka configuracao, MeterRegistry metricas,
+                       PromotorCancelamento promotor,
                        @ConfigProperty(name = "prospero.mensageria.habilitada", defaultValue = "true") boolean habilitada) {
         this.ems = ems;
         this.configuracao = configuracao;
         this.metricas = metricas;
+        this.promotor = promotor;
         this.habilitada = habilitada;
     }
 
@@ -43,7 +47,7 @@ public class RelayOutbox {
         em = ems.get();
         produtor = new KafkaProducer<>(configuracao.produtor());
         metricas.gauge("prospero.outbox.pendentes", pendentes);
-        PublicadorOutbox publicador = new PublicadorOutbox(em, produtor, metricas);
+        PublicadorOutbox publicador = new PublicadorOutbox(em, produtor, metricas, promotor);
         var agenda = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("relay-outbox").daemon().factory());
         var novo = new AgendadorOutbox(agenda, System::nanoTime,
                 () -> QuarkusTransaction.requiringNew().call(publicador::publicarLote),

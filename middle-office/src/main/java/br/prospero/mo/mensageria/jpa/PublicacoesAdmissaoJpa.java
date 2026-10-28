@@ -1,12 +1,14 @@
 package br.prospero.mo.mensageria.jpa;
 
 import br.prospero.mo.mensageria.dominio.MensagemSaida;
+import br.prospero.mo.mensageria.dominio.PromotorCancelamento;
 import jakarta.persistence.EntityManager;
 import org.hibernate.query.NativeQuery;
 
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -18,9 +20,15 @@ public final class PublicacoesAdmissaoJpa {
     private static final String TOPICO = "matching.comandos.v1";
     private static final String TIPO = "ORDEM_ADMITIDA";
     private final EntityManager em;
+    private final PromotorCancelamento promotor;
 
     public PublicacoesAdmissaoJpa(EntityManager em) {
+        this(em, PromotorCancelamento.NENHUM);
+    }
+
+    public PublicacoesAdmissaoJpa(EntityManager em, PromotorCancelamento promotor) {
         this.em = Objects.requireNonNull(em);
+        this.promotor = Objects.requireNonNull(promotor);
     }
 
     /** Snapshot da mensagem efetivamente confirmada pelo produtor, sem normalização de JSON ou headers. */
@@ -64,6 +72,7 @@ public final class PublicacoesAdmissaoJpa {
                 .setParameter("ids", ids).getResultList()) {
             conhecidas.add((UUID) id);
         }
+        List<UUID> confirmadasAgora = new ArrayList<>();
         for (Confirmada mensagem : confirmadas) {
             // Um recibo conhecido também detecta adulteração do tipo para outro tipo da outbox.
             if (!TIPO.equals(mensagem.tipo()) && !conhecidas.contains(mensagem.id())) continue;
@@ -79,7 +88,10 @@ public final class PublicacoesAdmissaoJpa {
                     AND o.traceparent IS NOT DISTINCT FROM :trace
                     """, mensagem).executeUpdate();
             if (alteradas != 1) throw inconsistente();
+            confirmadasAgora.add(mensagem.id());
         }
+        // Mesma transação da marcação: cancelamento que esperava pelo ACK é promovido ou nada muda.
+        promotor.admissoesConfirmadas(confirmadasAgora);
     }
 
     private NativeQuery<?> consulta(String sql, Confirmada mensagem) {

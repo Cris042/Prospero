@@ -55,19 +55,24 @@ class SolicitacaoCancelamentoRiscoTest {
     }
 
     @Test
-    void nenhumCaminhoDeProducaoDoMoSerializaOsTiposDeCancelamento() throws Exception {
+    void soOHelperDeCancelamentoSerializaOsTiposQueOMoEmite() throws Exception {
         try (var fontes = Files.walk(Path.of("src", "main", "java"))) {
             for (Path fonte : fontes.filter(p -> p.toString().endsWith(".java")).toList()) {
                 String texto = Files.readString(fonte);
-                assertFalse(texto.contains("CANCELAR_ORDEM"), fonte + " emitiria CANCELAR_ORDEM");
-                assertFalse(texto.contains("RESULTADO_CANCELAMENTO"), fonte + " emitiria RESULTADO_CANCELAMENTO");
+                // O helper serializa; o emissor só nomeia o tipo da mensagem que grava na outbox.
+                boolean emissor = fonte.endsWith(Path.of("cancelamento", "helper", "EnvelopeCancelamento.java"))
+                        || fonte.endsWith(Path.of("cancelamento", "actor", "EmissorCancelamento.java"));
+                if (texto.contains("CANCELAR_ORDEM") || texto.contains("RESULTADO_CANCELAMENTO")) {
+                    assertTrue(emissor, fonte + " emitiria tipo de cancelamento fora do helper e do emissor");
+                }
                 if (texto.contains("CANCELAMENTO_SOLICITADO")) {
                     assertTrue(fonte.endsWith(Path.of("risco", "helper", "EnvelopeRisco.java")), fonte.toString());
                     assertFalse(texto.contains("put(\"tipo\", \"CANCELAMENTO_SOLICITADO\")"));
                 }
                 if (texto.contains("CANCELAMENTO_DECIDIDO") || texto.contains("CANCELADA_MANUAL")) {
                     assertTrue(fonte.endsWith(Path.of("matching", "helper", "EnvelopeMatching.java"))
-                            || fonte.endsWith(Path.of("matching", "jpa", "RepositorioMatchingJpa.java")), fonte.toString());
+                            || fonte.endsWith(Path.of("matching", "jpa", "RepositorioMatchingJpa.java"))
+                            || fonte.endsWith(Path.of("matching", "dominio", "ReservaMatching.java")), fonte.toString());
                 }
             }
         }
