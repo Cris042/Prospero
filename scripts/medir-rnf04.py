@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Primeira medição do RNF04 (RF05d): boleta → negócio e núcleo do matching, sob carga local documentada.
+"""Medição do RNF04 (RF05d, V01-2): boleta → negócio e núcleo do matching, sob carga local documentada.
 
 Contraparte já em repouso (CONTA-003) e agressores Limit IOC de 1 unidade (CONTA-002) enviados em sequência, cada um
 só depois do terminal do anterior: mede processamento, não espera por contraparte nem fila. Os percentis saem da
@@ -8,6 +8,7 @@ bucket. O veredito compara o p99 com a meta; em ambiente compartilhado (`--conte
 Atenção: redefine as carteiras de teste CONTA-002/003 (preparação local), apagando o estado delas.
 """
 import argparse
+import base64
 import json
 import math
 import os
@@ -31,6 +32,13 @@ METAS = {"prospero_ordens_boleta_negocio_seconds": 0.050, "prospero_matching_com
 LINHA = re.compile(r'^(?P<serie>[A-Za-z_:][A-Za-z0-9_:]*)(?:\{(?P<rotulos>(?:[^}"]|"(?:[^"\\]|\\.)*")*)\})?\s+(?P<valor>\S+)')
 LE = re.compile(r'(?:^|,)\s*le="([^"]*)"')
 TETO_METRICAS = 8 * 1024 * 1024
+MINIMO_AMOSTRAS_DEDICADO = 1000
+TETO_ORDENS_POR_CONTA = 1000
+COMPRADORES_PADRAO = "CONTA-002,CONTA-001"
+TRACES_AMOSTRADOS = 100
+# Span de entrada de cada serviço na trajetória de uma ordem (mesmos nomes de testar-trajetoria.py).
+SALTOS = {"front-office": "POST /api/v1/ordens", "middle-office": "risco.avaliar",
+          "matching-engine": "matching.consumir", "back-office": "posicoes.consumir"}
 
 
 def buckets(origem, nome):
@@ -87,12 +95,86 @@ def percentil(antes, depois, q):
     return float("inf"), int(total)
 
 
+def tem_resolucao(depois, meta):
+    """O histograma precisa ter um bucket exatamente na meta; sem ele o p99 vira um limite superior mais largo."""
+    return any(not isinstance(le, str) and math.isclose(le, meta, rel_tol=0, abs_tol=1e-12) for le in depois)
+
+
 def classificar(p99, meta, contexto="dedicado"):
     """Somente limite superior estritamente abaixo da meta comprova a desigualdade exigida."""
     if p99 is None:
         return None
     prefixo = "indicativo: " if contexto == "ci-hospedado" else ""
     return prefixo + ("cumprido" if p99 < meta else "não cumprido")
+
+
+def validar_plano(amostras, aquecimento, compradores, contexto):
+    """Recusa planos que não permitem veredito: poucas amostras (dedicado) ou estouro do teto de ordens por conta."""
+    if contexto == "dedicado" and amostras < MINIMO_AMOSTRAS_DEDICADO:
+        raise SystemExit(f"Modo dedicado exige pelo menos {MINIMO_AMOSTRAS_DEDICADO} amostras; recebido {amostras}.")
+    if amostras < 1 or not 0 <= aquecimento <= 150 or not compradores:
+        raise SystemExit("Amostras >= 1, aquecimento 0–150 e ao menos um comprador.")
+    por_conta = math.ceil((amostras + aquecimento) / len(compradores))
+    if por_conta > TETO_ORDENS_POR_CONTA:
+        raise SystemExit(f"{por_conta} ordens por comprador excedem o teto de {TETO_ORDENS_POR_CONTA} por conta e sessão.")
+    return por_conta
+
+
+def duracoes_por_salto(conteudo, trace_id):
+    """Jaeger API v3 (OTLP JSON por linha): {serviço: (início_ns, duração_s)} dos spans de entrada de um trace."""
+    achados = {}
+    for linha in conteudo.splitlines():
+        if not linha.strip():
+            continue
+        for recurso in json.loads(linha).get("result", {}).get("resourceSpans", []):
+            atributos = recurso.get("resource", {}).get("attributes", [])
+            servico = next((a.get("value", {}).get("stringValue") for a in atributos if a.get("key") == "service.name"), None)
+            for escopo in recurso.get("scopeSpans", []):
+                for span in escopo.get("spans", []):
+                    identidade = span.get("traceId", "")
+                    if identidade != trace_id:
+                        try:
+                            identidade = base64.b64decode(identidade, validate=True).hex()
+                        except (ValueError, TypeError):
+                            continue
+                    if identidade != trace_id or SALTOS.get(servico) != span.get("name"):
+                        continue
+                    try:
+                        inicio, fim = int(span["startTimeUnixNano"]), int(span["endTimeUnixNano"])
+                    except (KeyError, ValueError):
+                        continue
+                    if fim >= inicio and servico not in achados:
+                        achados[servico] = (inicio, (fim - inicio) / 1e9)
+    return achados
+
+
+def atribuicao(traces):
+    """p50/p99 (amostral) da duração de cada salto e do atraso de início dele em relação ao POST do FO."""
+    def pct(valores, q):
+        ordenados = sorted(valores)
+        return ordenados[min(len(ordenados) - 1, int(len(ordenados) * q))] if ordenados else None
+
+    resultado = {}
+    completos = [t for t in traces if "front-office" in t]
+    for servico in SALTOS:
+        duracoes = [t[servico][1] for t in completos if servico in t]
+        atrasos = [(t[servico][0] - t["front-office"][0]) / 1e9 for t in completos if servico in t]
+        resultado[servico] = {"traces": len(duracoes), "duracao_p50_s": pct(duracoes, 0.50), "duracao_p99_s": pct(duracoes, 0.99),
+                              "inicio_apos_post_p50_s": pct(atrasos, 0.50), "inicio_apos_post_p99_s": pct(atrasos, 0.99)}
+    return {"traces_consultados": len(traces), "saltos": resultado,
+            "nota": "valores amostrais exatos do Jaeger; atraso de início inclui o trânsito Kafka entre serviços"}
+
+
+def coletar_atribuicao(origem_jaeger, traces_ids):
+    """Consulta o Jaeger por trace; falha de coleta nunca invalida a medição de latência."""
+    coletados = []
+    for trace in traces_ids:
+        try:
+            with urllib.request.urlopen(origem_jaeger.rstrip("/") + "/api/v3/traces/" + trace, timeout=10) as r:
+                coletados.append(duracoes_por_salto(r.read(4 * 1024 * 1024).decode("utf-8", "replace"), trace))
+        except Exception:
+            continue
+    return atribuicao(coletados)
 
 
 def ambiente():
@@ -153,47 +235,66 @@ def verificar_orcamento(origem, token, necessarias):
 
 
 def executar(args):
+    compradores = [c.strip() for c in args.compradores.split(",") if c.strip()]
+    if any(c not in mercado.CONTAS or c == "CONTA-003" for c in compradores) or len(set(compradores)) != len(compradores):
+        raise SystemExit("Compradores devem ser contas distintas de CONTA-001..004, exceto a vendedora CONTA-003.")
+    por_conta = validar_plano(args.amostras, args.aquecimento, compradores, args.contexto)
     total = args.amostras + args.aquecimento
     vendedor = mercado.token("ordens", 900, "CONTA-003")
-    comprador = mercado.token("ordens", 900, "CONTA-002")
-    orcamento = {"compradorExistentes": verificar_orcamento(args.origem, comprador, total),
+    tokens = {c: mercado.token("ordens", 900, c) for c in compradores}
+    orcamento = {"compradorExistentes": {c: verificar_orcamento(args.origem, tokens[c], por_conta) for c in compradores},
                  "vendedorExistentes": verificar_orcamento(args.origem, vendedor, 1),
-                 "compradorNecessarias": total, "vendedorNecessarias": 1, "limite": 1000}
-    mercado.preparar_carteira(args.origem_mo, "CONTA-002", "1000000.00", {}, prazo=60)
+                 "compradorNecessarias": por_conta, "vendedorNecessarias": 1, "limite": TETO_ORDENS_POR_CONTA}
+    for c in compradores:
+        mercado.preparar_carteira(args.origem_mo, c, "1000000.00", {}, prazo=60)
     mercado.preparar_carteira(args.origem_mo, "CONTA-003", "0.00", {args.ticker: total}, prazo=60)
 
-    def enviar(tok, corpo):
+    def enviar(tok, corpo, extras=None):
         return mercado.http("POST", args.origem + "/api/v1/ordens", tok, corpo,
-                            {"X-Idempotency-Key": "rnf04-" + uuid.uuid4().hex})
+                            {"X-Idempotency-Key": "rnf04-" + uuid.uuid4().hex, **(extras or {})})
 
     oferta = enviar(vendedor, {"ticker": args.ticker, "lado": "VENDA", "tipo": "LIMIT", "validade": "DIA",
                                "quantidade": total, "precoLimite": args.preco})
     mercado.aguardar_campos(args.origem, vendedor, f"/api/v1/ordens/{oferta['id']}", {"estado": "ABERTA"})
     nomes = list(METAS)
     origens = {nomes[0]: args.origem, nomes[1]: args.origem_me}
-    antes, cliente = None, []
+    antes, cliente, traces = None, [], []
     for i in range(total):
         if i == args.aquecimento:
             antes = {n: buckets(origens[n], n) for n in nomes}
+        conta = compradores[i % len(compradores)]
+        extras, trace = None, None
+        if args.origem_jaeger and i >= total - TRACES_AMOSTRADOS:
+            trace = uuid.uuid4().hex
+            extras = {"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"}
         inicio = time.perf_counter()
-        ordem = enviar(comprador, {"ticker": args.ticker, "lado": "COMPRA", "tipo": "LIMIT", "validade": "IOC",
-                                   "quantidade": 1, "precoLimite": args.preco})
-        mercado.aguardar_campos(args.origem, comprador, f"/api/v1/ordens/{ordem['id']}", {"estado": "EXECUTADA"})
+        ordem = enviar(tokens[conta], {"ticker": args.ticker, "lado": "COMPRA", "tipo": "LIMIT", "validade": "IOC",
+                                       "quantidade": 1, "precoLimite": args.preco}, extras)
+        mercado.aguardar_campos(args.origem, tokens[conta], f"/api/v1/ordens/{ordem['id']}", {"estado": "EXECUTADA"})
         if i >= args.aquecimento:
             cliente.append(time.perf_counter() - inicio)
+        if trace:
+            traces.append(trace)
     depois = {n: buckets(origens[n], n) for n in nomes}
     resultado = {"ambiente": ambiente(), "plano": vars(args), "orcamentoAntes": orcamento, "metricas": {}}
     for n in nomes:
         p50, amostras = percentil(antes[n], depois[n], 0.50)
         p99, _ = percentil(antes[n], depois[n], 0.99)
         media = media_independente(antes[n], depois[n])
+        veredito = classificar(p99, METAS[n], args.contexto)
+        resolucao = tem_resolucao(depois[n], METAS[n])
+        if veredito and not resolucao:
+            veredito += " (sem bucket na meta: limite superior grosseiro)"
         resultado["metricas"][n] = {"amostras": amostras, "p50_max_s": p50, "p99_max_s": p99, "meta_s": METAS[n],
                                     "media_s": media, "linhas_ignoradas": depois[n]["ignoradas"],
-                                    "veredito": classificar(p99, METAS[n], args.contexto)}
+                                    "bucket_na_meta": resolucao, "veredito": veredito}
     cliente.sort()
     resultado["cliente_ate_terminal_observado_s"] = {
         "amostras": len(cliente), "p50": cliente[len(cliente) // 2], "p99": cliente[min(len(cliente) - 1, int(len(cliente) * 0.99))],
         "nota": "inclui HTTP e o intervalo de polling do script; não é a métrica do RNF04"}
+    if args.origem_jaeger:
+        time.sleep(3)  # o coletor grava os spans de forma assíncrona
+        resultado["atribuicao_por_salto"] = coletar_atribuicao(args.origem_jaeger, traces)
     return resultado
 
 
@@ -214,13 +315,19 @@ def main(argv=None):
                         help="Identifica a variante; a CI confere a flag real dos containers separadamente.")
     parser.add_argument("--ticker", default="ALFA3")
     parser.add_argument("--preco", default="10.00")
-    parser.add_argument("--amostras", type=int, default=200)
+    parser.add_argument("--origem-jaeger", type=origem_http, default=None,
+                        help="Jaeger (opcional): atribui a latência por salto em até 100 traces da fase medida")
+    parser.add_argument("--compradores", default=COMPRADORES_PADRAO,
+                        help="contas compradoras em rodízio (teto de 1000 ordens por conta e sessão)")
+    parser.add_argument("--amostras", type=int, default=MINIMO_AMOSTRAS_DEDICADO)
     parser.add_argument("--aquecimento", type=int, default=30)
     parser.add_argument("--contexto", choices=["dedicado", "ci-hospedado"], default="dedicado",
                         help="ambiente da execução; em ci-hospedado o veredito é só indicativo")
     args = parser.parse_args(argv)
-    if not 1 <= args.amostras <= 800 or not 0 <= args.aquecimento <= 150:
-        parser.error("Amostras 1–800 e aquecimento 0–150: o teto de 1000 ordens por conta e sessão vale aqui.")
+    try:
+        validar_plano(args.amostras, args.aquecimento, [c for c in args.compradores.split(",") if c.strip()], args.contexto)
+    except SystemExit as erro:
+        parser.error(str(erro))
     print(json.dumps(executar(args), ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 

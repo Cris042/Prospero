@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import math
 import unittest
 import uuid
@@ -142,7 +143,8 @@ class MargemAntesDePreparar(unittest.TestCase):
     def argumentos(self):
         return SimpleNamespace(origem="http://127.0.0.1:8081", origem_mo="http://127.0.0.1:8082",
                                origem_me="http://127.0.0.1:8083", ticker="ALFA3", preco="10.00",
-                               amostras=3, aquecimento=2, contexto="ci-hospedado")
+                               amostras=3, aquecimento=2, contexto="ci-hospedado",
+                               compradores="CONTA-002", origem_jaeger=None)
 
     def test_verifica_comprador_e_vendedor_antes_da_primeira_preparacao(self):
         class InterromperAntesDaPreparacao(Exception):
@@ -223,6 +225,70 @@ class MediaIndependente(unittest.TestCase):
     def test_sem_sum_ou_contador_reiniciado_nao_inventa_media(self):
         self.assertIsNone(medir.media_independente({"soma": None, "contagem": 1}, {"soma": None, "contagem": 2}))
         self.assertIsNone(medir.media_independente({"soma": 5.0, "contagem": 50}, {"soma": 1.0, "contagem": 4}))
+
+
+class BucketFinoNaMeta(unittest.TestCase):
+    META = 0.050
+
+    def test_limite_exato_em_50_ms_nao_comprova_e_45_ms_comprova(self):
+        antes = {0.045: 0, 0.05: 0, 0.06: 0, float("inf"): 0}
+        no_limite = {0.045: 90, 0.05: 995, 0.06: 1000, float("inf"): 1000}
+        self.assertEqual(medir.percentil(antes, no_limite, 0.99), (0.05, 1000))
+        self.assertEqual(medir.classificar(0.05, self.META), "não cumprido")
+        abaixo = {0.045: 995, 0.05: 1000, 0.06: 1000, float("inf"): 1000}
+        self.assertEqual(medir.percentil(antes, abaixo, 0.99), (0.045, 1000))
+        self.assertEqual(medir.classificar(0.045, self.META), "cumprido")
+
+    def test_resolucao_exige_bucket_exatamente_na_meta(self):
+        self.assertTrue(medir.tem_resolucao({0.045: 1, 0.05: 1, float("inf"): 1}, self.META))
+        self.assertFalse(medir.tem_resolucao({0.0671: 1, float("inf"): 1}, self.META))
+        self.assertFalse(medir.tem_resolucao({"soma": 1.0, float("inf"): 1}, self.META))
+
+
+class PlanoDeAmostras(unittest.TestCase):
+    def test_dedicado_recusa_menos_de_mil_amostras(self):
+        for amostras in (1, 150, 999):
+            with self.subTest(amostras=amostras), self.assertRaises(SystemExit):
+                medir.validar_plano(amostras, 30, ["CONTA-002", "CONTA-001"], "dedicado")
+        self.assertEqual(medir.validar_plano(1000, 30, ["CONTA-002", "CONTA-001"], "dedicado"), 515)
+
+    def test_ci_hospedado_aceita_plano_menor_mas_respeita_o_teto_por_conta(self):
+        self.assertEqual(medir.validar_plano(10, 0, ["CONTA-002"], "ci-hospedado"), 10)
+        with self.assertRaises(SystemExit):
+            medir.validar_plano(1000, 30, ["CONTA-002"], "ci-hospedado")
+
+    def test_linha_de_comando_dedicada_com_150_amostras_e_recusada(self):
+        with self.assertRaises(SystemExit):
+            medir.main(["--amostras", "150"])
+
+
+class AtribuicaoPorSalto(unittest.TestCase):
+    TRACE = "0123456789abcdef0123456789abcdef"
+
+    def linha(self, servico, nome, inicio_ms, fim_ms):
+        span = {"traceId": self.TRACE, "name": nome, "startTimeUnixNano": str(inicio_ms * 1_000_000),
+                "endTimeUnixNano": str(fim_ms * 1_000_000)}
+        recurso = {"resource": {"attributes": [{"key": "service.name", "value": {"stringValue": servico}}]},
+                   "scopeSpans": [{"spans": [span, {**span, "name": "outro"}]}]}
+        return json.dumps({"result": {"resourceSpans": [recurso]}})
+
+    def test_extrai_somente_os_spans_de_entrada(self):
+        texto = "\n".join([self.linha("front-office", "POST /api/v1/ordens", 100, 112),
+                           self.linha("matching-engine", "matching.consumir", 125, 126),
+                           self.linha("middle-office", "nome-errado", 110, 120)])
+        achados = medir.duracoes_por_salto(texto, self.TRACE)
+        self.assertEqual(set(achados), {"front-office", "matching-engine"})
+        self.assertAlmostEqual(achados["front-office"][1], 0.012)
+        self.assertEqual(medir.duracoes_por_salto(texto, "f" * 32), {})
+
+    def test_agrega_duracao_e_atraso_de_inicio(self):
+        traces = [{"front-office": (0, 0.010), "matching-engine": (20_000_000, 0.001)},
+                  {"front-office": (0, 0.030), "matching-engine": (40_000_000, 0.003)}]
+        resultado = medir.atribuicao(traces)
+        self.assertEqual(resultado["traces_consultados"], 2)
+        self.assertEqual(resultado["saltos"]["matching-engine"]["inicio_apos_post_p99_s"], 0.04)
+        self.assertEqual(resultado["saltos"]["front-office"]["duracao_p50_s"], 0.03)
+        self.assertEqual(resultado["saltos"]["back-office"]["traces"], 0)
 
 
 class Origens(unittest.TestCase):

@@ -40,7 +40,9 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         this.boletaNegocio = Timer.builder("prospero.ordens.boleta_negocio")
                 .description("Recebimento da ordem agressora até a projeção do primeiro negócio")
                 .publishPercentileHistogram()
-                .serviceLevelObjectives(Duration.ofMillis(50)).register(metricas);
+                // Buckets finos em torno da meta de 50 ms: sem eles o p99 sairia como o limite do bucket padrão (67,1 ms).
+                .serviceLevelObjectives(Duration.ofMillis(25), Duration.ofMillis(35), Duration.ofMillis(45),
+                        Duration.ofMillis(50), Duration.ofMillis(60), Duration.ofMillis(75)).register(metricas);
     }
 
     private EntityManager em() {
