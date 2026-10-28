@@ -94,10 +94,11 @@ def interpretar_lag(saida):
     dados = [linha for linha in linhas if linha[:1] != ['GROUP'] and len(linha) == len(cabecalho)]
     if not dados:
         raise ValueError('lag sem linhas')
-    total = 0
-    for linha in dados:
-        total += _inteiro(linha[indice])
-    return total
+    # '-' é partição sem offset gravado (consumidor ativo que ainda não confirmou): sem lag definido, fica de fora.
+    medidas = [linha[indice] for linha in dados if linha[indice] != '-']
+    if not medidas:
+        raise ValueError('lag sem linhas')
+    return sum(_inteiro(valor) for valor in medidas)
 
 
 def _bytes(texto):

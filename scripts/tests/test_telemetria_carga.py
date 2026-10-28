@@ -46,6 +46,13 @@ class Interpretacao(unittest.TestCase):
                  'g1 t 0 10 15 5 -\n'
                  'g1 t 1 20 22 2 -\n')
         self.assertEqual(tel.interpretar_lag(saida), 7)
+        # Saída real do kafka-consumer-groups 4.1.0: grupo ativo sem offset gravado mostra '-' em LAG.
+        real = ("\nConsumer group 'g1' has no active members.\n\n"
+                'GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG CONSUMER-ID HOST CLIENT-ID\n'
+                'g1 t 1 1 4 3 - - -\n\n'
+                'GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG CONSUMER-ID HOST CLIENT-ID\n'
+                'g2 u 1 - 0 - console-consumer-41cf /127.0.0.1 console-consumer\n')
+        self.assertEqual(tel.interpretar_lag(real), 3)
         for ruim in ('', 'GROUP TOPIC PARTITION LAG\n', 'GROUP TOPIC PARTITION LAG\ng t 0 -\n'):
             with self.subTest(saida=ruim), self.assertRaises(ValueError):
                 tel.interpretar_lag(ruim)
