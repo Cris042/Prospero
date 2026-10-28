@@ -94,7 +94,7 @@ public final class EnvelopeMatching {
         campos(d,"ordem,intencao,conta,motivo,executada,cancelada"); exigir(v4 == texto(d,"motivo").equals("EXPIRADA_DIA"),"motivo");
         exigir(v4 || v5 && texto(d,"motivo").equals("CANCELADA_MANUAL") || Set.of("EXECUTADA","SALDO_CANCELADO_IOC","FOK_SEM_LIQUIDEZ","FORA_DA_FAIXA","LIMITADA_PELA_RESERVA","SEM_LIQUIDEZ","LIMITE_NEGOCIOS").contains(texto(d,"motivo")) || v2 && texto(d,"motivo").equals("LIMITE_CASCATA") || v3 && texto(d,"motivo").equals("CANCELADA_OCO"),"motivo");
         long executada = inteiro(d,"executada",0,1000000), cancelada = inteiro(d,"cancelada",v5 ? 1 : 0,1000000);
-        exigir(executada + cancelada <= 1000000,"cancelada");
+        exigir(!v5 || executada + cancelada <= 1000000,"cancelada");
     }
 
     private static void exigirNegocio(JsonNode r, JsonNode d) {
