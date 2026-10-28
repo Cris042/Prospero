@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -101,11 +102,11 @@ func (s *Server) execute(ctx context.Context, r *run, target string) {
 			s.countLocked(r, wi, measured, func(c *Counts) { c.Iniciadas++; c.EmVoo++ })
 			s.mu.Unlock()
 			wg.Add(1)
-			go func(windowIndex int, measure bool) {
+			go func(windowIndex int, measure bool, sequence int) {
 				defer wg.Done()
 				defer func() { <-slots }()
-				s.request(ctx, r, client, target, windowIndex, measure)
-			}(wi, measured)
+				s.request(ctx, r, client, target, windowIndex, measure, sequence)
+			}(wi, measured, offers)
 		}
 		if running && ctx.Err() == nil {
 			remaining := time.Until(start.Add(offset + duration))
@@ -179,7 +180,7 @@ func (s *Server) countLocked(r *run, wi int, measured bool, apply func(*Counts))
 	}
 	apply(c)
 }
-func (s *Server) request(parent context.Context, r *run, client *http.Client, target string, wi int, measured bool) {
+func (s *Server) request(parent context.Context, r *run, client *http.Client, target string, wi int, measured bool, sequence int) {
 	ctx, cancel := context.WithTimeout(parent, time.Duration(r.Plano.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	start := time.Now()
@@ -188,14 +189,23 @@ func (s *Server) request(parent context.Context, r *run, client *http.Client, ta
 	var bytesRead int64
 	var doErr error
 	operacao, _ := r.Plano.leitura()
-	req, e := http.NewRequestWithContext(ctx, http.MethodGet, target+operacao.caminho, nil)
+	var corpo io.Reader
+	if operacao.escrita() {
+		corpo = strings.NewReader(operacao.corpo)
+	}
+	req, e := http.NewRequestWithContext(ctx, operacao.metodo(), target+operacao.caminho, corpo)
 	if e == nil {
 		req.Header.Set("Accept", "application/json")
+		if operacao.escrita() {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Idempotency-Key", chaveIdempotencia(r.ID, sequence))
+		}
 		if r.credencial != "" {
 			req.Header.Set("Authorization", "Bearer "+r.credencial)
 		}
-		// A non-idempotent marker is deliberately absent: Transport may retry a GET on a reused
-		// broken connection before response. These are logical HTTP calls, not wire attempt counts.
+		// O Transport pode repetir um GET (ou um POST com X-Idempotency-Key, que ele trata como
+		// idempotente) numa conexão reutilizada quebrada antes da resposta; a chave é a mesma, então o
+		// alvo deduplica. Contagens são chamadas lógicas, não tentativas de rede.
 		resp, err := client.Do(req)
 		doErr = err
 		if err == nil {

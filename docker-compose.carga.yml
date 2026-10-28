@@ -34,6 +34,7 @@ services:
       CARGA_TOKEN_RISCO_FILE: /run/secrets/carga_risco
       CARGA_TOKEN_POSICOES_FILE: /run/secrets/carga_posicoes
       CARGA_TOKEN_RAZAO_FILE: /run/secrets/carga_razao
+      CARGA_TOKEN_ESCRITA_FILE: /run/secrets/carga_escrita
       GOMEMLIMIT: 256MiB
       GOMAXPROCS: '1'
     secrets:
@@ -44,6 +45,7 @@ services:
       - carga_risco
       - carga_posicoes
       - carga_razao
+      - carga_escrita
     restart: 'no'
     stop_grace_period: 8s
     logging:
@@ -66,3 +68,5 @@ secrets:
     file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/posicoes.token
   carga_razao:
     file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/razao.token
+  carga_escrita:
+    file: ${PROSPERO_CARGA_SECRETS_DIR:-./.carga-local}/escrita.token
