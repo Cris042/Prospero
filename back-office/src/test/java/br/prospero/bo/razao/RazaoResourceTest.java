@@ -218,6 +218,12 @@ class RazaoResourceTest {
     }
 
     @Test
+    void contaDeMedicao005LeRazaoComoAsDemais() {
+        ler("CONTA-005", "/api/v1/razao").statusCode(200).body("conta", equalTo("CONTA-005"));
+        ler("CONTA-999", "/api/v1/razao").statusCode(403);
+    }
+
+    @Test
     void negaSemTokenComEscopoDePosicoesAudienciaErradaEContaDesconhecida() {
         for (String rota : List.of("/api/v1/negocios", "/api/v1/razao", "/api/v1/negocios/ALFA3-2026-10-23-1")) {
             given().get(rota).then().statusCode(401).header("Cache-Control", containsString("no-store"));

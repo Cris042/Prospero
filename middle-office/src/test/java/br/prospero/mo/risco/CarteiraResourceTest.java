@@ -39,6 +39,14 @@ class CarteiraResourceTest {
     }
 
     @Test
+    void contaDeMedicaoEPreparavelEConsultaAPropriaCarteira() {
+        preparar(token(null, "risco:preparacao"), "CONTA-005", Map.of("saldo", "1000.00", "custodia", Map.of("ALFA3", 9)))
+                .then().statusCode(200).body("saldoTotal", equalTo("1000.00"));
+        given().auth().oauth2(token("CONTA-005", "risco:leitura")).when().get("/api/v1/risco/carteira").then()
+                .statusCode(200).body("conta", equalTo("CONTA-005")).body("saldoDisponivel", equalTo("1000.00"));
+    }
+
+    @Test
     void autorizacaoEscopoEContas() {
         given().when().get("/api/v1/risco/carteira").then().statusCode(401)
                 .body("codigo", equalTo("AUTENTICACAO_INVALIDA"));

@@ -19,8 +19,8 @@ public class RepositorioRevisoesJpa {
     public Map<String, Long> consultar() {
         List<?> linhas = gerenciadores.get().createNativeQuery(
                 "SELECT conta,revisao FROM trajetoria_revisao WHERE conta IN (:contas)")
-                .setParameter("contas", List.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"))
-                .setMaxResults(4).getResultList();
+                .setParameter("contas", List.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005"))
+                .setMaxResults(5).getResultList();
         Map<String, Long> revisoes = new HashMap<>();
         for (Object linha : linhas) {
             Object[] colunas = (Object[]) linha;

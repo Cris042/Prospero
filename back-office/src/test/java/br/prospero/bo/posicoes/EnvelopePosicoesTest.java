@@ -53,6 +53,17 @@ class EnvelopePosicoesTest {
     }
 
     @Test
+    void contaDeMedicao005EhAceitaComoCompradoraERecusaContaDesconhecida() throws Exception {
+        Map<String, Object> medicao = negocio("ALFA3", "10.01", 3);
+        dados(medicao).put("contaCompra", "CONTA-005");
+        EventoMatching.Negocio n = assertInstanceOf(EventoMatching.Negocio.class, ler(medicao).detalhe());
+        assertEquals("CONTA-005", n.compra().conta());
+        Map<String, Object> desconhecida = negocio("ALFA3", "10.01", 3);
+        dados(desconhecida).put("contaCompra", "CONTA-999");
+        assertThrows(MensagemInvalidaException.class, () -> ler(desconhecida));
+    }
+
+    @Test
     void precoExcessivoQuantidadeContaEVersaoDesconhecidasFalhamFechadas() {
         for (Map<String, Object> e : List.of(negocio("ALFA3", "1e999999", 3),
                 negocio("ALFA3", "10.01", Long.MAX_VALUE), negocio("ALFA3", "10.001", 3))) {

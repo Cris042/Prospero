@@ -366,7 +366,7 @@ class MatchingPostgresIT {
                     assertTrue(r.next());
                     assertEquals(5, r.getInt(1));
                 }
-                try (var r = s.executeQuery("SELECT count(*) FROM conta_risco WHERE conta <> 'CONTA-004' AND total = 1000000.00")) {
+                try (var r = s.executeQuery("SELECT count(*) FROM conta_risco WHERE conta NOT IN ('CONTA-004','CONTA-005') AND total = 1000000.00")) {
                     assertTrue(r.next());
                     assertEquals(3, r.getInt(1), "contas existentes intactas");
                 }

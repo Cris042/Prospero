@@ -57,6 +57,13 @@ class EnvelopeLiquidacaoTest {
     }
 
     @Test
+    void contaDeMedicao005ProduzCreditoERecusaContaDesconhecida() {
+        var lido = EnvelopeLiquidacao.ler(bytes(evento(NEGOCIO, LadoLiquidacao.COMPRADOR, "CONTA-005", "ALFA3", "4", CAUSA)));
+        assertEquals(new CreditoEsperado(NEGOCIO, LadoLiquidacao.COMPRADOR, "CONTA-005", "ALFA3", new BigDecimal("4")), lido.credito());
+        recusado(MotivoRecusa.CONTRATO_INVALIDO, e -> dados(e).put("conta", "CONTA-999"));
+    }
+
+    @Test
     void origemEIdIncoerentesTemMotivoProprio() {
         recusado(MotivoRecusa.ORIGEM_INVALIDA, e -> e.put("origem", "matching-engine"));
         recusado(MotivoRecusa.ID_INCOERENTE, e -> e.put("id", UUID.randomUUID().toString()));

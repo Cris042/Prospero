@@ -141,7 +141,7 @@ public final class EnvelopeMatching {
     }
 
     private static void motivo(JsonNode d) { exigir(texto(d,"motivo").matches("[A-Z_]{1,64}"),"motivo"); }
-    private static void conta(JsonNode d,String c) { exigir(Set.of("CONTA-001","CONTA-002","CONTA-003","CONTA-004").contains(texto(d,c)),c); }
+    private static void conta(JsonNode d,String c) { exigir(Set.of("CONTA-001","CONTA-002","CONTA-003","CONTA-004","CONTA-005").contains(texto(d,c)),c); }
     public static void campos(JsonNode r,String nomes) {
         Set<String> campos = Set.of(nomes.split(","));
         exigir(r != null && r.isObject() && r.size() == campos.size(),"campos");

@@ -100,6 +100,14 @@ class PosicoesResourceTest {
     }
 
     @Test
+    void contaDeMedicao005TemPosicoesComoAsDemais() {
+        given().auth().oauth2(token("CONTA-005", "posicoes:leitura")).get("/api/v1/posicoes").then()
+                .statusCode(200).body("conta", equalTo("CONTA-005"));
+        assertEquals("CONTA-005", fonte.ultimaConta());
+        given().auth().oauth2(token("CONTA-999", "posicoes:leitura")).get("/api/v1/posicoes").then().statusCode(403);
+    }
+
+    @Test
     void negaSemTokenSemEscopoEContaDesconhecida() {
         given().get("/api/v1/posicoes").then().statusCode(401).header("Cache-Control", containsString("no-store"));
         given().auth().oauth2(token("CONTA-002", "ordens:leitura")).get("/api/v1/posicoes").then().statusCode(403);

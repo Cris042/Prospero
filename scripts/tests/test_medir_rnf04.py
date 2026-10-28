@@ -139,17 +139,59 @@ class MargemDeOrdens(unittest.TestCase):
             self.assertNotIn(self.token, str(erro.exception))
 
 
-class CompradoresPreparaveis(unittest.TestCase):
-    def test_recusa_conta_nao_preparavel_antes_de_qualquer_http(self):
-        for conta in ("CONTA-001", "CONTA-003", "CONTA-004"):
-            argumentos = SimpleNamespace(origem="http://127.0.0.1:8081", origem_mo="http://127.0.0.1:8082",
-                                         origem_me="http://127.0.0.1:8083", ticker="ALFA3", preco="10.00",
-                                         amostras=3, aquecimento=2, contexto="ci-hospedado",
-                                         compradores=f"CONTA-002,{conta}", origem_jaeger=None)
-            with patch.object(medir.mercado, "http", side_effect=AssertionError("HTTP antes da validação")):
+class CompradoresMedidosEAquecimento(unittest.TestCase):
+    def argumentos(self, comprador="CONTA-005", aquecedor="CONTA-002"):
+        return SimpleNamespace(origem="http://127.0.0.1:8081", origem_mo="http://127.0.0.1:8082",
+                               origem_me="http://127.0.0.1:8083", ticker="ALFA3", preco="10.00",
+                               amostras=3, aquecimento=2, contexto="ci-hospedado",
+                               comprador=comprador, comprador_aquecimento=aquecedor, origem_jaeger=None)
+
+    def test_recusa_comprador_medido_que_nao_seja_conta_005_antes_de_qualquer_http(self):
+        # Isolado do ambiente: sem .env, uma validação furada aparece como AssertionError (FAIL), não como ERROR de ambiente.
+        proibido = AssertionError("token, carteira ou HTTP antes da validação")
+        for conta in ("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"):
+            with self.subTest(conta=conta), \
+                    patch.object(medir.mercado, "token", side_effect=proibido), \
+                    patch.object(medir.mercado, "http", side_effect=proibido), \
+                    patch.object(medir.mercado, "preparar_carteira", side_effect=proibido), \
+                    patch.object(medir, "verificar_orcamento", side_effect=proibido):
                 with self.assertRaises(SystemExit) as erro:
-                    medir.executar(argumentos)
-            self.assertIn("preparáveis", str(erro.exception))
+                    medir.executar(self.argumentos(comprador=conta))
+                self.assertIn("CONTA-005", str(erro.exception))
+
+    def test_recusa_aquecedor_que_nao_seja_conta_002_antes_de_qualquer_http(self):
+        proibido = AssertionError("token, carteira ou HTTP antes da validação")
+        for conta in ("CONTA-001", "CONTA-003", "CONTA-004", "CONTA-005"):
+            with self.subTest(conta=conta), \
+                    patch.object(medir.mercado, "token", side_effect=proibido), \
+                    patch.object(medir.mercado, "http", side_effect=proibido), \
+                    patch.object(medir.mercado, "preparar_carteira", side_effect=proibido), \
+                    patch.object(medir, "verificar_orcamento", side_effect=proibido):
+                with self.assertRaises(SystemExit) as erro:
+                    medir.executar(self.argumentos(aquecedor=conta))
+                self.assertIn("CONTA-002", str(erro.exception))
+
+    def test_amostras_medidas_somente_com_conta_005_e_aquecimento_somente_com_conta_002(self):
+        envios = []
+
+        def http(metodo, url, tok, corpo=None, cabecalhos=None):
+            if metodo == "POST" and url.endswith("/api/v1/ordens"):
+                envios.append((tok, corpo["lado"], corpo["quantidade"]))
+            return {"id": str(uuid.uuid4())}
+
+        argumentos = self.argumentos()
+        argumentos.amostras, argumentos.aquecimento, argumentos.contexto = 5, 2, "ci-hospedado"
+        with patch.object(medir.mercado, "token", side_effect=lambda escopo, validade, conta: "token-" + conta), \
+                patch.object(medir.mercado, "http", side_effect=http), \
+                patch.object(medir.mercado, "preparar_carteira"), \
+                patch.object(medir.mercado, "aguardar_campos"), \
+                patch.object(medir, "verificar_orcamento", return_value=0), \
+                patch.object(medir, "buckets", return_value={"soma": 0.0, "contagem": 0.0, "ignoradas": 0, float("inf"): 0}), \
+                patch.object(medir, "ambiente", return_value={}):
+            medir.executar(argumentos)
+        compras = [tok for tok, lado, _ in envios if lado == "COMPRA"]
+        self.assertEqual(compras, ["token-CONTA-002"] * 2 + ["token-CONTA-005"] * 5)
+        self.assertEqual([q for _, lado, q in envios if lado == "COMPRA"], [1] * 7)
 
 
 class MargemAntesDePreparar(unittest.TestCase):
@@ -157,7 +199,7 @@ class MargemAntesDePreparar(unittest.TestCase):
         return SimpleNamespace(origem="http://127.0.0.1:8081", origem_mo="http://127.0.0.1:8082",
                                origem_me="http://127.0.0.1:8083", ticker="ALFA3", preco="10.00",
                                amostras=3, aquecimento=2, contexto="ci-hospedado",
-                               compradores="CONTA-002", origem_jaeger=None)
+                               comprador="CONTA-005", comprador_aquecimento="CONTA-002", origem_jaeger=None)
 
     def test_verifica_comprador_e_vendedor_antes_da_primeira_preparacao(self):
         class InterromperAntesDaPreparacao(Exception):
@@ -176,8 +218,8 @@ class MargemAntesDePreparar(unittest.TestCase):
         with patch.object(medir.mercado, "token", side_effect=lambda escopo, validade, conta: "token-" + conta), patch.object(medir, "verificar_orcamento", side_effect=verificar), patch.object(medir.mercado, "preparar_carteira", side_effect=preparar):
             with self.assertRaises(InterromperAntesDaPreparacao):
                 medir.executar(self.argumentos())
-        self.assertCountEqual(eventos[:2], [("token-CONTA-002", 5), ("token-CONTA-003", 1)])
-        self.assertEqual(eventos[2:], ["preparar"])
+        self.assertCountEqual(eventos[:3], [("token-CONTA-005", 3), ("token-CONTA-002", 2), ("token-CONTA-003", 1)])
+        self.assertEqual(eventos[3:], ["preparar"])
 
     def test_recusa_de_margem_impede_preparacao_e_envio(self):
         with patch.object(medir.mercado, "token", return_value="token-sintetico"), patch.object(medir, "verificar_orcamento", side_effect=SystemExit("margem insuficiente")), patch.object(medir.mercado, "preparar_carteira") as preparar, patch.object(medir.mercado, "http", side_effect=SystemExit("envio interceptado pelo teste")) as http:
@@ -262,17 +304,27 @@ class PlanoDeAmostras(unittest.TestCase):
     def test_dedicado_recusa_menos_de_mil_amostras(self):
         for amostras in (1, 150, 999):
             with self.subTest(amostras=amostras), self.assertRaises(SystemExit):
-                medir.validar_plano(amostras, 30, ["CONTA-002", "CONTA-001"], "dedicado")
-        self.assertEqual(medir.validar_plano(1000, 30, ["CONTA-002", "CONTA-001"], "dedicado"), 515)
+                medir.validar_plano(amostras, 30, "CONTA-005", "CONTA-002", "dedicado")
+        self.assertEqual(medir.validar_plano(1000, 30, "CONTA-005", "CONTA-002", "dedicado"),
+                         {"medido": 1000, "aquecimento": 30})
 
-    def test_ci_hospedado_aceita_plano_menor_mas_respeita_o_teto_por_conta(self):
-        self.assertEqual(medir.validar_plano(10, 0, ["CONTA-002"], "ci-hospedado"), 10)
+    def test_teto_por_conta_recusa_mil_e_uma_amostras_da_conta_medida(self):
         with self.assertRaises(SystemExit):
-            medir.validar_plano(1000, 30, ["CONTA-002"], "ci-hospedado")
+            medir.validar_plano(1001, 0, "CONTA-005", "CONTA-002", "ci-hospedado")
+        with self.assertRaises(SystemExit):
+            medir.validar_plano(1001, 0, "CONTA-005", "CONTA-002", "dedicado")
+
+    def test_ci_hospedado_aceita_plano_menor(self):
+        self.assertEqual(medir.validar_plano(600, 30, "CONTA-005", "CONTA-002", "ci-hospedado"),
+                         {"medido": 600, "aquecimento": 30})
 
     def test_linha_de_comando_dedicada_com_150_amostras_e_recusada(self):
         with self.assertRaises(SystemExit):
             medir.main(["--amostras", "150"])
+
+    def test_plano_de_aquecimento_acima_de_cento_e_cinquenta_e_recusado(self):
+        with self.assertRaises(SystemExit):
+            medir.validar_plano(1000, 151, "CONTA-005", "CONTA-002", "dedicado")
 
 
 class AtribuicaoPorSalto(unittest.TestCase):

@@ -80,7 +80,9 @@ class PosicoesPostgresIT {
     void bootstrapTresParticoesIdempotenteMasNaoAceitaOutroLogOuEstadoParcial() throws Exception {
         checkpoint.iniciar(TOPICO);
         assertEquals(3, numero("SELECT count(*) FROM bo_checkpoint"));
-        assertEquals(20, numero("SELECT count(*) FROM bo_posicao"));
+        // Cinco contas (001 a 005, a 005 entra pela V6) × cinco ativos; o upgrade até a V2 segue com 20 (teste de upgrade abaixo).
+        assertEquals(25, numero("SELECT count(*) FROM bo_posicao"));
+        assertEquals(5, numero("SELECT count(*) FROM bo_posicao WHERE conta='CONTA-005'"));
         assertThrows(ProjecaoIncoerenteException.class, () -> checkpoint.iniciar("ZZZZZZZZZZZZZZZZZZZZZZ"));
         try (var c = conexao(); var s = c.createStatement()) { s.execute("DELETE FROM bo_checkpoint WHERE particao=2"); }
         assertThrows(ProjecaoIncoerenteException.class, () -> checkpoint.iniciar(TOPICO));

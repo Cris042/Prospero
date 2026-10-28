@@ -691,11 +691,17 @@ test('cancela ordem aberta pela lista: erro acessível, PUT único e saldo liber
   await boleta.getByLabel('Ativo').selectOption('BETA3');
   await boleta.getByLabel('Quantidade').fill('3');
   await boleta.getByLabel('Preço limite (R$)').fill('19.75');
-  const envio = page.waitForResponse(
-    (r) => r.url().endsWith('/api/v1/ordens') && r.request().method() === 'POST',
-  );
+  // Corpo capturado pela rota antes de chegar ao navegador: o CDP pode descartá-lo após a atualização da tela.
+  const capturada = Promise.withResolvers<{ id: string }>();
+  await page.route('**/servicos/front-office/api/v1/ordens', async (rota) => {
+    if (rota.request().method() !== 'POST') return rota.fallback();
+    const resposta = await rota.fetch();
+    capturada.resolve(await resposta.json());
+    await rota.fulfill({ response: resposta });
+  });
   await boleta.getByRole('button', { name: 'Registrar ordem' }).click();
-  const registrada: { id: string } = await (await envio).json();
+  const registrada = await capturada.promise;
+  await page.unroute('**/servicos/front-office/api/v1/ordens');
   const consultar = async () => {
     const r = await page.request.get(`/servicos/front-office/api/v1/ordens/${registrada.id}`);
     expect(r.status()).toBe(200);

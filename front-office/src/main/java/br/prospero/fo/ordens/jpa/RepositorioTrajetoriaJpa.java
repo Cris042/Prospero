@@ -140,7 +140,7 @@ public class RepositorioTrajetoriaJpa implements RepositorioTrajetoria {
     public boolean registrarContabilizacao(EventoContabilizacao evento) {
         exigirOrdem(evento.ordemCompra(), evento.contaCompra(), evento.ticker(), "COMPRA", evento.quantidade());
         exigirOrdem(evento.ordemVenda(), evento.contaVenda(), evento.ticker(), "VENDA", evento.quantidade());
-        List<String> contas = List.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004");
+        List<String> contas = List.of("CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005");
         travar(contas);
         List<?> anterior = em().createNativeQuery("SELECT assinatura FROM trajetoria_identidade WHERE origem='back-office' AND evento=:e")
                 .setParameter("e", evento.id()).getResultList();

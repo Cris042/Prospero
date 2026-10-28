@@ -5,7 +5,8 @@ from decimal import Decimal, localcontext
 import re
 
 ATIVOS = {"ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"}
-CONTAS = {f"CONTA-00{i}" for i in range(1, 5)}
+# CONTA-005 (medição, V01-2) é conta de negócio no BO: a CI gera negócios contra ela e precisa conciliá-la.
+CONTAS = {f"CONTA-00{i}" for i in range(1, 6)}
 
 
 def numero(valor, financeiro=False):

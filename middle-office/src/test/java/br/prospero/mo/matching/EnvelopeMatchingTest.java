@@ -28,10 +28,12 @@ class EnvelopeMatchingTest {
         var json=new ObjectMapper();
         assertEquals(EnvelopeMatching.assinatura(json.readTree("{\"a\":1,\"b\":2}")),EnvelopeMatching.assinatura(json.readTree("{\"b\":2,\"a\":1}")));
     }
-    @Test void contaDoRoboFormadorEntraNaAllowlistEContaInexistenteContinuaRecusada() {
+    @Test void contasDoRoboEDeMedicaoEntramNaAllowlistEContaInexistenteContinuaRecusada() {
         assertEquals("NEGOCIO",EnvelopeMatching.ler(EVENTO.replace("\"contaVenda\":\"CONTA-002\"","\"contaVenda\":\"CONTA-004\"")
                 .getBytes(StandardCharsets.UTF_8)).get("tipo").textValue());
+        assertEquals("NEGOCIO",EnvelopeMatching.ler(EVENTO.replace("\"contaVenda\":\"CONTA-002\"","\"contaVenda\":\"CONTA-005\"")
+                .getBytes(StandardCharsets.UTF_8)).get("tipo").textValue());
         assertThrows(MensagemInvalidaException.class,()->EnvelopeMatching.ler(EVENTO.replace("\"contaVenda\":\"CONTA-002\"",
-                "\"contaVenda\":\"CONTA-005\"").getBytes(StandardCharsets.UTF_8)));
+                "\"contaVenda\":\"CONTA-999\"").getBytes(StandardCharsets.UTF_8)));
     }
 }

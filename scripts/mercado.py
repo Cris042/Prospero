@@ -35,7 +35,7 @@ AUDIENCIAS = {"risco": "prospero-middle-office", "risco-preparacao": "prospero-m
               "razao": "prospero-back-office", "liquidacao": "prospero-back-office"}
 POR_CONTA = {"ordens-leitura", "ordens", "ordens-envio", "risco", "posicoes", "razao"}
 ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
-CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004"}
+CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005"}
 VALIDADE_MAXIMA = 3600
 # Fixture histórica da tela: namespace separado do mercado real (ADR-014).
 NAMESPACE_DEMO = "8d3df0f3-76d3-4ac0-b9a8-26f040e5721c"
@@ -45,7 +45,7 @@ def token(escopo, validade, conta=None):
     if escopo not in ESCOPOS or not 1 <= validade <= VALIDADE_MAXIMA:
         raise SystemExit("Escopo ou validade inválidos.")
     if (escopo in POR_CONTA) != (conta is not None) or (conta is not None and conta not in CONTAS):
-        raise SystemExit("Escopos ordens e risco exigem --conta CONTA-001..004; demais escopos não aceitam conta.")
+        raise SystemExit("Escopos ordens e risco exigem --conta CONTA-001..005; demais escopos não aceitam conta.")
     chave = ambiente.ler(ambiente.path).get("FO_JWT_CHAVE")
     if not chave or len(chave) < 32:
         raise SystemExit("FO_JWT_CHAVE ausente; execute python3 scripts/preparar-ambiente.py.")

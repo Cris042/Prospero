@@ -60,6 +60,16 @@ class EnvelopeContabilizacaoTest {
     }
 
     @Test
+    void aceitaAContaDeMedicao005ComoCompradoraERecusaContaDesconhecida() throws Exception {
+        var raiz = envelope();
+        @SuppressWarnings("unchecked") var dados = (Map<String, Object>) raiz.get("dados");
+        dados.put("contaCompra", "CONTA-005");
+        assertEquals("CONTA-005", EnvelopeContabilizacao.evento(bytes(raiz), "ALFA3").contaCompra());
+        dados.put("contaCompra", "CONTA-999");
+        assertThrows(RuntimeException.class, () -> EnvelopeContabilizacao.evento(bytes(raiz), "ALFA3"));
+    }
+
+    @Test
     void rejeitaQuantidadeNumericaNaoPositivaOverflowContaEUuidInvalidos() throws Exception {
         for (Object quantidade : new Object[]{10, "0", "-1", "1.0", "01", "9223372036854775808"}) {
             var raiz = envelope();
