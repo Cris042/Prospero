@@ -703,9 +703,10 @@ test('cancela ordem aberta pela lista: erro acessível, PUT único e saldo liber
   };
   await expect.poll(async () => (await consultar()).estado, { timeout: 15000 }).toBe('ABERTA');
   await page.getByRole('button', { name: 'Atualizar ordens' }).click();
+  // O botão Cancelar some quando o pedido existe; a trajetória identifica a linha durante todo o fluxo.
   const linha = page
     .getByRole('row')
-    .filter({ has: page.getByLabel(`Cancelar ordem ${registrada.id}`) });
+    .filter({ has: page.getByLabel(`Ver trajetória da ordem ${registrada.id}`) });
   await expect(linha).toContainText('Aberta');
 
   // Primeira tentativa: 503 contratado do interruptor; a UI mostra o erro na linha e permite repetir.
