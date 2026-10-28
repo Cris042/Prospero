@@ -737,7 +737,7 @@
     },
     {
       "id": 16,
-      "title": "MS: HTTP técnico por segundo",
+      "title": "MS: HTTP técnico e rotas de ordens por segundo",
       "type": "timeseries",
       "description": "",
       "gridPos": {
@@ -755,6 +755,11 @@
           "refId": "A",
           "expr": "sum by (servico, status) (rate(http_server_requests_seconds_count{job=\"prospero\",uri=\"/api/v1/sistema\"}[1m]))",
           "legendFormat": "{{servico}} HTTP {{status}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (servico, status) (rate(http_server_requests_seconds_count{job=\"prospero\",uri=~\"/api/v1/ordens.*\"}[1m]))",
+          "legendFormat": "{{servico}} ordens HTTP {{status}}"
         }
       ],
       "fieldConfig": {
