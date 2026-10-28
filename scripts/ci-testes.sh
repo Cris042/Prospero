@@ -89,7 +89,7 @@ rodar_workbook posicoes posicoes
 # RF08b: negócios e razão D0 em DELTA3 logo após posições; repete abrindo e fechando por negócios reais.
 rodar_workbook razao razao
 rodar_workbook razao razao
-# B1: somente 12 leituras logicas, preflight real e controlador do proprio projeto.
+# B1: somente 12 leituras logicas, preflight real e controlador do proprio projeto; B2 reutiliza o controlador.
 carga_cfg="$(mktemp -d "${RUNNER_TEMP:?}/prospero-carga.XXXXXX")"
 export PROSPERO_CARGA_SECRETS_DIR="$carga_cfg"
 python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carga_cfg" --preparar
@@ -98,6 +98,12 @@ python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carg
 timeout --kill-after=15s 90s python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carga_cfg" \
   > .ci-evidencias/carga-leituras.json
 cat .ci-evidencias/carga-leituras.json
+# B2: duas execuções de ORDEM_AGRESSOR (a segunda com o MO parado e religado), reconciliação e conferência financeira.
+# Mesmos privados e controlador do smoke de leituras; relatório público só com contagens.
+fo_origem="http://$("${compose[@]}" port front-office 8080)"
+timeout --kill-after=15s 420s python3 scripts/testar-carga-escrita.py --projeto "$project" --privados "$carga_cfg" \
+  --origem "$fo_origem" > .ci-evidencias/carga-escrita.json
+cat .ci-evidencias/carga-escrita.json
 "${compose_carga[@]}" stop --timeout 8 api-carga
 "${compose_carga[@]}" rm -f api-carga
 rm -rf -- "$carga_cfg"

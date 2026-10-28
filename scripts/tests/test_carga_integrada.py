@@ -664,7 +664,7 @@ class PrivadosECli(unittest.TestCase):
             token = arquivo.read_text(); header, body, signature = token.split('.')
             claims = json.loads(dec(body)); aud, grupo = grupos[arquivo.name]
             self.assertEqual((claims['aud'], claims['groups']), (aud, [grupo]))
-            self.assertEqual(claims['exp'] - claims['iat'], 600)
+            self.assertEqual(claims['exp'] - claims['iat'], ci.VALIDADE_TOKENS)
             if arquivo.name != 'mercado.token':
                 self.assertEqual(claims['sub'], 'CONTA-002')
             self.assertEqual(dec(signature), hmac.new(self.financeira.encode(), (header + '.' + body).encode(), hashlib.sha256).digest())
