@@ -191,12 +191,13 @@ def preparar_cenario(origem, origem_mo, n):
 
 def conferir_financeiro(origem, origem_mo, vendedor, oferta, n):
     mercado.aguardar_campos(origem, vendedor, '/api/v1/ordens/' + oferta, {'estado': 'EXECUTADA'}, 60)
+    # D0: só a compradora debita; o caixa da vendedora é creditado em D+2 (RF08c), então seu total segue 0.00.
     total = '%d.00' % (1000000 - 10 * n)
     mercado.aguardar_campos(origem_mo, mercado.token('risco', 300, 'CONTA-002'), '/api/v1/risco/carteira',
                             {'saldoTotal': total, 'saldoReservado': '0.00'}, 60)
     vendedora = mercado.aguardar_campos(origem_mo, mercado.token('risco', 300, 'CONTA-003'),
                                         '/api/v1/risco/carteira',
-                                        {'saldoTotal': '%d.00' % (10 * n), 'saldoReservado': '0.00'}, 60)
+                                        {'saldoTotal': '0.00', 'saldoReservado': '0.00'}, 60)
     custodia = next((c for c in vendedora['custodias'] if c['ticker'] == TICKER), None)
     if custodia is not None and (custodia['total'], custodia['reservado']) != (0, 0):
         raise ValueError('custodia da vendedora divergente')
