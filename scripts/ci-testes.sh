@@ -98,16 +98,6 @@ python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carg
 timeout --kill-after=15s 90s python3 scripts/testar-carga-integrada.py --projeto "$project" --privados "$carga_cfg" \
   > .ci-evidencias/carga-leituras.json
 cat .ci-evidencias/carga-leituras.json
-# B2: duas execuções de ORDEM_AGRESSOR (a segunda com o MO parado e religado), reconciliação e conferência financeira.
-# Mesmos privados e controlador do smoke de leituras; relatório público só com contagens.
-fo_origem="http://$("${compose[@]}" port front-office 8080)"
-timeout --kill-after=15s 420s python3 scripts/testar-carga-escrita.py --projeto "$project" --privados "$carga_cfg" \
-  --origem "$fo_origem" > .ci-evidencias/carga-escrita.json
-cat .ci-evidencias/carga-escrita.json
-"${compose_carga[@]}" stop --timeout 8 api-carga
-"${compose_carga[@]}" rm -f api-carga
-rm -rf -- "$carga_cfg"
-carga_cfg=''
 # RF09a: recebimento, risco rejeitado, cursor e isolamento; duas execuções sem reconstruir fatos.
 rodar_workbook trajetoria risco
 rodar_workbook trajetoria risco
@@ -129,6 +119,17 @@ rodar_workbook cotacao risco
 # Repetição deliberada comprova limpeza por negócios reais, sem apagar reservas/livro.
 rodar_workbook matching risco
 rodar_workbook matching risco
+# B2 depois de cotação/matching: TunelAntesDoPrimeiroNegocio exige ALFA3 sem negócio na sessão.
+# B2: duas execuções de ORDEM_AGRESSOR (a segunda com o MO parado e religado), reconciliação e conferência financeira.
+# Mesmos privados e controlador do smoke de leituras; relatório público só com contagens.
+fo_origem="http://$("${compose[@]}" port front-office 8080)"
+timeout --kill-after=15s 420s python3 scripts/testar-carga-escrita.py --projeto "$project" --privados "$carga_cfg" \
+  --origem "$fo_origem" > .ci-evidencias/carga-escrita.json
+cat .ci-evidencias/carga-escrita.json
+"${compose_carga[@]}" stop --timeout 8 api-carga
+"${compose_carga[@]}" rm -f api-carga
+rm -rf -- "$carga_cfg"
+carga_cfg=''
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
 mo_origem="http://$("${compose[@]}" port middle-office 8080)"
 # V01b: comparação pareada na mesma imagem/infra, preservando dados e o teto de ordens.
