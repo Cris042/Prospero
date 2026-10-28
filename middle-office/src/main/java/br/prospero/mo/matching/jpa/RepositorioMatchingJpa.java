@@ -7,6 +7,7 @@ import br.prospero.mo.matching.dominio.NegocioMatching;
 import br.prospero.mo.matching.dominio.PernaOco;
 import br.prospero.mo.matching.dominio.ReservaMatching;
 import br.prospero.mo.matching.helper.CalculoConsumo;
+import br.prospero.mo.mensageria.dominio.ParticaoBloqueadaException;
 import br.prospero.mo.risco.helper.EnvelopeAdmissao;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -37,6 +38,9 @@ public class RepositorioMatchingJpa {
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void aplicar(JsonNode evento) {
+        // v5 (cancelamento manual) já foi validado por ler(); sem solicitação persistida não há o que liberar. Bloqueia antes
+        // de travar conta, tocar reserva ou deduplicar, para que a versão com coordenação processe o mesmo offset.
+        if (evento.get("versao").intValue() == 5) throw new ParticaoBloqueadaException("CANCELAMENTO_SEM_COORDENACAO");
         if (texto(evento,"tipo").equals("SESSAO_ENCERRADA")) {
             aplicarMarco(evento);
             return;

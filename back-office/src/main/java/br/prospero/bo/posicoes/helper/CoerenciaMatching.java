@@ -38,6 +38,7 @@ public final class CoerenciaMatching {
             case EventoMatching.Reduzida r -> r.alvo();
             case EventoMatching.Encerrada f -> e.causacao() == null ? null : f.alvo();
             case EventoMatching.SessaoEncerrada ignorado -> null;
+            case EventoMatching.CancelamentoDecidido d -> d.alvo();
         };
     }
 

@@ -108,7 +108,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
         if (e.versao() == 4 && !EventoMatching.encerramento(e.ticker(), e.sessao()).equals(e.causacao())) {
             throw new MatchingIncoerenteException("MATCHING_CAUSACAO");
         }
-        if (e.causacao() != null && e.versao() != 4 && em().createNativeQuery(
+        if (e.causacao() != null && e.versao() != 4 && e.versao() != 5 && em().createNativeQuery(
                 "SELECT 1 FROM ordem WHERE admissao_matching=:a AND ticker=:t AND data_sessao=:s"
                         + (e.versao() == 3 ? "" : " AND grupo_oco IS NULL"))
                 .setParameter("a", e.causacao()).setParameter("t", e.ticker()).setParameter("s", e.sessao())
@@ -138,6 +138,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             case EventoMatching.Encerrada f -> e.causacao() != null ? f.alvo() : null;
             case EventoMatching.Reduzida r -> r.alvo();
             case EventoMatching.SessaoEncerrada m -> null;
+            case EventoMatching.CancelamentoDecidido d -> d.alvo();
             default -> null;
         };
     }
@@ -169,7 +170,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
                 || entidades.stream().anyMatch(o -> o.grupoOco != null);
         boolean envolveStop = causas.stream().map(c -> ((Object[]) c)[0]).anyMatch(t -> t.equals("STOP") || t.equals("STOP_LIMIT"))
                 || entidades.stream().anyMatch(o -> o.tipo.equals("STOP") || o.tipo.equals("STOP_LIMIT"));
-        if (e.versao() != 4 && e.versao() != (envolveOco ? 3 : envolveStop ? 2 : 1)) {
+        if (e.versao() != 4 && e.versao() != 5 && e.versao() != (envolveOco ? 3 : envolveStop ? 2 : 1)) {
             throw new MatchingIncoerenteException("MATCHING_VERSAO_STOP");
         }
     }
@@ -244,6 +245,7 @@ public class RepositorioMatchingJpa implements RepositorioMatching {
             case EventoMatching.Encerrada f -> List.of(f.alvo());
             case EventoMatching.Reduzida r -> List.of(r.alvo());
             case EventoMatching.SessaoEncerrada m -> List.of();
+            case EventoMatching.CancelamentoDecidido d -> List.of(d.alvo());
         };
     }
 }

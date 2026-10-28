@@ -1,0 +1,1 @@
+{"id":"d4197a57-af6b-34f9-8e94-d9ea8a50262a","tipo":"CANCELAR_ORDEM","versao":1,"origem":"middle-office","correlacao":"2aa1a6ec-f41a-309e-99e6-f5929b3a651e","ocorridoEm":"2026-10-18T12:00:00Z","traceparent":null,"dados":{"ordem":"a0000000-0000-4000-8000-000000000003","intencao":"b0000000-0000-4000-8000-000000000003","conta":"CONTA-003","ticker":"ALFA3","dataSessao":"2026-10-18"}}

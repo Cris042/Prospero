@@ -3,6 +3,7 @@ set -euo pipefail
 python3 scripts/preparar-ambiente.py
 python3 scripts/verificar-documentacao.py
 python3 scripts/verificar-estrutura.py
+python3 scripts/verificar-contratos.py
 python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'
 # Gate de qualidade: reprova só falha nova ou pior que a baseline; --sem-git porque o checkout é raso.
 python3 scripts/verificar-qualidade.py --gate --baseline scripts/verificar-qualidade-baseline.json --sem-git

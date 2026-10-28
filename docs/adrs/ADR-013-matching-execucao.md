@@ -220,3 +220,57 @@ Backfill V8 usa somente linhas de outbox ainda existentes ligadas inequivocament
 Aplicar expansão com o processamento pausado. Backfill percorre apenas a outbox retida e o vínculo indexável por UUID; esse trabalho de migração limitado não justifica varreduras contínuas. Não apagar reservas, logs ou volumes. Antes de novos fatos de cancelamento, a aplicação anterior pode voltar conservando a tabela aditiva, mas não gera recibos durante esse período: os dados produzidos por ela precisam de reconciliação explícita antes de depender da nova prova. Correção de esquema usa nova migração ou restauração consistente; nenhuma restauração é atribuída sem ensaio. Não editar V1–V7 nem usar Flyway Undo pago. Depois da emissão futura v5, a recuperação continua para frente com leitores compatíveis.
 
 QA exclusivo deve comprovar RED/GREEN e PostgreSQL16/JTA real: migração V7→V8, legado publicado/pendente/expurgado, limite por bytes, mesma transação de registro, ACK/rollback/reentrega/primeiro ACK, divergência antes de confirmar, expurgo e demais tipos preservados. MockProducer controla os ACKs; não é prova de autenticação Kafka ou capacidade. Sem API nova, XLSX dispensada somente neste incremento interno conforme ADR-004. API completa exigirá workbook duas vezes, autorização/proxy, reserva/ordem/mercado/trajetória e quedas recuperáveis.
+
+## Catálogo v5 e leitores de cancelamento — RF10c2 (2026-10-27)
+
+Cinco pareceres medium independentes (arquitetura, QA, segurança, operação e viabilidade) recomendaram seguir com ressalvas e fixaram o catálogo abaixo antes do código. Esta fatia entrega somente contratos, fixtures compartilhadas, leitores e o lado ME. **Nenhum produtor de produção emite os tipos novos**: FO e MO não serializam `CANCELAMENTO_SOLICITADO`, `RESULTADO_CANCELAMENTO` nem `CANCELAR_ORDEM`, e nenhuma flag os liga. O ME só os emite como resposta a um `CANCELAR_ORDEM`, que ninguém produz ainda.
+
+### Catálogo
+
+| Tópico (chave) | Tipo, versão e origem | `dados` | Identidade |
+| --- | --- | --- | --- |
+| `risco.comandos.v1` (conta) | `CANCELAMENTO_SOLICITADO` v1, `front-office` | `ordem`, `intencao`, `ticker`, `dataSessao` | `id = uuid("cancelamento-solicitado:" + ordem)`; `correlacao = uuid("admissao:" + intencao)`, a admissão alvo |
+| `risco.resultados.v1` (conta) | `RESULTADO_CANCELAMENTO` v1, `middle-office` | `ordem`, `resultado` (`CONFIRMADO` ou `RECUSADO`), `motivo` | `id = uuid("resultado-cancelamento:" + ordem)`; mesma correlação. `motivo` nulo em `CONFIRMADO`; em `RECUSADO` pertence a `SEM_SALDO_VIVO`, `ALVO_DIVERGENTE`, `ORIGEM_OCO`, `ADMISSAO_NAO_COMPROVADA`, `RISCO_REJEITADO` |
+| `matching.comandos.v1` (ticker) | `CANCELAR_ORDEM` v1, `middle-office` | `AlvoCancelamento`: `ordem`, `intencao`, `conta`, `ticker`, `dataSessao` | `id = uuid("cancelamento:" + ordem)`; mesma correlação. Raiz sem `conta`, como `ENCERRAR_SESSAO`: a conta vive em `dados` |
+| `matching.eventos.v1` (ticker) | envelope **v5**, `matching-engine`, com `causacao = id` do comando | `ORDEM_ENCERRADA` com motivo `CANCELADA_MANUAL` (`ordem`, `intencao`, `conta`, `motivo`, `executada` acumulada, `cancelada` = saldo retirado, maior que zero) e `CANCELAMENTO_DECIDIDO` (`ordem`, `intencao`, `conta`, `resultado`, `terminal`) | ids `uuid("matching:" + comando + ":" + indice)`; correlação = admissão alvo |
+
+`CANCELAMENTO_DECIDIDO.resultado` pertence a `APLICADO`, `SEM_SALDO_VIVO`, `ALVO_DIVERGENTE`, `ORIGEM_OCO`. `terminal` é o id do `ORDEM_ENCERRADA` em `APLICADO` e `null` nas recusas. Em `APLICADO` o terminal tem índice 0 e a decisão índice 1; numa recusa a decisão tem índice 0. A decisão é sempre o último evento do comando. A v5 é exclusiva desses dois tipos: o motivo `CANCELADA_MANUAL` é proibido em v1–v4 e os tipos v5 são proibidos fora da v5. O texto "o nome do comando de matching é `CANCELAMENTO_SOLICITADO`" da proposta anterior fica corrigido: cada tópico tem nome próprio para evitar ambiguidade entre solicitação (FO→MO) e comando (MO→ME). Os leitores recalculam `causacao = uuid("cancelamento:" + ordem)`, `correlacao` e os ids; qualquer divergência é inválida.
+
+`SaldoCanceladoManual` continua fora de `Evento`: o serializador v5 do ME o converte direto no envelope, sem acrescentar `CANCELADA_MANUAL` ao enum de domínio.
+
+### Decisão por leitor
+
+| Leitor | `ORDEM_ENCERRADA CANCELADA_MANUAL` | `CANCELAMENTO_DECIDIDO` |
+| --- | --- | --- |
+| FO ordens e trajetória | Marca a ordem `CANCELADA` com o motivo, se não há OCO, a executada e o saldo conferem exatamente e a causação é a derivada; Stop não acionado é elegível (PRD) | Valida identidade e, em `APLICADO`, exige a ordem já cancelada manualmente; registra o id para deduplicação e o marco `CANCELAMENTO_DECIDIDO` na trajetória, sem alterar estado |
+| FO cotação | `Retirar` da oferta, como os demais terminais; Stop pendente não repousa e nada muda | Ignora sem negócio fictício |
+| BO | Valida a coerência v5 e ignora | Valida e ignora |
+| MO reservas | Valida estritamente e **bloqueia** com `CANCELAMENTO_SEM_COORDENACAO`, sem tocar reserva nem deduplicação; liberar só com solicitação persistida (fatia de coordenação) | Idem |
+| ME | Produz os dois eventos | Produz |
+| Parser de risco do MO | `CANCELAMENTO_SOLICITADO` reconhecido bloqueia a partição | n/a |
+| Parser de risco do FO | `RESULTADO_CANCELAMENTO` reconhecido bloqueia a partição | n/a |
+
+Os consumidores de `risco.*` usam `ConsumoKafka` não financeiro, que descarta mensagem inválida confirmando o offset, com retenção de 7 dias. Perder um pedido ou resultado de cancelamento seria silencioso, então os tipos novos lançam `ParticaoBloqueadaException`: o offset não avança, a tentativa repete com espera crescente, nunca há descarte por falha persistente e a métrica `prospero_consumo_bloqueadas_total{topico,motivo}` conta cada ocorrência. Um alerta Prometheus cobre bloqueio e qualquer descarte em `risco.*`. Os motivos são constantes: `CANCELAMENTO_SOLICITADO_SEM_COORDENACAO` e `RESULTADO_CANCELAMENTO_SEM_LEITOR` para mensagem válida, `..._INVALIDO` para a de tipo reconhecido que falha na leitura estrita (versão, campo extra, id ou correlação não derivados, conteúdo após o JSON). JSON ilegível ou acima de 16 KiB não permite reconhecer o tipo e segue o descarte existente; um emissor legítimo nunca produz esses casos. O leitor de matching do MO usa o mesmo mecanismo com `CANCELAMENTO_SEM_COORDENACAO`, sem gravar nada: o consumidor financeiro fica fora de prontidão e retoma sozinho no mesmo offset quando a versão com coordenação for implantada. Parar a partição é intencional: a recuperação é implantar essa versão, não descartar. O alerta `ProsperoRiscoConsumoBloqueadoOuDescartado` cobre `prospero_consumo_bloqueadas_total` e `prospero_consumo_descartadas_total` em `risco.*`, inclusive a primeira exposição sem baseline.
+
+### Deduplicação no ME
+
+`CANCELAR_ORDEM` é deduplicado pelo id do comando em `SessaoMatching`, num mapa `id → AlvoCancelamento` limitado a 30.000 entradas e reconstruído pelo replay do log (todo comando é reprocessado na ordem). Segunda entrega com o mesmo conteúdo não produz evento nem efeito; mesmo id com alvo diferente é inconsistência e bloqueia o escritor, como na admissão. Ordem desconhecida devolve `SEM_SALDO_VIVO`, sem abrir sessão nem criar estado, pela precedência RF10b1. O checkpoint do log usa a sessão persistida e só a fixa com a do comando se o log ainda não tiver uma, como em `ENCERRAR_SESSAO`.
+
+### Errata ao refinamento anterior (D1–D4)
+
+O desenho do bloco RF10 simplificou quatro pontos do texto aceito em "Contrato técnico proposto da solicitação" e "Coordenação integrada". Preservam as invariantes: reserva liberada uma vez, nada liberado por HTTP ou timeout, OCO inelegível.
+
+- **D1.** "Pedido anterior ao risco permanece pendente" no MO é substituído por pendência no FO (`AGUARDANDO_RISCO`). O FO só emite `CANCELAMENTO_SOLICITADO` depois de aplicar `RESULTADO_RISCO`. O MO nunca vê cancelamento anterior à decisão de risco; se a decisão faltar, bloqueia a partição.
+- **D2.** A espera pelo ACK da admissão no MO não usa varredura nem timer: quem grava o primeiro ACK promove a operação `AGUARDANDO_ACK` e grava o `CANCELAR_ORDEM` na outbox, na mesma transação.
+- **D3.** Uma linha de operação por ordem nos dois serviços (PK = ordem). Repetição devolve a mesma linha, sem nova outbox; recusa é final. Elimina chaves de idempotência e aliases.
+- **D4.** A flag `prospero.cancelamento.emissao-habilitada` protege só a criação de operações, fica `false` por padrão e responde 503 `CANCELAMENTO_INDISPONIVEL`. Operações já persistidas continuam sendo promovidas. É um interruptor de novas emissões, não uma máquina de estados.
+
+D2 a D4 só entram em vigor nas fatias de coordenação e API; esta fatia apenas as registra.
+
+### Compatibilidade e recuperação
+
+Os leitores desta fatia precisam estar implantados em FO, BO, MO e ME antes de qualquer emissão futura. Depois da primeira emissão v5 não há retorno de imagem: preservar bancos e logs e corrigir para frente. Os fatos históricos v1–v4 e seus ids permanecem byte a byte; o ME mantém os vetores congelados (3 de 3) e ganha replay misto v1–v5. Não há migração SQL em FO, BO nem MO: as colunas de motivo não têm CHECK.
+
+### Evidências e ADR-004
+
+Fixtures v5 compartilhadas em `contratos/v5/`, com manifesto SHA-256 conferido por `scripts/verificar-contratos.py` e por testes de cada serviço, cobrem válidos e um corpus negativo (versão, campo extra ou duplicado, mais de 16 KiB, conteúdo após o JSON, UUID e data não canônicos, enum fora, ticker diferente da chave, origem errada, quebra de linha e marcador de log no payload). O ME prova que seus bytes reais são iguais às fixtures. Planilha XLSX é dispensada pelo ADR-004 nesta fatia porque nenhum produtor ativo emite os tipos novos nem há API ou efeito externo; a API completa exigirá workbook duas vezes.

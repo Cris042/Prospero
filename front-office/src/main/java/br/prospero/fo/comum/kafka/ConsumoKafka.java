@@ -1,6 +1,7 @@
 package br.prospero.fo.comum.kafka;
 
 import br.prospero.fo.comum.dominio.MensagemInvalidaException;
+import br.prospero.fo.comum.dominio.ParticaoBloqueadaException;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -23,6 +24,7 @@ import java.util.function.Supplier;
  * falha de processamento reposiciona as partições no primeiro registro não confirmado e repete com espera crescente.
  * Depois de {@link #TENTATIVAS_MAXIMAS} falhas seguidas no mesmo offset o registro é tratado como inválido, para um
  * defeito determinístico não travar a partição; se nem o registro do descarte for possível (banco fora), segue repetindo.
+ * {@link ParticaoBloqueadaException} (tipo reconhecido sem leitor) é a exceção: repete sempre e nunca descarta.
  * Cópia espelhada em middle-office (projetos Maven independentes): corrigir nos dois.
  */
 public final class ConsumoKafka implements Runnable {
@@ -125,6 +127,13 @@ public final class ConsumoKafka implements Runnable {
     private void processarOuRejeitar(TopicPartition particao, ConsumerRecord<String, byte[]> registro) {
         try {
             processador.processar(registro);
+        } catch (ParticaoBloqueadaException bloqueio) {
+            // Nunca descarta nem avança o offset, por mais que repita: a recuperação é implantar o leitor.
+            contarFalha(particao, registro.offset());
+            metricas.counter("prospero.consumo.bloqueadas", "topico", topico, "motivo", bloqueio.getMessage()).increment();
+            LOG.errorf("Partição bloqueada: topico=%s particao=%d offset=%d motivo=%s", registro.topic(),
+                    registro.partition(), registro.offset(), bloqueio.getMessage());
+            throw bloqueio;
         } catch (MensagemInvalidaException invalida) {
             rejeitar(registro, invalida.getMessage());
         } catch (RuntimeException falha) {
