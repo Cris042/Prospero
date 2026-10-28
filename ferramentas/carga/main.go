@@ -52,6 +52,7 @@ func main() {
 		"ATIVOS": "CARGA_TOKEN_MERCADO_FILE", "ORDENS": "CARGA_TOKEN_ORDENS_FILE",
 		"CARTEIRA": "CARGA_TOKEN_RISCO_FILE", "POSICOES": "CARGA_TOKEN_POSICOES_FILE",
 		"NEGOCIOS": "CARGA_TOKEN_RAZAO_FILE", "RAZAO": "CARGA_TOKEN_RAZAO_FILE",
+		cenarioEscrita: "CARGA_TOKEN_ESCRITA_FILE",
 	} {
 		cfg.FinancialTokens[cenario] = lerCredencial(os.Getenv(variavel))
 	}

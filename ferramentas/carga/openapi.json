@@ -1102,9 +1102,10 @@
               "CARTEIRA",
               "POSICOES",
               "NEGOCIOS",
-              "RAZAO"
+              "RAZAO",
+              "ORDEM_AGRESSOR"
             ],
-            "description": "Catálogo fechado de GET. Omitido mantém IDENTIDADE; credenciais financeiras ficam somente no servidor."
+            "description": "Catálogo fechado: seis GET financeiros e um único POST, ORDEM_AGRESSOR (compra IOC de uma unidade de ALFA3 no front-office, corpo fixo do catálogo, X-Idempotency-Key único por oferta). ORDEM_AGRESSOR exige modo ABERTO, concorrencia 1, maxChamadas até 20 e rps até 5. Omitido mantém IDENTIDADE; credenciais financeiras ficam somente no servidor."
           }
         },
         "required": [

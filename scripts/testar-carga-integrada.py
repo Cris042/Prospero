@@ -27,6 +27,8 @@ CENARIOS = {
 PORTAS = {'api-carga': 8080, 'prometheus': 9090, 'grafana': 3000, 'otel-collector': 13133}
 ARQUIVOS_COMPOSE = ('docker-compose.yml', 'docker-compose.ci.yml', 'docker-compose.robo.yml',
                     'docker-compose.carga.yml', 'docker-compose.carga-ci.yml')
+# Cobre build do controlador, smoke de leituras e o smoke de escrita (B2) no mesmo job.
+VALIDADE_TOKENS = 1200
 TERMINAIS = {'CONCLUIDA', 'CANCELADA', 'FALHA'}
 CONTAGENS = ('oferecidas', 'iniciadas', 'naoIniciadas', 'descartadas', 'interrompidas', 'finalizadas',
              'emVoo', 'respostasHTTP', 'errosHTTP', 'timeouts', 'falhasTransporte', 'canceladasEmVoo',
@@ -252,7 +254,7 @@ def preparar_privados(pasta):
     for nome in ('controle.key', 'preflight.key'):
         carga.private_write(pasta / nome, secrets.token_hex(32))
         (pasta / nome).chmod(0o444)
-    carga.financial_credentials('CONTA-002', 600)
+    carga.financial_credentials('CONTA-002', VALIDADE_TOKENS)
 
 
 class _Argumentos(argparse.ArgumentParser):

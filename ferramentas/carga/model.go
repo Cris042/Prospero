@@ -29,8 +29,12 @@ type Plan struct {
 }
 
 func (p Plan) Validate() error {
-	if _, err := p.leitura(); err != nil {
+	cenario, err := p.leitura()
+	if err != nil {
 		return err
+	}
+	if cenario.escrita() && (p.Modo != "ABERTO" || p.Concorrencia != 1 || p.MaxChamadas > maxChamadasEscrita) {
+		return errors.New("limites")
 	}
 	if p.Modo != "ABERTO" && p.Modo != "FECHADO" {
 		return errors.New("modo")
@@ -46,6 +50,9 @@ func (p Plan) Validate() error {
 	total := 0
 	for _, st := range p.Estagios {
 		if st.DuracaoMs < 100 || st.DuracaoMs > 60000 || st.RPS < 1 || st.RPS > 100 || st.VUs < 0 || st.VUs > 16 || (p.Modo == "ABERTO" && st.VUs != 0) || (p.Modo == "FECHADO" && (st.VUs < 1 || st.VUs > p.Concorrencia)) {
+			return errors.New("estagios")
+		}
+		if cenario.escrita() && st.RPS > maxRPSEscrita {
 			return errors.New("estagios")
 		}
 		total += st.DuracaoMs

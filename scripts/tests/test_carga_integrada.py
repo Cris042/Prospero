@@ -646,14 +646,15 @@ class PrivadosECli(unittest.TestCase):
         self.assertEqual(resultado.returncode, 0, resultado.stderr)
         self.assertNotIn(self.financeira, resultado.stdout + resultado.stderr)
         arquivos = set(p.name for p in self.privados.iterdir())
-        self.assertEqual(arquivos, {'controle.key', 'preflight.key', 'mercado.token', 'ordens.token', 'risco.token', 'posicoes.token', 'razao.token'})
+        self.assertEqual(arquivos, {'controle.key', 'preflight.key', 'mercado.token', 'ordens.token', 'risco.token', 'posicoes.token', 'razao.token', 'escrita.token'})
         chaves = [(self.privados / n).read_text() for n in ('controle.key', 'preflight.key')]
         self.assertTrue(all(len(c) >= 32 for c in chaves)); self.assertNotEqual(*chaves)
         grupos = {'mercado.token': ('prospero-front-office', 'mercado:leitura'),
                   'ordens.token': ('prospero-front-office', 'ordens:leitura'),
                   'risco.token': ('prospero-middle-office', 'risco:leitura'),
                   'posicoes.token': ('prospero-back-office', 'posicoes:leitura'),
-                  'razao.token': ('prospero-back-office', 'razao:leitura')}
+                  'razao.token': ('prospero-back-office', 'razao:leitura'),
+                  'escrita.token': ('prospero-front-office', 'ordens:enviar')}
         dec = lambda b: base64.urlsafe_b64decode(b + '=' * (-len(b) % 4))
         for arquivo in self.privados.iterdir():
             self.assertEqual(stat.S_IMODE(arquivo.stat().st_mode), 0o444)
@@ -663,7 +664,7 @@ class PrivadosECli(unittest.TestCase):
             token = arquivo.read_text(); header, body, signature = token.split('.')
             claims = json.loads(dec(body)); aud, grupo = grupos[arquivo.name]
             self.assertEqual((claims['aud'], claims['groups']), (aud, [grupo]))
-            self.assertEqual(claims['exp'] - claims['iat'], 600)
+            self.assertEqual(claims['exp'] - claims['iat'], ci.VALIDADE_TOKENS)
             if arquivo.name != 'mercado.token':
                 self.assertEqual(claims['sub'], 'CONTA-002')
             self.assertEqual(dec(signature), hmac.new(self.financeira.encode(), (header + '.' + body).encode(), hashlib.sha256).digest())

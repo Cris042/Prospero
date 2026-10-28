@@ -32,7 +32,7 @@ def private_write(path, data):
 
 FINANCIAL_FILES = {
     'mercado.token': 'leitura', 'ordens.token': 'ordens-leitura', 'risco.token': 'risco',
-    'posicoes.token': 'posicoes', 'razao.token': 'razao',
+    'posicoes.token': 'posicoes', 'razao.token': 'razao', 'escrita.token': 'ordens-envio',
 }
 
 
@@ -49,7 +49,7 @@ def financial_credentials(conta, validade):
     if conta not in {'CONTA-002', 'CONTA-003'} or not 1 <= validade <= 3600:
         raise ValueError('conta ou validade invalida')
     from mercado import token
-    # A chave financeira permanece neste processo operador; somente bearers de leitura são gravados.
+    # A chave financeira permanece neste processo operador; bearers de leitura e o de envio (somente ordens:enviar, conta fixa no servidor) são gravados.
     tokens = {name: token(scope, validade, None if scope == 'leitura' else conta)
               for name, scope in FINANCIAL_FILES.items()}
     for name, value in tokens.items():
