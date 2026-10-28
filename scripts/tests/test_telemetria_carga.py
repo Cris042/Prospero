@@ -95,14 +95,15 @@ class Snapshot(unittest.TestCase):
                 self.assertTrue(dados['fontes'][nome]['motivo'])
                 self.assertEqual(dados['fontes'][nome]['instante'], INSTANTE)
 
-    def test_delta_so_existe_quando_os_dois_lados_foram_coletados(self):
-        antes = {'fontes': {'wal': {'estado': 'coletado', 'valores': {'bytes': 100, 'registros': 1}},
-                            'lag': {'estado': 'indisponivel', 'motivo': 'x'}}}
-        depois = {'fontes': {'wal': {'estado': 'coletado', 'valores': {'bytes': 150, 'registros': 4}},
-                             'lag': {'estado': 'coletado', 'valores': 0}}}
-        delta = tel.delta(antes, depois)
-        self.assertEqual(delta['wal'], {'bytes': 50, 'registros': 3})
-        self.assertIsNone(delta['lag'])
+    def test_fonte_sem_valor_nunca_vira_zero_no_snapshot_de_banco(self):
+        def sem_saida(args):
+            raise subprocess.CalledProcessError(1, args)
+        fontes = tel.fontes_postgres(sem_saida, 'postgres-back-office')
+        dados = tel.coletar(fontes, instante=INSTANTE, origens={})
+        for nome in fontes:
+            with self.subTest(nome=nome):
+                self.assertEqual(dados['fontes'][nome]['estado'], 'indisponivel')
+                self.assertNotIn('valores', dados['fontes'][nome])
 
 
 class Montagem(unittest.TestCase):
@@ -144,6 +145,10 @@ class Montagem(unittest.TestCase):
                                  origem_bo='http://127.0.0.1:9', rotulo='antes-escrita-1', instante=INSTANTE)
         psql = [c for c in compose if 'psql' in c]
         self.assertTrue(psql)
+        # Os quatro bancos entram no snapshot (FO, MO, ME e BO): nenhum fica de fora sem motivo.
+        self.assertEqual({c[2] for c in psql}, set(tel.BANCOS))
+        self.assertEqual(set(tel.BANCOS), {'postgres-front-office', 'postgres-middle-office',
+                                           'postgres-matching-engine', 'postgres-back-office'})
         for argv in psql:
             self.assertEqual(argv[argv.index('-U') + 1], tel.PAPEL_MONITOR)
             self.assertNotIn('PGPASSWORD', ' '.join(argv))

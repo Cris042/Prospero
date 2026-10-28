@@ -19,8 +19,9 @@ FORA_DO_ESCOPO = {
     'seriesContinuas': 'fora do escopo B3: exporters contínuos de banco e Kafka ficam para a V01',
 }
 PAPEL_MONITOR = 'prospero_monitor'
-BANCOS = {'postgres-front-office': 'prospero_fo', 'postgres-middle-office': 'prospero_mo'}
-DONOS = {'postgres-front-office': 'prospero_fo', 'postgres-middle-office': 'prospero_mo'}
+BANCOS = {'postgres-front-office': 'prospero_fo', 'postgres-middle-office': 'prospero_mo',
+          'postgres-matching-engine': 'prospero_me', 'postgres-back-office': 'prospero_bo'}
+DONOS = dict(BANCOS)
 UNIDADES = {'B': 1, 'kB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3, 'TB': 1000 ** 4,
             'KiB': 1024, 'MiB': 1024 ** 2, 'GiB': 1024 ** 3, 'TiB': 1024 ** 4, 'KB': 1000, 'K': 1000,
             'M': 1000 ** 2, 'G': 1000 ** 3, 'Ki': 1024, 'Mi': 1024 ** 2, 'Gi': 1024 ** 3}
@@ -153,25 +154,6 @@ def coletar(fontes, *, instante, origens):
     for nome, motivo in FORA_DO_ESCOPO.items():
         resultado[nome] = _estado('nao coletado', instante, motivo=motivo)
     return {'instante': instante, 'fontes': resultado}
-
-
-def delta(antes, depois):
-    """Diferença depois − antes só para fontes coletadas nos dois instantes; o resto é None."""
-    def subtrair(a, b):
-        if isinstance(a, dict) and isinstance(b, dict) and a.keys() == b.keys():
-            return {k: subtrair(a[k], b[k]) for k in a}
-        if type(a) in (int, float) and type(b) in (int, float):
-            return b - a
-        return None
-
-    saida = {}
-    for nome, valor in antes['fontes'].items():
-        posterior = depois['fontes'].get(nome, {})
-        if valor.get('estado') == 'coletado' and posterior.get('estado') == 'coletado':
-            saida[nome] = subtrair(valor['valores'], posterior['valores'])
-        else:
-            saida[nome] = None
-    return saida
 
 
 def fontes_postgres(run, servico):

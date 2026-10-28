@@ -20,6 +20,10 @@ def carregar(nome, arquivo):
 canc = carregar('carga_cancelamento_qa', 'testar-carga-cancelamento.py')
 
 
+def saldo(total, disponivel, reservado):
+    return {'saldoTotal': total, 'saldoDisponivel': disponivel, 'saldoReservado': reservado}
+
+
 class Plano(unittest.TestCase):
     def test_plano_exige_contraparte_menor_que_agressores_e_dentro_do_teto(self):
         self.assertEqual(canc.plano(4, 2), {'agressores': 4, 'contraparte': 2})
@@ -50,26 +54,87 @@ class Desfecho(unittest.TestCase):
                 canc.classificar_desfecho(estado, operacao)
 
 
+class Valores(unittest.TestCase):
+    def test_valor_monetario_e_decimal(self):
+        self.assertIsInstance(canc._valor('1.10'), Decimal)
+
+    def test_numero_json_em_valor_monetario_e_recusado(self):
+        # Float em _valor abriria a comparação binária; número JSON nunca entra como saldo.
+        for valor in (1.1, 10, True, None, '1,10', ''):
+            with self.subTest(valor=valor), self.assertRaises(ValueError):
+                canc._valor(valor)
+
+    def test_saldo_reservado_numerico_e_recusado_na_liberacao(self):
+        for reservado in (0, 0.0, 20.0):
+            with self.subTest(reservado=reservado), self.assertRaises(ValueError):
+                canc.conferir_liberacao(saldo('999980.00', '999980.00', reservado), 2, '10.00', '1000000.00')
+
+
 class Saldos(unittest.TestCase):
     def test_saldo_em_repouso_reserva_so_as_abertas_com_decimal(self):
-        antes = {'saldoTotal': '999980.00', 'saldoReservado': '20.00'}
+        antes = saldo('999980.00', '999960.00', '20.00')
         canc.conferir_repouso(antes, executadas=2, abertas=2, preco='10.00', inicial='1000000.00')
         with self.assertRaises(ValueError):
-            canc.conferir_repouso({'saldoTotal': '999980.00', 'saldoReservado': '20.0000001'}, 2, 2, '10.00',
-                                  '1000000.00')
+            canc.conferir_repouso(saldo('999980.00', '999959.9999999', '20.0000001'), 2, 2, '10.00', '1000000.00')
 
-    def test_liberacao_unica_zera_reserva_sem_mexer_no_debito_da_execucao(self):
-        depois = {'saldoTotal': '999980.00', 'saldoReservado': '0.00'}
-        canc.conferir_liberacao(depois, executadas=2, preco='10.00', inicial='1000000.00')
-        # Liberação dupla deixaria saldo reservado negativo; liberação ausente deixa reserva viva. Ambas recusam.
-        for reservado in ('-20.00', '20.00'):
-            with self.subTest(reservado=reservado), self.assertRaises(ValueError):
-                canc.conferir_liberacao({'saldoTotal': '999980.00', 'saldoReservado': reservado}, 2, '10.00',
-                                        '1000000.00')
+    def test_aritmetica_em_decimal_fecha_centavos_que_o_float_erra(self):
+        # 1000000.00 − 0.10 × 3 = 999999.70 exato em Decimal; em float não fecha a comparação.
+        canc.conferir_liberacao(saldo('999999.70', '999999.70', '0.00'), 3, '0.10', '1000000.00')
+        canc.conferir_repouso(saldo('999999.70', '999999.40', '0.30'), 3, 3, '0.10', '1000000.00')
+
+    def test_liberacao_unica_zera_reserva_e_iguala_disponivel_ao_total(self):
+        canc.conferir_liberacao(saldo('999980.00', '999980.00', '0.00'), 2, '10.00', '1000000.00')
+
+    def test_liberacao_dupla_reprova_com_os_saldos_que_ela_produziria(self):
+        # Dupla liberação: reserva negativa e disponível acima do total. Ambos os saldos precisam reprovar.
+        dupla = (saldo('999980.00', '1000000.00', '-20.00'), saldo('999980.00', '1000000.00', '0.00'),
+                 saldo('999980.00', '999980.00', '20.00'))
+        for lido in dupla:
+            with self.subTest(lido=lido), self.assertRaises(ValueError):
+                canc.conferir_liberacao(lido, 2, '10.00', '1000000.00')
 
     def test_saldo_total_divergente_recusa(self):
         with self.assertRaises(ValueError):
-            canc.conferir_liberacao({'saldoTotal': '999979.99', 'saldoReservado': '0.00'}, 2, '10.00', '1000000.00')
+            canc.conferir_liberacao(saldo('999979.99', '999979.99', '0.00'), 2, '10.00', '1000000.00')
+
+
+class Quantidades(unittest.TestCase):
+    @staticmethod
+    def ordem(feita, cancelada, reduzida=0):
+        return {'quantidade': 1, 'quantidadeExecutada': feita, 'quantidadeCancelada': cancelada,
+                'quantidadeReduzida': reduzida}
+
+    def test_leitura_da_api_fecha_o_original_e_devolve_os_valores_lidos(self):
+        corpos = [self.ordem(1, 0), self.ordem(0, 1), self.ordem(1, 0), self.ordem(0, 1)]
+        self.assertEqual(canc.conferir_quantidades(corpos, 4), (2, 2))
+
+    def test_ordem_que_nao_fecha_ou_quantidade_nao_inteira_recusa(self):
+        casos = (
+            ([self.ordem(1, 1)], 1),
+            ([self.ordem(1, 0), self.ordem(0, 0)], 2),
+            ([self.ordem(1, 0)], 2),
+            ([{'quantidade': 1, 'quantidadeExecutada': 1.0, 'quantidadeCancelada': 0, 'quantidadeReduzida': 0}], 1),
+            ([{}], 1),
+        )
+        for corpos, n in casos:
+            with self.subTest(corpos=corpos, n=n), self.assertRaises(ValueError):
+                canc.conferir_quantidades(corpos, n)
+
+
+class Custodia(unittest.TestCase):
+    def test_custodia_da_compradora_e_lida_ou_ausente(self):
+        carteira = {'custodias': [{'ticker': 'ALFA3', 'total': 2, 'disponivel': 2, 'reservado': 0}]}
+        self.assertEqual(canc.custodia_compradora(carteira), {'total': 2, 'disponivel': 2, 'reservado': 0})
+        self.assertIsNone(canc.custodia_compradora({'custodias': []}))
+        with self.assertRaises(ValueError):
+            canc.custodia_compradora({'custodias': [{'ticker': 'ALFA3', 'total': 2.0, 'disponivel': 2,
+                                                     'reservado': 0}]})
+
+    def test_cancelamento_nao_altera_a_custodia(self):
+        canc.conferir_custodia(None, None)
+        with self.assertRaises(ValueError):
+            canc.conferir_custodia({'total': 2, 'disponivel': 2, 'reservado': 0},
+                                   {'total': 1, 'disponivel': 1, 'reservado': 0})
 
 
 class Invariante(unittest.TestCase):
@@ -108,14 +173,17 @@ class Compensacao(unittest.TestCase):
 class Publico(unittest.TestCase):
     def test_relatorio_publico_nao_carrega_token_corpo_nem_ids(self):
         relatorio = canc.relatorio_publico(
-            [{'rodada': 'a' * 32, 'ordens': 4, 'executadas': 2, 'canceladas': 2, 'falhaEnsaiada': False,
-              'liberacoes': 1, 'repeticaoConfirmada': True, 'negativos': {'ordemAlheia': 404, 'corpoInvalido': 400},
-              'saldoAposLiberacao': {'saldoTotal': '999980.00', 'saldoReservado': '0.00'}}])
+            [{'digestsOrdens': ['a' * 64], 'ordens': 4, 'executadas': 2, 'canceladas': 2, 'falhaEnsaiada': False,
+              'repeticaoConfirmada': True, 'negativos': {'ordemAlheia': 404, 'corpoInvalido': 400},
+              'saldoEmRepouso': {'saldoTotal': '999980.00', 'saldoDisponivel': '999960.00',
+                                 'saldoReservado': '20.00', 'custodiaCompradora': None},
+              'saldoAposLiberacao': {'saldoTotal': '999980.00', 'saldoDisponivel': '999980.00',
+                                     'saldoReservado': '0.00', 'custodiaCompradora': None}}])
         texto = repr(relatorio)
-        for proibido in ('token', 'Bearer', 'eyJ', 'corpo_bruto', 'ordemId'):
+        for proibido in ('token', 'Bearer', 'eyJ', 'corpo_bruto', 'ordemId', 'rodada'):
             self.assertNotIn(proibido, texto)
         self.assertEqual(relatorio['tipo'], 'smoke-cancelamento-carga')
-        self.assertEqual(relatorio['execucoes'][0]['liberacoes'], 1)
+        self.assertNotIn('liberacoes', relatorio['execucoes'][0])
 
 
 if __name__ == '__main__':

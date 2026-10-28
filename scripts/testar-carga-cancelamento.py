@@ -6,9 +6,11 @@ DIA de uma unidade: M executam e N−M ficam em repouso com reserva. Depois canc
 `PUT /api/v1/ordens/{id}/cancelamento`, repete o pedido (cabeçalho de repetição), confere a recusa de uma ordem
 executada e os negativos (404 de outra conta, 400 com corpo). Na segunda execução o MO para antes dos pedidos: o
 gauge `prospero_cancelamento_pendente_segundos_max` do FO precisa acusar pendência e zerar depois do religamento.
-Invariantes: executada + cancelada = original; uma única liberação; saldos em Decimal. O relatório público traz só
-contagens, saldos finais e o estado dos negativos."""
+Invariantes, todas sobre leituras reais: quantidades de cada ordem pela API (executada + cancelada = quantidade); saldos
+finais do MO exatos em Decimal (total, disponível e reserva; sem segunda liberação) e custódia da compradora inalterada.
+O relatório público traz contagens, digests dos identificadores (não os IDs), saldos lidos e o estado dos negativos."""
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -20,7 +22,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-import uuid
 from decimal import Decimal
 
 AQUI = Path(__file__).resolve().parent
@@ -76,23 +77,78 @@ def _valor(texto):
     return Decimal(texto)
 
 
+def _saldos(carteira):
+    """Lê os três saldos do MO como texto decimal; número JSON (float ou int) é recusado."""
+    total = _valor(carteira['saldoTotal'])
+    disponivel = _valor(carteira['saldoDisponivel'])
+    reservado = _valor(carteira['saldoReservado'])
+    return total, disponivel, reservado
+
+
 def conferir_repouso(carteira, executadas, abertas, preco, inicial):
-    """Com N−M ordens em repouso: debitado só o executado e reservado exatamente o preço vezes as abertas."""
-    total, reservado = _valor(carteira['saldoTotal']), _valor(carteira['saldoReservado'])
-    if total != Decimal(inicial) - Decimal(preco) * executadas or reservado != Decimal(preco) * abertas:
+    """Com N−M ordens em repouso: debitado só o executado, reservado exatamente o preço vezes as abertas, e o
+    disponível é o total menos a reserva."""
+    total, disponivel, reservado = _saldos(carteira)
+    if (total != Decimal(inicial) - Decimal(preco) * executadas or reservado != Decimal(preco) * abertas
+            or disponivel != total - reservado):
         raise ValueError('saldo em repouso divergente')
 
 
 def conferir_liberacao(carteira, executadas, preco, inicial):
-    """Depois do cancelamento: reserva zerada uma única vez (sem negativo nem resíduo) e débito inalterado."""
-    total, reservado = _valor(carteira['saldoTotal']), _valor(carteira['saldoReservado'])
-    if total != Decimal(inicial) - Decimal(preco) * executadas or reservado != 0:
+    """Saldos finais exatos: total = inicial − preço × executadas, reserva zero e disponível igual ao total.
+    Uma segunda liberação deixa reserva negativa ou disponível acima do total; ambas recusam."""
+    total, disponivel, reservado = _saldos(carteira)
+    esperado = Decimal(inicial) - Decimal(preco) * executadas
+    if total != esperado or reservado != 0 or disponivel != esperado:
         raise ValueError('liberacao da reserva divergente')
+
+
+def custodia_compradora(carteira, ticker=TICKER):
+    """Entrada da custódia do ticker na compradora, lida do MO; None quando a conta não tem custódia dele."""
+    achados = [c for c in carteira.get('custodias', []) if isinstance(c, dict) and c.get('ticker') == ticker]
+    if not achados:
+        return None
+    if len(achados) != 1:
+        raise ValueError('custodia duplicada')
+    custodia = {nome: achados[0].get(nome) for nome in ('total', 'disponivel', 'reservado')}
+    if any(type(v) is not int or v < 0 for v in custodia.values()):
+        raise ValueError('custodia invalida')
+    return custodia
+
+
+def conferir_custodia(antes, depois):
+    """O cancelamento só mexe no caixa reservado: a custódia da compradora fica igual à lida em repouso."""
+    if antes != depois:
+        raise ValueError('custodia alterada pelo cancelamento')
+
+
+def conferir_quantidades(corpos, n):
+    """Lê quantidadeExecutada e quantidadeCancelada de cada ordem: cada uma fecha a quantidade original e o total
+    de executadas mais canceladas fecha n. Devolve (executadas, canceladas) lidas, não contadas."""
+    executadas = canceladas = 0
+    for corpo in corpos:
+        valores = [corpo.get(nome) for nome in ('quantidade', 'quantidadeExecutada', 'quantidadeCancelada',
+                                                  'quantidadeReduzida')]
+        if any(type(v) is not int or v < 0 for v in valores):
+            raise ValueError('quantidade invalida na ordem')
+        quantidade, feita, cancelada, reduzida = valores
+        if feita + cancelada + reduzida != quantidade:
+            raise ValueError('executada + cancelada diverge do original')
+        executadas += feita
+        canceladas += cancelada
+    if len(corpos) != n or executadas + canceladas != n:
+        raise ValueError('executada + cancelada diverge do original')
+    return executadas, canceladas
 
 
 def conferir_invariante(estados, n):
     if len(estados) != n or any(estado not in ('EXECUTADA', 'CANCELADA') for estado in estados):
         raise ValueError('executada + cancelada diverge do original')
+
+
+def _saldo_lido(carteira, custodia):
+    return {'saldoTotal': carteira['saldoTotal'], 'saldoDisponivel': carteira['saldoDisponivel'],
+            'saldoReservado': carteira['saldoReservado'], 'custodiaCompradora': custodia}
 
 
 def pendencia_observada(texto):
@@ -184,6 +240,21 @@ def _carteira(origem_mo, tok):
     return mercado.http('GET', origem_mo + '/api/v1/risco/carteira', tok)
 
 
+def _ordem(origem, tok, ordem):
+    """Leitura da ordem pela API: quantidades reais, não contadas a partir dos estados."""
+    status, _, corpo = _pedido('GET', origem + '/api/v1/ordens/' + ordem, tok)
+    if status != 200 or not isinstance(corpo, dict):
+        raise ValueError('consulta da ordem recusada')
+    return corpo
+
+
+def _repouso_conferido(origem_mo, tok, executadas, abertas):
+    carteira = _carteira(origem_mo, tok)
+    conferir_repouso(carteira, executadas, abertas, PRECO, INICIAL)
+    custodia_compradora(carteira)
+    return carteira
+
+
 def _recusa_executada(origem, tok, ordem):
     """PUT sobre ordem já executada segue o contrato RF10: 202 e recusa SEM_SALDO_VIVO pelo MO."""
     _pedir_cancelamento(origem, tok, ordem)
@@ -219,8 +290,8 @@ def rodar_execucao(ctx, n, m, falha):
     atuais = _aguardar(assentadas, 60)
     abertas = [i for i in ordens if atuais[i] == 'ABERTA']
     executada_ref = next(i for i in ordens if atuais[i] == 'EXECUTADA')
-    _aguardar(lambda: _tentar(lambda: conferir_repouso(_carteira(origem_mo, tok_risco), m, n - m, PRECO, INICIAL)
-                              or True), 60)
+    repouso = _aguardar(lambda: _tentar(lambda: _repouso_conferido(origem_mo, tok_risco, m, n - m)), 60)
+    custodia_repouso = custodia_compradora(repouso)
     status_alheia, _, _ = _pedido('PUT', origem + '/api/v1/ordens/' + oferta['id'] + '/cancelamento', tok_compra)
     status_corpo, _, _ = _pedido('PUT', origem + '/api/v1/ordens/' + abertas[0] + '/cancelamento', tok_compra,
                                  {'x': 1})
@@ -257,17 +328,23 @@ def rodar_execucao(ctx, n, m, falha):
                                   60)
     estados_finais = [finais[i] for i in ordens]
     conferir_invariante(estados_finais, n)
-    executadas = sum(1 for e in estados_finais if e == 'EXECUTADA')
-    canceladas = n - executadas
-    final = _aguardar(lambda: _tentar(lambda: conferir_liberacao(_carteira(origem_mo, tok_risco), executadas, PRECO,
-                                                                 INICIAL) or _carteira(origem_mo, tok_risco)), 60)
-    # 'liberacoes': 1 é inferido do saldo final, não contado: uma segunda liberação deixaria a reserva negativa e
-    # conferir_liberacao já recusou. 'repeticaoConfirmada' vale porque pedidos() recusa a ausência do cabeçalho.
-    return {'rodada': uuid.uuid4().hex, 'ordens': n, 'executadas': executadas, 'canceladas': canceladas,
-            'falhaEnsaiada': bool(falha), 'pendentesDuranteFalha': pendentes, 'liberacoes': 1,
-            'repeticaoConfirmada': True, 'recusaExecutada': recusa,
+    executadas, canceladas = conferir_quantidades([_ordem(origem, tok_compra, i) for i in ordens], n)
+
+    def liberado():
+        carteira = _carteira(origem_mo, tok_risco)
+        conferir_liberacao(carteira, executadas, PRECO, INICIAL)
+        conferir_custodia(custodia_repouso, custodia_compradora(carteira))
+        return carteira
+
+    final = _aguardar(lambda: _tentar(liberado), 60)
+    # Sem 'liberacoes' fixa: a liberação única é provada pelos saldos finais lidos, que uma segunda liberação quebra.
+    # 'repeticaoConfirmada' vale porque pedidos() recusa a ausência do cabeçalho de repetição.
+    return {'digestsOrdens': [hashlib.sha256(i.encode()).hexdigest() for i in ordens], 'ordens': n,
+            'executadas': executadas, 'canceladas': canceladas, 'falhaEnsaiada': bool(falha),
+            'pendentesDuranteFalha': pendentes, 'repeticaoConfirmada': True, 'recusaExecutada': recusa,
             'negativos': {'ordemAlheia': status_alheia, 'corpoInvalido': status_corpo},
-            'saldoAposLiberacao': {'saldoTotal': final['saldoTotal'], 'saldoReservado': final['saldoReservado']}}
+            'saldoEmRepouso': _saldo_lido(repouso, custodia_repouso),
+            'saldoAposLiberacao': _saldo_lido(final, custodia_compradora(final))}
 
 
 class _Argumentos(argparse.ArgumentParser):

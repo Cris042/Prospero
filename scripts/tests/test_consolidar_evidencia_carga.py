@@ -1,4 +1,5 @@
-"""Evidência integrada da carga (B3): consolidação, invariantes, IDs disjuntos e vedações; só com dublês."""
+"""Evidência integrada da carga (B3): consolidação, invariantes, ordens disjuntas, saldos lidos e vedações; só com dublês."""
+import hashlib
 import importlib.util
 from pathlib import Path
 import sys
@@ -30,11 +31,18 @@ def escrita(n, **extras):
             'reconciliacao': {'ids': n, 'terminais': {'EXECUTADA': n}, 'pendentes': 0, 'ausentes': 0}}
 
 
-def cancelamento(rodada, falha=False):
-    return {'rodada': rodada, 'ordens': 4, 'executadas': 2, 'canceladas': 2, 'falhaEnsaiada': falha,
-            'pendentesDuranteFalha': 2 if falha else None, 'liberacoes': 1, 'repeticaoConfirmada': True,
+def saldo(total, disponivel, reservado, custodia=None):
+    return {'saldoTotal': total, 'saldoDisponivel': disponivel, 'saldoReservado': reservado,
+            'custodiaCompradora': custodia}
+
+
+def cancelamento(semente, falha=False, final=None):
+    digests = [hashlib.sha256(f'{semente}-{i}'.encode()).hexdigest() for i in range(4)]
+    return {'digestsOrdens': digests, 'ordens': 4, 'executadas': 2, 'canceladas': 2, 'falhaEnsaiada': falha,
+            'pendentesDuranteFalha': 2 if falha else None, 'repeticaoConfirmada': True,
             'recusaExecutada': 'SEM_SALDO_VIVO', 'negativos': {'ordemAlheia': 404, 'corpoInvalido': 400},
-            'saldoAposLiberacao': {'saldoTotal': '999980.00', 'saldoReservado': '0.00'}}
+            'saldoEmRepouso': saldo('999980.00', '999960.00', '20.00'),
+            'saldoAposLiberacao': final or saldo('999980.00', '999980.00', '0.00')}
 
 
 def snapshot(rotulo):
@@ -53,7 +61,7 @@ def montar(**alteracoes):
     base = {
         'leituras': leituras(),
         'escrita': {'execucoes': [escrita(4), escrita(12)]},
-        'cancelamento': {'execucoes': [cancelamento('a' * 32), cancelamento('b' * 32, falha=True)]},
+        'cancelamento': {'execucoes': [cancelamento('a'), cancelamento('b', falha=True)]},
         'telemetria': [snapshot('antes-escrita'), snapshot('depois-escrita')],
         'sha': SHA, 'contexto': {'runner': 'ci-hospedado', 'run': '42'}, 'fontes': ['carga-leituras.json'],
     }
@@ -68,6 +76,7 @@ class Consolidacao(unittest.TestCase):
         self.assertEqual(doc['sha'], SHA)
         self.assertEqual(doc['conciliacaoFinanceira']['estado'], 'conferida')
         self.assertEqual(doc['capacidade'], 'nao_inferida')
+        self.assertEqual(doc['rnf04'], 'nao_comprovado')
         self.assertEqual(doc['contagens']['oferecidas'], 16)
         self.assertEqual(doc['contagens']['emVoo'], 0)
         cons.validar(doc)
@@ -79,6 +88,29 @@ class Consolidacao(unittest.TestCase):
         self.assertEqual(doc['conciliacaoFinanceira']['estado'], 'pendente')
         self.assertEqual(doc['conciliacaoFinanceira']['pendencias'], [{'execucao': 2, 'motivo': 'pendente'}])
         cons.validar(doc)
+
+    def test_liberacao_dupla_deixa_a_conciliacao_pendente_com_motivo(self):
+        # Os saldos que uma segunda liberação produziria: reserva negativa, disponível acima do total, reserva viva.
+        duplas = (saldo('999980.00', '1000000.00', '-20.00'), saldo('999980.00', '1000000.00', '0.00'),
+                  saldo('999980.00', '999980.00', '20.00'))
+        for final in duplas:
+            with self.subTest(final=final):
+                doc = cons.consolidar(**montar(cancelamento={'execucoes': [cancelamento('a', final=final),
+                                                                           cancelamento('b', falha=True)]}))
+                self.assertEqual(doc['conciliacaoFinanceira']['estado'], 'pendente')
+                self.assertEqual(doc['conciliacaoFinanceira']['pendencias'],
+                                 [{'execucao': 'cancelamento-1', 'motivo': 'liberacao divergente'}])
+
+    def test_custodia_alterada_pelo_cancelamento_fica_pendente(self):
+        execucao = cancelamento('a')
+        execucao['saldoAposLiberacao']['custodiaCompradora'] = {'total': 1, 'disponivel': 1, 'reservado': 0}
+        doc = cons.consolidar(**montar(cancelamento={'execucoes': [execucao, cancelamento('b', falha=True)]}))
+        self.assertEqual(doc['conciliacaoFinanceira']['estado'], 'pendente')
+
+    def test_saldo_numerico_na_conciliacao_recusa_com_erro_claro(self):
+        execucao = cancelamento('a', final=saldo('999980.00', '999980.00', 0))
+        with self.assertRaises(ValueError):
+            cons.consolidar(**montar(cancelamento={'execucoes': [execucao, cancelamento('b', falha=True)]}))
 
 
 class Invariantes(unittest.TestCase):
@@ -96,13 +128,25 @@ class Invariantes(unittest.TestCase):
             with self.subTest(contagens=ruim), self.assertRaises(ValueError):
                 cons.consolidar(**montar(escrita={'execucoes': [execucao, escrita(12)]}))
 
-    def test_duas_execucoes_com_ids_disjuntos_sao_obrigatorias(self):
+    def test_duas_execucoes_com_ordens_disjuntas_sao_obrigatorias(self):
         with self.assertRaises(ValueError):
-            cons.consolidar(**montar(cancelamento={'execucoes': [cancelamento('a' * 32)]}))
+            cons.consolidar(**montar(cancelamento={'execucoes': [cancelamento('a')]}))
         with self.assertRaises(ValueError):
-            cons.consolidar(**montar(cancelamento={'execucoes': [cancelamento('a' * 32), cancelamento('a' * 32)]}))
+            cons.consolidar(**montar(cancelamento={'execucoes': [cancelamento('a'), cancelamento('a')]}))
         with self.assertRaises(ValueError):
             cons.consolidar(**montar(escrita={'execucoes': [escrita(4)]}))
+
+    def test_digests_de_ordem_invalidos_recusam(self):
+        execucao = cancelamento('a')
+        execucao['digestsOrdens'][0] = 'XYZ'
+        with self.assertRaises(ValueError):
+            cons.consolidar(**montar(cancelamento={'execucoes': [execucao, cancelamento('b', falha=True)]}))
+
+    def test_executadas_mais_canceladas_devem_fechar_o_original(self):
+        execucao = cancelamento('a')
+        execucao['canceladas'] = 3
+        with self.assertRaises(ValueError):
+            cons.consolidar(**montar(cancelamento={'execucoes': [execucao, cancelamento('b', falha=True)]}))
 
     def test_sha_e_telemetria_sao_validados(self):
         with self.assertRaises(ValueError):
@@ -111,6 +155,24 @@ class Invariantes(unittest.TestCase):
         telemetria['fontes']['deadlocks:postgres-front-office']['valores'] = None
         with self.assertRaises(ValueError):
             cons.consolidar(**montar(telemetria=[telemetria, snapshot('depois-escrita')]))
+
+    def test_leituras_b1_ausentes_ou_vazias_reprovam_em_vez_de_virar_lista_vazia(self):
+        for alteracao in ({'resultados': []}, {}):
+            leitura = leituras()
+            leitura.pop('resultados')
+            if alteracao:
+                leitura.update(alteracao)
+            with self.subTest(leitura=leitura), self.assertRaises(ValueError):
+                cons.consolidar(**montar(leituras=leitura))
+
+    def test_telemetria_indisponivel_com_valores_ou_fonte_que_nao_e_objeto_recusa(self):
+        com_valor = snapshot('antes-escrita')
+        com_valor['fontes']['latenciaFsync']['valores'] = 0
+        fonte_texto = snapshot('antes-escrita')
+        fonte_texto['fontes']['latenciaFsync'] = 'indisponivel'
+        for telemetria in (com_valor, fonte_texto):
+            with self.subTest(telemetria=telemetria), self.assertRaises(ValueError):
+                cons.consolidar(**montar(telemetria=[telemetria, snapshot('depois-escrita')]))
 
 
 class Vedacoes(unittest.TestCase):
@@ -129,6 +191,12 @@ class Vedacoes(unittest.TestCase):
     def test_capacidade_nunca_e_inferida_por_throughput(self):
         doc = cons.consolidar(**montar())
         doc['throughputMaximo'] = 300
+        with self.assertRaises(ValueError):
+            cons.validar(doc)
+
+    def test_rnf04_nunca_e_marcado_como_comprovado(self):
+        doc = cons.consolidar(**montar())
+        doc['rnf04'] = 'comprovado'
         with self.assertRaises(ValueError):
             cons.validar(doc)
 

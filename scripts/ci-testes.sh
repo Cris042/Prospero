@@ -129,8 +129,14 @@ rodar_workbook cancelamento risco
 # cenário; a ausência de uma fonte vira `indisponivel`, nunca zero (scripts/telemetria_carga.py).
 python3 scripts/telemetria_carga.py preparar --projeto "$project"
 snapshot_carga() {
-  python3 scripts/telemetria_carga.py snapshot --projeto "$project" --origem-bo "$bo_origem" --rotulo "$1" \
-    > ".ci-evidencias/telemetria-$1.json"
+  # Orçamento próprio (120 s, com KILL após 15 s) para não travar a CI; o estouro vira mensagem explícita.
+  local status=0
+  timeout --kill-after=15s 120s python3 scripts/telemetria_carga.py snapshot --projeto "$project" \
+    --origem-bo "$bo_origem" --rotulo "$1" > ".ci-evidencias/telemetria-$1.json" || status=$?
+  if (( status == 124 || status == 137 )); then
+    echo "Snapshot de telemetria '$1' estourou o orçamento de 120 s; evidência de telemetria não gerada." >&2
+  fi
+  return "$status"
 }
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
 snapshot_carga antes-escrita

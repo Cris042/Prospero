@@ -7,6 +7,7 @@ identificadores (rodadas) disjuntos; reconciliação financeira `conferida` ou `
 pendências; ausência de fonte nunca vira zero; nenhum token, cabeçalho de autorização, corpo ou capacidade inferida
 (throughput). O arquivo recebe o SHA avaliado e o contexto do runner, sem dados de conta."""
 import argparse
+from decimal import Decimal
 import json
 from pathlib import Path
 import re
@@ -14,14 +15,30 @@ import sys
 
 VERSAO = 1
 CHAVES_TOPO = ('tipo', 'versao', 'sha', 'contexto', 'fontes', 'leituras', 'escrita', 'cancelamento', 'contagens',
-               'conciliacaoFinanceira', 'telemetria', 'capacidade')
+               'conciliacaoFinanceira', 'telemetria', 'capacidade', 'rnf04')
 PROIBIDAS = ('token', 'authorization', 'corpo', 'body', 'bearer', 'senha', 'password', 'jwt')
 PREFIXOS_PROIBIDOS = ('eyJ', 'Bearer ')
 PRAZO_TELEMETRIA = ('coletado', 'indisponivel')
+RNF04 = 'nao_comprovado'
 
 
-def _rodada_valida(valor):
-    return isinstance(valor, str) and re.fullmatch(r'[0-9a-f]{32}', valor) is not None
+def _decimal(texto):
+    """Valor monetário lido como texto; número JSON (float ou int) é recusado."""
+    if not isinstance(texto, str) or not re.fullmatch(r'-?[0-9]+(\.[0-9]+)?', texto):
+        raise ValueError('valor monetario invalido')
+    return Decimal(texto)
+
+
+def _ordens_disjuntas(execucoes):
+    """Os digests das ordens (um por ordem devolvida pelo FO) das duas execuções não se repetem."""
+    listas = [e.get('digestsOrdens') for e in execucoes]
+    if not all(isinstance(lista, list) and len(lista) == e.get('ordens') and lista
+               and all(isinstance(d, str) and re.fullmatch(r'[0-9a-f]{64}', d) for d in lista)
+               for lista, e in zip(listas, execucoes)):
+        raise ValueError('identificadores das ordens invalidos')
+    achatados = [d for lista in listas for d in lista]
+    if len(set(achatados)) != len(achatados):
+        raise ValueError('identificadores das execucoes nao sao disjuntos')
 
 
 def _conferir_contagens(contagens, rotulo):
@@ -43,16 +60,40 @@ def _somar(execucoes, campo):
 
 
 def _conferir_telemetria(snapshots):
+    if not isinstance(snapshots, list) or not snapshots:
+        raise ValueError('telemetria ausente')
     for snapshot in snapshots:
         if not isinstance(snapshot, dict) or not isinstance(snapshot.get('fontes'), dict):
             raise ValueError('snapshot de telemetria invalido')
         for nome, fonte in snapshot['fontes'].items():
-            if fonte.get('estado') not in PRAZO_TELEMETRIA:
+            if not isinstance(fonte, dict) or fonte.get('estado') not in PRAZO_TELEMETRIA:
                 raise ValueError('estado de telemetria desconhecido')
-            if fonte['estado'] == 'coletado' and fonte.get('valores') is None:
-                raise ValueError('telemetria coletada sem valor')
-            if fonte['estado'] == 'indisponivel' and not fonte.get('motivo'):
-                raise ValueError('telemetria indisponivel sem motivo')
+            if fonte['estado'] == 'coletado':
+                if fonte.get('valores') is None:
+                    raise ValueError('telemetria coletada sem valor')
+            else:
+                if not fonte.get('motivo'):
+                    raise ValueError('telemetria indisponivel sem motivo')
+                if 'valores' in fonte:
+                    raise ValueError('telemetria indisponivel com valores')
+
+
+def _saldos_lidos(saldo):
+    if not isinstance(saldo, dict):
+        raise ValueError('saldo lido invalido')
+    return (_decimal(saldo.get('saldoTotal')), _decimal(saldo.get('saldoDisponivel')),
+            _decimal(saldo.get('saldoReservado')))
+
+
+def _liberacao_unica(execucao):
+    """Só valores lidos do MO: o total não muda com o cancelamento; a reserva em repouso volta inteira ao disponível;
+    a reserva final é zero e o disponível fica igual ao total. Uma segunda liberação quebra alguma dessas igualdades."""
+    total_r, disp_r, res_r = _saldos_lidos(execucao.get('saldoEmRepouso'))
+    total_f, disp_f, res_f = _saldos_lidos(execucao.get('saldoAposLiberacao'))
+    custodia_igual = (execucao['saldoEmRepouso'].get('custodiaCompradora')
+                      == execucao['saldoAposLiberacao'].get('custodiaCompradora'))
+    return (total_f == total_r and res_r > 0 and res_f == 0 and disp_f == total_f and disp_f - disp_r == res_r
+            and custodia_igual)
 
 
 def _conciliacao(escrita, cancelamento):
@@ -61,7 +102,7 @@ def _conciliacao(escrita, cancelamento):
         if execucao.get('resultadoFinanceiro') != 'conferido':
             pendencias.append({'execucao': indice, 'motivo': execucao.get('resultadoFinanceiro') or 'ausente'})
     for indice, execucao in enumerate(cancelamento, start=1):
-        if execucao.get('liberacoes') != 1 or execucao.get('saldoAposLiberacao', {}).get('saldoReservado') != '0.00':
+        if not _liberacao_unica(execucao):
             pendencias.append({'execucao': f'cancelamento-{indice}', 'motivo': 'liberacao divergente'})
     return {'estado': 'conferida' if not pendencias else 'pendente', 'pendencias': pendencias}
 
@@ -75,12 +116,23 @@ def consolidar(*, leituras, escrita, cancelamento, telemetria, sha, contexto, fo
         raise ValueError('a evidencia exige duas execucoes de escrita')
     if not isinstance(execucoes_cancelamento, list) or len(execucoes_cancelamento) != 2:
         raise ValueError('a evidencia exige duas execucoes de cancelamento')
-    rodadas = [e.get('rodada') for e in execucoes_cancelamento]
-    if not all(_rodada_valida(r) for r in rodadas) or len(set(rodadas)) != 2:
-        raise ValueError('identificadores das execucoes nao sao disjuntos')
+    if not all(isinstance(e, dict) for e in (*execucoes_escrita, *execucoes_cancelamento)):
+        raise ValueError('entrada de evidencia com formato invalido')
+    _ordens_disjuntas(execucoes_cancelamento)
+    for execucao in execucoes_cancelamento:
+        if not isinstance(execucao.get('executadas'), int) or not isinstance(execucao.get('canceladas'), int) \
+                or execucao['executadas'] + execucao['canceladas'] != execucao.get('ordens'):
+            raise ValueError('executada + cancelada diverge do original')
+    resultados = leituras.get('resultados')
+    if not isinstance(resultados, list) or not resultados:
+        raise ValueError('leituras B1 ausentes; a evidencia nao aceita lista vazia')
+    if type(leituras.get('getLogicosCatalogo')) is not int or type(leituras.get('chamadasAdministrativas')) is not int:
+        raise ValueError('contagens das leituras B1 ausentes')
+    if not all(isinstance(e, dict) for e in resultados):
+        raise ValueError('entrada de evidencia com formato invalido')
     for indice, execucao in enumerate(execucoes_escrita, start=1):
         _conferir_contagens(execucao.get('contagens'), f'escrita {indice}')
-    for indice, resultado in enumerate(leituras.get('resultados', []), start=1):
+    for indice, resultado in enumerate(resultados, start=1):
         _conferir_contagens(resultado.get('contagens'), f'leitura {indice}')
     _conferir_telemetria(telemetria)
     total = {
@@ -100,6 +152,7 @@ def consolidar(*, leituras, escrita, cancelamento, telemetria, sha, contexto, fo
         'conciliacaoFinanceira': _conciliacao(execucoes_escrita, execucoes_cancelamento),
         'telemetria': telemetria,
         'capacidade': 'nao_inferida',
+        'rnf04': RNF04,
     }
     validar(doc)
     return doc
@@ -127,6 +180,8 @@ def validar(doc):
         raise ValueError('tipo ou versao da evidencia invalidos')
     if doc['capacidade'] != 'nao_inferida':
         raise ValueError('capacidade nao pode ser inferida na evidencia')
+    if doc['rnf04'] != RNF04:
+        raise ValueError('RNF04 nao pode ser marcado como comprovado por esta evidencia')
     if not re.fullmatch(r'[0-9a-f]{40}', str(doc['sha'])):
         raise ValueError('sha invalido')
     _percorrer(doc)
@@ -139,7 +194,10 @@ class _Argumentos(argparse.ArgumentParser):
 
 
 def _ler(caminho):
-    return json.loads(Path(caminho).read_text(encoding='utf-8'))
+    dados = json.loads(Path(caminho).read_text(encoding='utf-8'))
+    if not isinstance(dados, dict):
+        raise ValueError('arquivo de evidencia com formato invalido')
+    return dados
 
 
 def main(argv=None):
