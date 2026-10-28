@@ -210,7 +210,7 @@ def montar_fontes(run, run_host, *, projeto, origem_bo):
             origens[nome] = 'compose exec ' + servico
     fontes['lagPosicoes'] = lambda: interpretar_gauge(_http_texto(origem_bo), 'prospero_posicoes_lag_registros')
     origens['lagPosicoes'] = 'BO /q/metrics'
-    fontes['lagKafkaGrupos'] = lambda: interpretar_lag(run(['exec', '-T', 'kafka', 'kafka-consumer-groups.sh',
+    fontes['lagKafkaGrupos'] = lambda: interpretar_lag(run(['exec', '-T', 'kafka', '/opt/kafka/bin/kafka-consumer-groups.sh',
                                                              '--bootstrap-server', 'kafka:9092', '--describe',
                                                              '--all-groups']))
     origens['lagKafkaGrupos'] = 'compose exec kafka'
