@@ -17,7 +17,8 @@ FILES = {"mercado.token": ("prospero-front-office", "mercado:leitura"),
          "ordens.token": ("prospero-front-office", "ordens:leitura"),
          "risco.token": ("prospero-middle-office", "risco:leitura"),
          "posicoes.token": ("prospero-back-office", "posicoes:leitura"),
-         "razao.token": ("prospero-back-office", "razao:leitura")}
+         "razao.token": ("prospero-back-office", "razao:leitura"),
+         "escrita.token": ("prospero-front-office", "ordens:enviar")}
 
 
 class CargaCli(unittest.TestCase):
@@ -120,6 +121,19 @@ class CargaCli(unittest.TestCase):
         claims = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
         self.assertEqual(claims["sub"], "CONTA-002")
         self.assertEqual(claims["exp"] - claims["iat"], 600)
+
+    def test_token_de_escrita_tem_so_o_escopo_de_envio_e_conta_002(self):
+        (self.root / ".env").write_text("FO_JWT_CHAVE=" + self.secret + "\n")
+        self.assert_ok(self.run_cli("preparar-financeiro"))
+        token = (self.private / "escrita.token").read_text().strip()
+        body = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        self.assertEqual((claims["aud"], claims["groups"], claims["sub"]),
+                         ("prospero-front-office", ["ordens:enviar"], "CONTA-002"))
+        for name in ("mercado.token", "ordens.token", "risco.token", "posicoes.token", "razao.token"):
+            leitura = (self.private / name).read_text().strip().split(".")[1]
+            grupos = json.loads(base64.urlsafe_b64decode(leitura + "=" * (-len(leitura) % 4)))["groups"]
+            self.assertNotIn("ordens:enviar", grupos)
 
     def test_symlink_placeholder_nao_sobrescreve_arquivo_externo(self):
         self.private.mkdir()
