@@ -41,7 +41,7 @@ class ConsumidorComandosRiscoTest {
         };
         var telemetria = OpenTelemetry.noop();
         return new ConsumidorComandosRisco(avaliar, solicitar, (t, p, d, m) -> { }, null, telemetria,
-                telemetria.getTracer("teste"), new SimpleMeterRegistry(), false);
+                new SimpleMeterRegistry(), false);
     }
 
     private static ConsumerRecord<String, byte[]> registro(String chave, byte[] bytes) {

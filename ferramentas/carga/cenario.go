@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/base64"
 	"errors"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -10,15 +12,41 @@ import (
 type cenarioLeitura struct {
 	nome, servico, caminho, audiencia, grupo string
 	conta                                    bool
+	// corpo não vazio marca o cenário de escrita (POST com corpo fixo do catálogo).
+	corpo string
 }
 
+const (
+	cenarioEscrita = "ORDEM_AGRESSOR"
+	contaEscrita   = "CONTA-002"
+	// Compra IOC mínima: a contraparte é preparada e dimensionada pelo operador.
+	corpoOrdemAgressor = `{"ticker":"ALFA3","lado":"COMPRA","tipo":"LIMIT","validade":"IOC","quantidade":1,"precoLimite":"10.00"}`
+	maxChamadasEscrita = 20
+	maxRPSEscrita      = 5
+)
+
 var leiturasFinanceiras = []cenarioLeitura{
-	{"ATIVOS", "front-office", "/api/v1/ativos", "prospero-front-office", "mercado:leitura", false},
-	{"ORDENS", "front-office", "/api/v1/ordens?limite=20", "prospero-front-office", "ordens:leitura", true},
-	{"CARTEIRA", "middle-office", "/api/v1/risco/carteira", "prospero-middle-office", "risco:leitura", true},
-	{"POSICOES", "back-office", "/api/v1/posicoes", "prospero-back-office", "posicoes:leitura", true},
-	{"NEGOCIOS", "back-office", "/api/v1/negocios?limite=20", "prospero-back-office", "razao:leitura", true},
-	{"RAZAO", "back-office", "/api/v1/razao?limite=20", "prospero-back-office", "razao:leitura", true},
+	{"ATIVOS", "front-office", "/api/v1/ativos", "prospero-front-office", "mercado:leitura", false, ""},
+	{"ORDENS", "front-office", "/api/v1/ordens?limite=20", "prospero-front-office", "ordens:leitura", true, ""},
+	{"CARTEIRA", "middle-office", "/api/v1/risco/carteira", "prospero-middle-office", "risco:leitura", true, ""},
+	{"POSICOES", "back-office", "/api/v1/posicoes", "prospero-back-office", "posicoes:leitura", true, ""},
+	{"NEGOCIOS", "back-office", "/api/v1/negocios?limite=20", "prospero-back-office", "razao:leitura", true, ""},
+	{"RAZAO", "back-office", "/api/v1/razao?limite=20", "prospero-back-office", "razao:leitura", true, ""},
+	{cenarioEscrita, "front-office", "/api/v1/ordens", "prospero-front-office", "ordens:enviar", true, corpoOrdemAgressor},
+}
+
+func (c cenarioLeitura) escrita() bool { return c.corpo != "" }
+
+func (c cenarioLeitura) metodo() string {
+	if c.escrita() {
+		return http.MethodPost
+	}
+	return http.MethodGet
+}
+
+// Uma chave por oferta (e não por tentativa): qualquer repetição de transporte reenvia a mesma chave.
+func chaveIdempotencia(execucao string, sequencia int) string {
+	return "carga-" + execucao + "-" + strconv.Itoa(sequencia)
 }
 
 func (p Plan) leitura() (cenarioLeitura, error) {
@@ -100,6 +128,9 @@ func (s *Server) credencialLeitura(p Plan, agora time.Time) (string, error) {
 	if strictJSON(payload, &m) != nil || m.Iss != "prospero-local" || m.Aud != c.audiencia ||
 		len(m.Groups) != 1 || m.Groups[0] != c.grupo || m.Iat <= 0 || m.Iat > agora.Unix() ||
 		m.Exp <= m.Iat || m.Exp-m.Iat > 3600 || m.Nbf < 0 || m.Nbf > agora.Unix() {
+		return "", errConfig
+	}
+	if c.escrita() && m.Sub != contaEscrita {
 		return "", errConfig
 	}
 	conhecida := m.Sub == "CONTA-001" || m.Sub == "CONTA-002" || m.Sub == "CONTA-003" || m.Sub == "CONTA-004"

@@ -41,7 +41,7 @@ public class ConsumidorComandosRisco {
 
     @Inject
     public ConsumidorComandosRisco(AvaliarRiscoActor actor, SolicitarCancelamentoActor cancelamentos, EventosRejeitados rejeitados,
-                                   ConfiguracaoKafka configuracao, OpenTelemetry telemetria, Tracer tracer, MeterRegistry metricas,
+                                   ConfiguracaoKafka configuracao, OpenTelemetry telemetria, MeterRegistry metricas,
                                    @ConfigProperty(name = "prospero.mensageria.habilitada", defaultValue = "true")
                                    boolean habilitada) {
         this.actor = actor;
@@ -49,7 +49,7 @@ public class ConsumidorComandosRisco {
         this.rejeitados = rejeitados;
         this.configuracao = configuracao;
         this.telemetria = telemetria;
-        this.tracer = tracer;
+        this.tracer = telemetria.getTracer("br.prospero.mo.risco");
         this.metricas = metricas;
         this.habilitada = habilitada;
     }

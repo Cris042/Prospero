@@ -275,8 +275,9 @@ test('registra ordem Limit pela boleta, sem credencial no navegador nem envio du
   page.on('console', (mensagem) => {
     if (mensagem.type() === 'error') erros.push(mensagem.text());
   });
-  // ADR-015: leituras do BO respondem 503 problem+json durante lag. Hoje CicloPosicoes invalida a
-  // prontidão a cada lote, inclusive o da própria ordem; a prontidão por lag real é pendência da V01.
+  // ADR-015: leituras do BO respondem 503 problem+json com lag acima do limite (50 registros), no
+  // bootstrap ou em quarentena. A V01-1 removeu a invalidação por lote; a tolerância ao 503 contratado
+  // fica como proteção contra o bootstrap do BO na CI e só sai com evidência de 503 zero em runs reais.
   const indisponibilidadesBo: string[] = [];
   const leiturasPosicoes: number[] = [];
   page.on('response', (r) => {
