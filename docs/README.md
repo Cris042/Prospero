@@ -16,6 +16,7 @@ Manter o mínimo que orienta escopo, qualidade de código, arquitetura e seguran
 | [rules.md](rules.md) | Padrões de código/segurança, contribuição, documentação, CI e memória. |
 | [playbook-desenvolvimento.md](playbook-desenvolvimento.md) | Guia seletivo com 60 tópicos, exemplos e trade-offs. |
 | [roadmap.md](roadmap.md) | Dependências, critérios futuros, estado e PRs; inclui P06. |
+| [v01-validacao.md](v01-validacao.md) | Fechamento da V01: matriz de evidências RNF01–RNF08, execução local, medição do RNF04 e roteiro de demonstração. |
 | [libs.md](libs.md) | Dependências adotadas, versões e evidência de uso. |
 | [README.md](README.md) | Este índice. |
 

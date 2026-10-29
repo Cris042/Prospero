@@ -274,7 +274,7 @@ O primeiro comando cria `.env` com credenciais aleatórias sem sobrescrever arqu
 | Loki — prontidão | http://localhost:13100/ready |
 | OpenTelemetry Collector — saúde | http://localhost:14333 |
 
-Grafana: usuário `admin`, senha em `GRAFANA_ADMIN_PASSWORD` no `.env` local. Além da fundação e do painel técnico de carga, a V01a provisiona quatro dashboards operacionais: [ordens](infra/grafana/dashboards/ordens.json), [risco/reservas](infra/grafana/dashboards/risco.json), [matching/mercado](infra/grafana/dashboards/matching.json) e [back office/liquidação](infra/grafana/dashboards/back-office.json), em validação conforme roadmap. Cada um informa fontes e lacunas; não substituem a conciliação financeira por APIs. As [regras locais](infra/prometheus/alertas.yml) aparecem em `http://localhost:19090/alerts`, sem notificações externas; condições, janelas e recuperação estão no [HLD](docs/hlds/HLD-001-arquitetura-prospero.md#painéis-e-alertas-operacionais--v01a). Jaeger usa memória nesta etapa; seus traces se perdem ao reiniciar. Demais dados de infraestrutura usam volumes nomeados do projeto.
+Grafana: usuário `admin`, senha em `GRAFANA_ADMIN_PASSWORD` no `.env` local. Além da fundação e do painel técnico de carga, a V01a provisiona quatro dashboards operacionais: [ordens](infra/grafana/dashboards/ordens.json), [risco/reservas](infra/grafana/dashboards/risco.json), [matching/mercado](infra/grafana/dashboards/matching.json) e [back office/liquidação](infra/grafana/dashboards/back-office.json), integrados pela V01a ([PR #52](https://github.com/mclovin137/Prospero/pull/52)); a validação integral e os vereditos dos RNFs estão em [docs/v01-validacao.md](docs/v01-validacao.md). Cada um informa fontes e lacunas; não substituem a conciliação financeira por APIs. As [regras locais](infra/prometheus/alertas.yml) aparecem em `http://localhost:19090/alerts`, sem notificações externas; condições, janelas e recuperação estão no [HLD](docs/hlds/HLD-001-arquitetura-prospero.md#painéis-e-alertas-operacionais--v01a). Jaeger usa memória nesta etapa; seus traces se perdem ao reiniciar. Demais dados de infraestrutura usam volumes nomeados do projeto.
 
 ## Desenvolvimento e testes
 
@@ -468,6 +468,7 @@ docker compose start
 ## Documentação e roadmaps
 
 - [Índice da documentação](docs/README.md): requisitos, arquitetura e guias do projeto.
+- [Fechamento da V01](docs/v01-validacao.md): matriz de evidências dos RNFs, execução local, medição do RNF04 e roteiro de demonstração.
 - [Regras canônicas](docs/rules.md), [ADRs](docs/adrs/README.md), [inventário](docs/libs.md) e [catálogo de skills](docs/skills/README.md).
 - [Perfis de agentes](docs/agentes/README.md), incluindo o gerador C4.
 - [Roadmap global](docs/roadmap.md): uma tarefa principal por requisito funcional.
