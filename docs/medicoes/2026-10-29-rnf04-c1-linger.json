@@ -1,0 +1,95 @@
+{
+  "ambiente": {
+    "cpus": 12,
+    "docker": "29.1.3",
+    "kernel": "6.6.114.1-microsoft-standard-WSL2",
+    "limites": "384 MiB e 1 CPU por serviço Java (docker-compose.yml)",
+    "memoria": "MemTotal:        8103012 kB",
+    "sha": "1cbd561"
+  },
+  "atribuicao_por_salto": {
+    "nota": "valores amostrais exatos do Jaeger; atraso de início inclui o trânsito Kafka entre serviços",
+    "saltos": {
+      "back-office": {
+        "duracao_p50_s": 0.003806287,
+        "duracao_p99_s": 0.011634601,
+        "inicio_apos_post_p50_s": 0.018179423,
+        "inicio_apos_post_p99_s": 0.0240401,
+        "traces": 90
+      },
+      "front-office": {
+        "duracao_p50_s": 0.00711759,
+        "duracao_p99_s": 0.009994895,
+        "inicio_apos_post_p50_s": 0.0,
+        "inicio_apos_post_p99_s": 0.0,
+        "traces": 90
+      },
+      "matching-engine": {
+        "duracao_p50_s": 0.00621047,
+        "duracao_p99_s": 0.012859184,
+        "inicio_apos_post_p50_s": 0.014942779,
+        "inicio_apos_post_p99_s": 0.01968438,
+        "traces": 88
+      },
+      "middle-office": {
+        "duracao_p50_s": 0.004409255,
+        "duracao_p99_s": 0.00718066,
+        "inicio_apos_post_p50_s": 0.008187325,
+        "inicio_apos_post_p99_s": 0.011213067,
+        "traces": 90
+      }
+    },
+    "traces_consultados": 91
+  },
+  "cliente_ate_terminal_observado_s": {
+    "amostras": 1000,
+    "nota": "inclui HTTP e o intervalo de polling do script; não é a métrica do RNF04",
+    "p50": 0.2151404010000988,
+    "p99": 0.43000509699777467
+  },
+  "metricas": {
+    "prospero_matching_comando_seconds": {
+      "amostras": 1000,
+      "bucket_na_meta": true,
+      "linhas_ignoradas": 0,
+      "media_s": 0.000213734383,
+      "meta_s": 0.001,
+      "p50_max_s": 0.000174761,
+      "p99_max_s": 0.000699049,
+      "veredito": "cumprido"
+    },
+    "prospero_ordens_boleta_negocio_seconds": {
+      "amostras": 1000,
+      "bucket_na_meta": true,
+      "linhas_ignoradas": 0,
+      "media_s": 0.040411809213,
+      "meta_s": 0.05,
+      "p50_max_s": 0.033554431,
+      "p99_max_s": 0.246065832,
+      "veredito": "não cumprido"
+    }
+  },
+  "orcamentoAntes": {
+    "aquecimentoExistentes": 0,
+    "aquecimentoNecessarias": 30,
+    "limite": 1000,
+    "medidoExistentes": 0,
+    "medidoNecessarias": 1000,
+    "vendedorExistentes": 0,
+    "vendedorNecessarias": 1
+  },
+  "plano": {
+    "amostras": 1000,
+    "aquecimento": 30,
+    "comprador": "CONTA-005",
+    "comprador_aquecimento": "CONTA-002",
+    "contexto": "dedicado",
+    "origem": "http://127.0.0.1:8081",
+    "origem_jaeger": "http://127.0.0.1:16687",
+    "origem_me": "http://127.0.0.1:8083",
+    "origem_mo": "http://127.0.0.1:8082",
+    "preco": "10.00",
+    "ticker": "ALFA3",
+    "variante": "isolada"
+  }
+}

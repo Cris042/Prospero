@@ -395,7 +395,10 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
       KAFKA_LOG_DIRS: /var/lib/kafka/data
-      KAFKA_HEAP_OPTS: -Xms128m -Xmx256m
+      # V02-6 (RNF04): com 256 MB e o coletor serial que a JVM escolhe no container, o broker fazia Full GC de 70–110 ms
+      # a cada ~20 s e prendia todos os clientes; heap fixo de 384 MB e G1 com meta de pausa de 20 ms.
+      KAFKA_HEAP_OPTS: -Xms384m -Xmx384m
+      KAFKA_JVM_PERFORMANCE_OPTS: -server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+ExplicitGCInvokesConcurrent -Djava.awt.headless=true
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
     - kafka-dados:/var/lib/kafka/data
