@@ -31,7 +31,11 @@ def snapshot(conta, carteira):
                 raise ValueError("Custódia fora do contrato inteiro.")
         if custodia["disponivel"] + custodia["reservado"] != custodia["total"]:
             raise ValueError("Snapshot de custódia incoerente.")
-        valores[ticker] = Decimal(custodia["total"])
+        # ADR-021: custódia efetiva = possuída − vendida a descoberto; o crédito D+2 primeiro cobre o descoberto.
+        descoberto = custodia.get("descobertoExecutado", 0)
+        if type(descoberto) is not int or descoberto < 0:
+            raise ValueError("Custódia fora do contrato inteiro.")
+        valores[ticker] = Decimal(custodia["total"] - descoberto)
     return valores
 
 
@@ -94,7 +98,12 @@ def _conciliar(negocios, lancamentos, antes, depois):
     diferencas = []
     for conta in sorted(antes):
         inicio, fim = snapshot(conta, antes[conta]), snapshot(conta, depois[conta])
-        if antes[conta]["saldoReservado"] != depois[conta]["saldoReservado"]:
+        reservado_antes = numero(antes[conta]["saldoReservado"], True)
+        reservado_depois = numero(depois[conta]["saldoReservado"], True)
+        descoberto_antes = {c["ticker"]: c.get("descobertoExecutado", 0) for c in antes[conta]["custodias"]}
+        cobriu = any(c.get("descobertoExecutado", 0) < descoberto_antes.get(c["ticker"], 0) for c in depois[conta]["custodias"])
+        # Só a recompra que cobre venda a descoberto libera garantia (ADR-021); qualquer outra mudança é erro.
+        if reservado_depois > reservado_antes or (reservado_depois < reservado_antes and not cobriu):
             raise ValueError("Reservas mudaram durante a conciliação.")
         reservas_antes = {c["ticker"]: c["reservado"] for c in antes[conta]["custodias"]}
         reservas_depois = {c["ticker"]: c["reservado"] for c in depois[conta]["custodias"]}

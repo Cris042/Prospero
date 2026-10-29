@@ -42,6 +42,7 @@ O ADR-012 decidiu "sem venda a descoberto" e citou um limite de exposição vend
 ## Consequências
 
 - `CUSTODIA_INSUFICIENTE` deixa de aparecer para contas com limite de exposição; o cenário 2 do `risco.xlsx` e o `verificar-risco` passam a provar a venda parcialmente descoberta.
+- A conciliação D+2 (`scripts/liquidacao.py`) compara a custódia efetiva (`total − descobertoExecutado`) e aceita queda do reservado só quando o descoberto executado diminuiu (garantia liberada pela recompra).
 - A conta pode ter caixa reservado sem ordem viva (garantia de posição vendida executada); a carteira MO expõe `exposicaoVendida` e, por ativo, `descobertoExecutado`.
 - Preparação local (RF04b) redefine a carteira inteira e zera também exposição, descoberto e garantia, como já fazia com o reservado. Ela não recusa posição vendida aberta, porque as planilhas da CI preparam a mesma conta várias vezes; a preparação é ferramenta de teste e não liquida a obrigação.
 
