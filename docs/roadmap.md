@@ -446,7 +446,7 @@ Pendência registrada pelo PR #60 (2026-10-27), resolvida na V01-1: `CicloPosico
 
 ## V02 — Ajustes pós-validação
 
-Pedido do usuário em 2026-10-28: seis pontos encontrados ao comparar o projeto com a especificação de origem, executados em ordem (falhas que escondem efeitos primeiro, latência por último). Por decisão do usuário, os seis vão **num único PR**, branch `feat/v02-ajustes-pos-validacao`, um commit por item; sem merge nem release automáticos. O fluxo foi executado em modo autônomo (`/loop`) sem o usuário disponível: o refinamento ficou registrado nos ADRs e neste roadmap, e os pareceres de revisão, QA e segurança devem acontecer no PR, por agentes separados, antes do merge.
+Pedido do usuário em 2026-10-28: seis pontos encontrados ao comparar o projeto com a especificação de origem, executados em ordem (falhas que escondem efeitos primeiro, latência por último). Por decisão do usuário, os seis vão **num único PR**, [PR #72](https://github.com/mclovin137/Prospero/pull/72), branch `feat/v02-ajustes-pos-validacao`, um commit por item; sem merge nem release automáticos. O fluxo foi executado em modo autônomo (`/loop`) sem o usuário disponível: o refinamento ficou registrado nos ADRs e neste roadmap, e os pareceres de revisão, QA e segurança devem acontecer no PR, por agentes separados, antes do merge.
 
 | Item | Estado | Decisão | Evidência principal |
 | --- | --- | --- | --- |
