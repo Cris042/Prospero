@@ -18,6 +18,9 @@ import static org.hamcrest.Matchers.*;
 @QuarkusTest
 class QuarentenaResourceTest {
     private static final String CHAVE = "chave-sintetica-de-teste-com-mais-de-32-bytes";
+    @Inject br.prospero.fo.comum.kafka.ReaplicacaoKafka reaplicacao;
+    private static volatile boolean falhar;
+    private static final java.util.List<Long> reaplicadas = new java.util.concurrent.CopyOnWriteArrayList<>();
     @Inject EventosRejeitadosMemoria memoria;
 
     private static String token(String... grupos) {
@@ -59,5 +62,31 @@ class QuarentenaResourceTest {
         given().auth().oauth2(tok).when().post("/api/v1/quarentena/1/descarte").then().statusCode(200)
                 .body("repetido", equalTo(true));
         given().auth().oauth2(tok).when().get("/api/v1/quarentena").then().statusCode(200).body("size()", equalTo(0));
+    }
+
+    @Test
+    void reprocessaComSucessoRepeteSemReaplicarEFalhaDevolve409() {
+        reaplicacao.registrar("topico.teste.v1", r -> {
+            if (falhar) throw new IllegalStateException("ainda inválida");
+            reaplicadas.add(r.offset());
+        });
+        reaplicadas.clear();
+        falhar = false;
+        memoria.registrar(new MensagemQuarentena("topico.teste.v1", 0, 7, "CONTA-001", null,
+                "{}".getBytes(StandardCharsets.UTF_8), "contrato", 1));
+        memoria.registrar(new MensagemQuarentena("topico.teste.v1", 0, 8, "CONTA-001", null,
+                "{}".getBytes(StandardCharsets.UTF_8), "contrato", 1));
+        String tok = token("quarentena:reprocessar");
+        given().auth().oauth2(tok).when().post("/api/v1/quarentena/2/reprocessamento").then().statusCode(200)
+                .body("resolucao", equalTo("REPROCESSADA")).body("repetido", equalTo(false));
+        given().auth().oauth2(tok).when().post("/api/v1/quarentena/2/reprocessamento").then().statusCode(200)
+                .body("repetido", equalTo(true));
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of(7L), reaplicadas, "a repetição não reaplica");
+        falhar = true;
+        given().auth().oauth2(tok).when().post("/api/v1/quarentena/3/reprocessamento").then().statusCode(409)
+                .body("codigo", equalTo("REPROCESSAMENTO_FALHOU"));
+        org.junit.jupiter.api.Assertions.assertEquals(2, memoria.buscar(3).orElseThrow().mensagem().tentativas());
+        given().auth().oauth2(tok).when().get("/api/v1/quarentena?limite=201").then().statusCode(400)
+                .body("codigo", equalTo("LIMITE_INVALIDO"));
     }
 }

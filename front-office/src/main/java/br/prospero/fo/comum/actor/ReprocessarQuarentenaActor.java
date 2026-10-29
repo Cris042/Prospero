@@ -26,6 +26,8 @@ public class ReprocessarQuarentenaActor {
     private final EventosRejeitados quarentena;
     private final Reaplicacao reaplicacao;
     private final MeterRegistry metricas;
+    /** Uma ação por linha de cada vez neste processo: reaplicar e descartar a mesma linha nunca se cruzam. */
+    private final java.util.Set<Long> emAndamento = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     @Inject
     public ReprocessarQuarentenaActor(EventosRejeitados quarentena, Reaplicacao reaplicacao, MeterRegistry metricas) {
@@ -41,7 +43,27 @@ public class ReprocessarQuarentenaActor {
         return quarentena.pendentes(limite).stream().map(QuarentenaItemDTO::de).toList();
     }
 
-    public ResolucaoQuarentenaDTO reprocessar(long id) {
+    public ResolucaoQuarentenaDTO reprocessar(long id, String autor) {
+        return exclusivo(id, () -> reprocessarExclusivo(id, autor));
+    }
+
+    public ResolucaoQuarentenaDTO descartar(long id, String autor) {
+        return exclusivo(id, () -> descartarExclusivo(id, autor));
+    }
+
+    private ResolucaoQuarentenaDTO exclusivo(long id, java.util.function.Supplier<ResolucaoQuarentenaDTO> acao) {
+        if (!emAndamento.add(id)) {
+            throw new RegraNegocioException(Categoria.CONFLITO, "QUARENTENA_EM_ANDAMENTO",
+                    "Outra ação sobre esta mensagem está em andamento; repita depois.");
+        }
+        try {
+            return acao.get();
+        } finally {
+            emAndamento.remove(id);
+        }
+    }
+
+    private ResolucaoQuarentenaDTO reprocessarExclusivo(long id, String autor) {
         ItemQuarentena item = existente(id);
         if (!item.pendente()) return ResolucaoQuarentenaDTO.repetida(item);
         var mensagem = item.mensagem();
@@ -59,24 +81,25 @@ public class ReprocessarQuarentenaActor {
             String motivo = "reprocessamento: " + erro.getClass().getSimpleName();
             quarentena.falhou(id, motivo);
             metricas.counter("prospero.quarentena.reprocessamentos", "topico", mensagem.topico(), "resultado", "falha").increment();
-            LOG.warnf("Reprocessamento falhou: id=%d topico=%s erro=%s", id, mensagem.topico(), erro.getClass().getSimpleName());
+            LOG.warnf("Reprocessamento falhou: id=%d topico=%s autor=%s erro=%s", id, mensagem.topico(), autor,
+                    erro.getClass().getSimpleName());
             throw new RegraNegocioException(Categoria.CONFLITO, "REPROCESSAMENTO_FALHOU",
                     "A mensagem falhou de novo e continua em quarentena.");
         }
         boolean primeira = quarentena.resolver(id, ResolucaoQuarentena.REPROCESSADA);
         metricas.counter("prospero.quarentena.reprocessamentos", "topico", mensagem.topico(), "resultado", "ok").increment();
-        LOG.infof("Quarentena reprocessada: id=%d topico=%s particao=%d offset=%d", id, mensagem.topico(),
-                mensagem.particao(), mensagem.deslocamento());
+        LOG.infof("Quarentena reprocessada: id=%d topico=%s particao=%d offset=%d autor=%s", id, mensagem.topico(),
+                mensagem.particao(), mensagem.deslocamento(), autor);
         return primeira ? ResolucaoQuarentenaDTO.nova(id, ResolucaoQuarentena.REPROCESSADA)
                 : ResolucaoQuarentenaDTO.repetida(existente(id));
     }
 
-    public ResolucaoQuarentenaDTO descartar(long id) {
+    private ResolucaoQuarentenaDTO descartarExclusivo(long id, String autor) {
         ItemQuarentena item = existente(id);
         if (!item.pendente()) return ResolucaoQuarentenaDTO.repetida(item);
         boolean primeira = quarentena.resolver(id, ResolucaoQuarentena.DESCARTADA);
-        LOG.infof("Quarentena descartada: id=%d topico=%s particao=%d offset=%d", id, item.mensagem().topico(),
-                item.mensagem().particao(), item.mensagem().deslocamento());
+        LOG.infof("Quarentena descartada: id=%d topico=%s particao=%d offset=%d autor=%s", id, item.mensagem().topico(),
+                item.mensagem().particao(), item.mensagem().deslocamento(), autor);
         return primeira ? ResolucaoQuarentenaDTO.nova(id, ResolucaoQuarentena.DESCARTADA)
                 : ResolucaoQuarentenaDTO.repetida(existente(id));
     }

@@ -30,10 +30,18 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 @Tag(name = "Quarentena", description = "Mensagens Kafka retiradas por erro permanente (ADR-019); acesso operacional.")
 public class QuarentenaResource {
     private final ReprocessarQuarentenaActor actor;
+    private final io.quarkus.security.identity.SecurityIdentity identidade;
 
     @Inject
-    public QuarentenaResource(ReprocessarQuarentenaActor actor) {
+    public QuarentenaResource(ReprocessarQuarentenaActor actor, io.quarkus.security.identity.SecurityIdentity identidade) {
         this.actor = actor;
+        this.identidade = identidade;
+    }
+
+    /** Autor registrado no log de auditoria; tokens sem sub aparecem como "sem-sub". */
+    private String autor() {
+        var principal = identidade.getPrincipal();
+        return principal == null || principal.getName() == null || principal.getName().isBlank() ? "sem-sub" : principal.getName();
     }
 
     @GET
@@ -57,7 +65,7 @@ public class QuarentenaResource {
             content = @Content(schema = @Schema(implementation = ResolucaoQuarentenaDTO.class)))
     @APIResponse(responseCode = "404", description = "Id desconhecido.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
-    @APIResponse(responseCode = "409", description = "Falhou de novo; a mensagem continua em quarentena.",
+    @APIResponse(responseCode = "409", description = "Falhou de novo (continua em quarentena) ou outra ação na mesma linha está em andamento.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "422", description = "Linha sem payload ou tópico sem reprocessador neste serviço.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
@@ -66,7 +74,7 @@ public class QuarentenaResource {
     @APIResponse(responseCode = "403", description = "Token sem escopo quarentena:reprocessar.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     public Response reprocessar(@PathParam("id") long id) {
-        return Response.ok(actor.reprocessar(id)).header("Cache-Control", "no-store").build();
+        return Response.ok(actor.reprocessar(id, autor())).header("Cache-Control", "no-store").build();
     }
 
     @POST
@@ -74,6 +82,8 @@ public class QuarentenaResource {
     @Operation(summary = "Descartar a mensagem por decisão operacional, sem aplicar efeito; repetição é inócua")
     @APIResponse(responseCode = "200", description = "Descartada agora ou já resolvida antes.",
             content = @Content(schema = @Schema(implementation = ResolucaoQuarentenaDTO.class)))
+    @APIResponse(responseCode = "409", description = "Reprocessamento da mesma linha em andamento.",
+            content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "404", description = "Id desconhecido.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     @APIResponse(responseCode = "401", description = "Token ausente ou inválido.",
@@ -81,6 +91,6 @@ public class QuarentenaResource {
     @APIResponse(responseCode = "403", description = "Token sem escopo quarentena:reprocessar.",
             content = @Content(mediaType = Problemas.PROBLEM_JSON, schema = @Schema(implementation = ProblemaDTO.class)))
     public Response descartar(@PathParam("id") long id) {
-        return Response.ok(actor.descartar(id)).header("Cache-Control", "no-store").build();
+        return Response.ok(actor.descartar(id, autor())).header("Cache-Control", "no-store").build();
     }
 }

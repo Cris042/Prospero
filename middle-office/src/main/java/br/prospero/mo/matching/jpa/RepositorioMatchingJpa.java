@@ -315,8 +315,7 @@ public class RepositorioMatchingJpa {
             exigir(n==1,"controle custodia");
         }
         if(vendida>0) {
-            BigDecimal g=vendida==descoberta?garantia:garantia.multiply(BigDecimal.valueOf(vendida))
-                    .divide(BigDecimal.valueOf(descoberta),2,java.math.RoundingMode.HALF_EVEN);
+            BigDecimal g=br.prospero.mo.risco.helper.CalculoGarantia.proporcional(garantia,vendida,descoberta);
             int n=em().createNativeQuery("""
                     UPDATE custodia_risco SET descoberto_reservado=descoberto_reservado-:s,
                     descoberto_executado=descoberto_executado+:s,garantia_executada=garantia_executada+:g

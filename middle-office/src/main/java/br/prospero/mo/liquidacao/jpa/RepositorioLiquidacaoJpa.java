@@ -19,7 +19,6 @@ import jakarta.transaction.Transactional;
 import org.hibernate.query.NativeQuery;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
@@ -128,8 +127,8 @@ public class RepositorioLiquidacaoJpa implements RepositorioLiquidacao {
         long descoberto = ((Number) l[0]).longValue();
         BigDecimal garantia = (BigDecimal) l[1];
         long cobre = Math.min(quantidade, descoberto);
-        BigDecimal liberada = cobre == 0 ? BigDecimal.ZERO.setScale(2) : cobre == descoberto ? garantia
-                : garantia.multiply(BigDecimal.valueOf(cobre)).divide(BigDecimal.valueOf(descoberto), 2, RoundingMode.HALF_EVEN);
+        BigDecimal liberada = descoberto == 0 ? BigDecimal.ZERO.setScale(2)
+                : br.prospero.mo.risco.helper.CalculoGarantia.proporcional(garantia, cobre, descoberto);
         int n = em().createNativeQuery("""
                         UPDATE custodia_risco SET total = total + :e, disponivel = disponivel + :e,
                             compra_aberta = GREATEST(compra_aberta - :q, 0),

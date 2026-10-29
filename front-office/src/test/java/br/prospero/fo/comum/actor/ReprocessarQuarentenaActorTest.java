@@ -36,40 +36,68 @@ class ReprocessarQuarentenaActorTest {
     @Test
     void reprocessaUmaVezERepeticaoEInocua() {
         long id = quarentenar(TOPICO, 7, "{}".getBytes(StandardCharsets.UTF_8));
-        var primeira = actor.reprocessar(id);
+        var primeira = actor.reprocessar(id, "operador");
         assertEquals("REPROCESSADA", primeira.resolucao());
         assertFalse(primeira.repetido());
-        var segunda = actor.reprocessar(id);
+        var segunda = actor.reprocessar(id, "operador");
         assertTrue(segunda.repetido());
         assertEquals(List.of(7L), reaplicadas, "a segunda chamada não reaplica");
         assertTrue(quarentena.pendentes(10).isEmpty());
-        assertTrue(actor.descartar(id).repetido(), "descartar depois de reprocessar não muda o desfecho");
+        assertTrue(actor.descartar(id, "operador").repetido(), "descartar depois de reprocessar não muda o desfecho");
     }
 
     @Test
     void falhaDeNovoMantemPendenteContaTentativaEResponde409() {
         long id = quarentenar(TOPICO, 3, "{}".getBytes(StandardCharsets.UTF_8));
         falhar = true;
-        var erro = assertThrows(RegraNegocioException.class, () -> actor.reprocessar(id));
+        var erro = assertThrows(RegraNegocioException.class, () -> actor.reprocessar(id, "operador"));
         assertEquals("REPROCESSAMENTO_FALHOU", erro.codigo());
         var item = quarentena.buscar(id).orElseThrow();
         assertTrue(item.pendente());
         assertEquals(2, item.mensagem().tentativas());
         assertEquals("reprocessamento: IllegalStateException", item.mensagem().motivo());
         falhar = false;
-        assertEquals("REPROCESSADA", actor.reprocessar(id).resolucao());
+        assertEquals("REPROCESSADA", actor.reprocessar(id, "operador").resolucao());
     }
 
     @Test
     void recusaLinhaSemPayloadTopicoSemReprocessadorEIdDesconhecido() {
         long legado = quarentenar(TOPICO, 1, null);
-        assertEquals("QUARENTENA_SEM_PAYLOAD", assertThrows(RegraNegocioException.class, () -> actor.reprocessar(legado)).codigo());
+        assertEquals("QUARENTENA_SEM_PAYLOAD", assertThrows(RegraNegocioException.class, () -> actor.reprocessar(legado, "operador")).codigo());
         long alheio = quarentenar("outro.topico.v1", 1, new byte[]{1});
-        assertEquals("TOPICO_SEM_REPROCESSADOR", assertThrows(RegraNegocioException.class, () -> actor.reprocessar(alheio)).codigo());
-        assertEquals("QUARENTENA_DESCONHECIDA", assertThrows(RegraNegocioException.class, () -> actor.reprocessar(999)).codigo());
-        assertEquals("DESCARTADA", actor.descartar(legado).resolucao());
-        assertTrue(actor.descartar(legado).repetido());
+        assertEquals("TOPICO_SEM_REPROCESSADOR", assertThrows(RegraNegocioException.class, () -> actor.reprocessar(alheio, "operador")).codigo());
+        assertEquals("QUARENTENA_DESCONHECIDA", assertThrows(RegraNegocioException.class, () -> actor.reprocessar(999, "operador")).codigo());
+        assertEquals("DESCARTADA", actor.descartar(legado, "operador").resolucao());
+        assertTrue(actor.descartar(legado, "operador").repetido());
         assertTrue(reaplicadas.isEmpty());
         assertEquals("LIMITE_INVALIDO", assertThrows(RegraNegocioException.class, () -> actor.pendentes(0)).codigo());
+    }
+
+    @Test
+    void reprocessarEDescartarAMesmaLinhaAoMesmoTempoNaoSeCruzam() throws Exception {
+        var entrou = new java.util.concurrent.CountDownLatch(1);
+        var liberar = new java.util.concurrent.CountDownLatch(1);
+        var lento = new Reaplicacao() {
+            @Override public boolean suporta(String topico) { return true; }
+            @Override public void reaplicar(MensagemQuarentena m) {
+                entrou.countDown();
+                try { liberar.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                reaplicadas.add(m.deslocamento());
+            }
+        };
+        var concorrente = new ReprocessarQuarentenaActor(quarentena, lento, new SimpleMeterRegistry());
+        long id = quarentenar(TOPICO, 9, "{}".getBytes(StandardCharsets.UTF_8));
+        try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var primeiro = executor.submit(() -> concorrente.reprocessar(id, "a"));
+            assertTrue(entrou.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals("QUARENTENA_EM_ANDAMENTO",
+                    assertThrows(RegraNegocioException.class, () -> concorrente.reprocessar(id, "b")).codigo());
+            assertEquals("QUARENTENA_EM_ANDAMENTO",
+                    assertThrows(RegraNegocioException.class, () -> concorrente.descartar(id, "b")).codigo());
+            liberar.countDown();
+            assertEquals("REPROCESSADA", primeiro.get().resolucao());
+        }
+        assertEquals(List.of(9L), reaplicadas, "uma única reaplicação");
+        assertEquals("REPROCESSADA", concorrente.descartar(id, "b").resolucao(), "depois, o descarte só confirma o desfecho");
     }
 }

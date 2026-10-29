@@ -54,7 +54,8 @@ def token(escopo, validade, conta=None):
     agora = int(time.time())
     claims = {"iss": "prospero-local", "aud": AUDIENCIAS.get(escopo, "prospero-front-office"), "iat": agora,
               "exp": agora + validade, "groups": ESCOPOS[escopo]}
-    if escopo == "liquidacao":
+    if escopo in ("liquidacao", "quarentena-fo", "quarentena-mo"):
+        # Ações operacionais auditadas pelo sub no log do serviço (ADR-016 e ADR-019).
         claims["sub"] = "operador-local"
         claims["jti"] = str(uuid.uuid4())
     if conta:

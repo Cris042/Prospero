@@ -9,7 +9,6 @@ import br.prospero.mo.risco.dominio.Lado;
 import br.prospero.mo.risco.dominio.MotivoRejeicao;
 import br.prospero.mo.risco.dominio.ParametrosRisco;
 import br.prospero.mo.risco.dominio.RepositorioRisco;
-import br.prospero.mo.risco.dominio.ReservaVenda;
 import br.prospero.mo.risco.dominio.ResultadoRisco;
 import br.prospero.mo.risco.dominio.TipoOrdem;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -206,6 +205,8 @@ class AvaliarRiscoActorTest {
         repositorio.disponivel.put("CONTA-002", new BigDecimal("50.00"));
         assertEquals(MotivoRejeicao.SALDO_INSUFICIENTE, actor.avaliar(venda(5), null).decisao().motivo(),
                 "garantia de 55,00 não cabe em 50,00");
+        assertEquals(new BigDecimal("100.00"), repositorio.exposicao.get("CONTA-002"), "recusa devolve a exposição");
+        assertEquals(10L, repositorio.descobertoReservado.get("CONTA-002|ALFA3"), "recusa devolve o descoberto");
     }
 
     @Test
@@ -293,38 +294,59 @@ class AvaliarRiscoActorTest {
         final Map<String, BigDecimal> limiteVendido = new HashMap<>();
         final Map<String, BigDecimal> exposicao = new HashMap<>();
         final Map<String, Long> descobertoReservado = new HashMap<>();
-        final Map<UUID, ReservaVenda.Reservada> descobertos = new HashMap<>();
+        record Descoberto(long descoberta, BigDecimal garantia) { }
+        final Map<UUID, Descoberto> descobertos = new HashMap<>();
         static final BigDecimal REFERENCIA_ALFA3 = new BigDecimal("10.00");
 
         @Override
-        public synchronized ReservaVenda reservarVenda(String conta, String ticker, long quantidade, BigDecimal teto) {
+        public synchronized boolean reservarCustodia(String conta, String ticker, long quantidade) {
             String chave = conta + "|" + ticker;
             long livre = custodia.getOrDefault(chave, 0L);
-            BigDecimal limite = limiteVendido.getOrDefault(conta, BigDecimal.ZERO);
-            if (limite.signum() == 0 || livre >= quantidade) {
-                if (livre < quantidade) return new ReservaVenda.Recusada(MotivoRejeicao.CUSTODIA_INSUFICIENTE);
-                custodia.put(chave, livre - quantidade);
-                return ReservaVenda.Reservada.coberta();
+            if (livre < quantidade) return false;
+            custodia.put(chave, livre - quantidade);
+            return true;
+        }
+
+        @Override
+        public boolean vendaADescobertoPermitida(String conta) {
+            return limiteVendido.getOrDefault(conta, BigDecimal.ZERO).signum() > 0;
+        }
+
+        @Override
+        public synchronized java.util.OptionalLong reservarCustodiaComDescoberto(String conta, String ticker, long quantidade) {
+            String chave = conta + "|" + ticker;
+            long livre = custodia.getOrDefault(chave, 0L);
+            long coberta = Math.min(quantidade, livre), descoberta = quantidade - coberta;
+            if (descoberta > 0 && descobertoReservado.getOrDefault(chave, 0L) + descoberta > limitePosicao.getOrDefault(chave, 50_000L)) {
+                return java.util.OptionalLong.empty();
             }
-            long descoberta = quantidade - livre;
-            if (descobertoReservado.getOrDefault(chave, 0L) + descoberta > limitePosicao.getOrDefault(chave, 50_000L)) {
-                return new ReservaVenda.Recusada(MotivoRejeicao.LIMITE_POSICAO_EXCEDIDO);
-            }
-            if (teto == null) return new ReservaVenda.Recusada(MotivoRejeicao.PRECO_BASE_AUSENTE);
-            BigDecimal novaExposicao = exposicao.getOrDefault(conta, BigDecimal.ZERO)
-                    .add(REFERENCIA_ALFA3.multiply(BigDecimal.valueOf(descoberta)));
-            if (novaExposicao.compareTo(limite) > 0) return new ReservaVenda.Recusada(MotivoRejeicao.EXPOSICAO_VENDIDA_EXCEDIDA);
-            BigDecimal garantia = teto.multiply(BigDecimal.valueOf(descoberta));
-            if (!reservarCaixa(conta, garantia)) return new ReservaVenda.Recusada(MotivoRejeicao.SALDO_INSUFICIENTE);
-            custodia.put(chave, 0L);
-            exposicao.put(conta, novaExposicao);
+            custodia.put(chave, livre - coberta);
             descobertoReservado.merge(chave, descoberta, Long::sum);
-            return new ReservaVenda.Reservada(descoberta, garantia);
+            return java.util.OptionalLong.of(descoberta);
+        }
+
+        @Override
+        public synchronized void desfazerCustodiaVenda(String conta, String ticker, long coberta, long descoberta) {
+            custodia.merge(conta + "|" + ticker, coberta, Long::sum);
+            descobertoReservado.merge(conta + "|" + ticker, -descoberta, Long::sum);
+        }
+
+        @Override
+        public synchronized boolean reservarExposicao(String conta, String ticker, long descoberta) {
+            BigDecimal nova = exposicao.getOrDefault(conta, BigDecimal.ZERO).add(REFERENCIA_ALFA3.multiply(BigDecimal.valueOf(descoberta)));
+            if (nova.compareTo(limiteVendido.getOrDefault(conta, BigDecimal.ZERO)) > 0) return false;
+            exposicao.put(conta, nova);
+            return true;
+        }
+
+        @Override
+        public synchronized void desfazerExposicao(String conta, String ticker, long descoberta) {
+            exposicao.merge(conta, REFERENCIA_ALFA3.multiply(BigDecimal.valueOf(descoberta)).negate(), BigDecimal::add);
         }
 
         @Override
         public synchronized void registrarDescoberto(UUID intencao, long descoberta, BigDecimal garantia) {
-            descobertos.put(intencao, new ReservaVenda.Reservada(descoberta, garantia));
+            descobertos.put(intencao, new Descoberto(descoberta, garantia));
         }
 
         @Override

@@ -29,12 +29,24 @@ public interface RepositorioRisco {
     /** Desfaz {@link #reservarPosicaoCompra} na mesma transação quando a reserva de caixa falha. */
     void liberarPosicaoCompra(String conta, String ticker, long quantidade);
 
+    /** Reserva {@code quantidade} da custódia disponível, ou nada se não houver (venda coberta). */
+    boolean reservarCustodia(String conta, String ticker, long quantidade);
+
+    /** Conta com limite de exposição vendida maior que zero (ADR-021); 0 desliga a venda a descoberto. */
+    boolean vendaADescobertoPermitida(String conta);
+
     /**
-     * Venda (ADR-021): reserva a custódia disponível e, se a conta tiver limite de exposição, põe o restante a
-     * descoberto com exposição pelo preço de referência e garantia de {@code descoberta × tetoGarantia} em caixa.
-     * Cada passo é UPDATE condicional; recusa desfaz os anteriores e não deixa nada reservado.
+     * Reserva a custódia disponível e põe o restante em descoberto reservado se couber no limite de posição do lado
+     * vendido; devolve a parte a descoberto, ou vazio sem alterar nada.
      */
-    ReservaVenda reservarVenda(String conta, String ticker, long quantidade, BigDecimal tetoGarantia);
+    java.util.OptionalLong reservarCustodiaComDescoberto(String conta, String ticker, long quantidade);
+
+    void desfazerCustodiaVenda(String conta, String ticker, long coberta, long descoberta);
+
+    /** Soma {@code descoberta × preço de referência} à exposição vendida se couber no limite da conta. */
+    boolean reservarExposicao(String conta, String ticker, long descoberta);
+
+    void desfazerExposicao(String conta, String ticker, long descoberta);
 
     /** Grava a parte a descoberto e a garantia na decisão e na reserva recém-registradas. */
     void registrarDescoberto(java.util.UUID intencao, long descoberta, BigDecimal garantia);

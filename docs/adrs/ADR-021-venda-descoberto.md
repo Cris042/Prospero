@@ -25,6 +25,11 @@ O ADR-012 decidiu "sem venda a descoberto" e citou um limite de exposição vend
 9. **Razão e D+2.** As partidas não mudam. No D0 o vendedor credita `CUSTODIA`; no D+2 recebe o caixa. Para quem vende a descoberto, o saldo da conta contábil `CUSTODIA` fica negativo depois do D+2 e **representa a custódia a entregar** até a recompra, quando volta a zero. Cada transação continua balanceada por unidade. Não foi criada uma conta `CUSTODIA_A_ENTREGAR` separada porque o BO não conhece a custódia inicial do MO e, por isso, não sabe separar coberto de descoberto. Representar pelo saldo negativo evita copiar estado entre serviços. `PlanoDeContas.d2` passa a ser o único construtor do lançamento D+2.
 10. **No MO, a custódia efetiva é `total − descoberto_executado`** e pode ficar negativa até o vendido a descoberto. `total`, `disponivel` e `reservado` continuam não negativos e se referem só à parte coberta.
 
+### Premissas e pontos em aberto
+
+- A exposição é liberada pelo preço de referência **atual**, com piso zero. Hoje ele só muda por migração; alterar `ativo_risco.preco_referencia` exige a conta sem posição vendida, ou a exposição fica com resíduo ou zera antes da hora.
+- A compra de recompra também passa pelo limite de posição do ADR-020 sem descontar `descoberto_executado` (conservador). Fica para o usuário decidir se a cobertura de posição vendida deve ficar fora do limite.
+
 ## Alternativas
 
 | Alternativa | Por que não |

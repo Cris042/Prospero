@@ -81,10 +81,11 @@ public class RelayOutbox {
         em.createNativeQuery("""
                 DELETE FROM outbox WHERE id IN (SELECT id FROM outbox
                 WHERE publicado_em < now() - INTERVAL '1 day' LIMIT 500)""").executeUpdate();
-        // Retenção da quarentena (ADR-019): 30 dias, resolvida ou não; o alerta dispara muito antes.
+        // Retenção da quarentena (ADR-019): 30 dias depois de resolvida. Pendente nunca é apagada: é a única cópia do
+        // payload quando o tópico de origem já expirou, e o alerta continua ativo até alguém decidir.
         em.createNativeQuery("""
                 DELETE FROM mensagem_quarentena WHERE id IN (SELECT id FROM mensagem_quarentena
-                WHERE quarentenado_em < now() - INTERVAL '30 days' LIMIT 500)""").executeUpdate();
+                WHERE resolvido_em < now() - INTERVAL '30 days' LIMIT 500)""").executeUpdate();
         medirQuarentena();
     }
 

@@ -15,8 +15,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** ADR-022: o snapshot do Redis preserva escala exata e a versão ordena por sessão e depois por revisão. */
-class SerializadorCotacaoTest {
-    static LivroCotado livro(LocalDate dia, long revisao, String ultimo) {
+public class SerializadorCotacaoTest {
+    public static LivroCotado livro(LocalDate dia, long revisao, String ultimo) {
         var sessao = new SessaoCotacao("ALFA3", dia, ultimo == null ? null : new BigDecimal(ultimo), 3,
                 new BigDecimal("30.020"), revisao, Instant.parse("2026-10-28T12:00:00.123456Z"), false);
         return new LivroCotado(sessao, new LadoCotado(List.of(new NivelCotado(new BigDecimal("9.90"), 7, 2, 7)), 1, 7),

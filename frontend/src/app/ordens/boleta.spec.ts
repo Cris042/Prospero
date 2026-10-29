@@ -113,7 +113,12 @@ describe('Boleta', () => {
     ).toContain('limite de posição no ativo excedido');
     expect(
       boleta.estadoRegistro([
-        { ...ORDEM, lado: 'VENDA', estado: 'REJEITADA', motivoRejeicao: 'EXPOSICAO_VENDIDA_EXCEDIDA' },
+        {
+          ...ORDEM,
+          lado: 'VENDA',
+          estado: 'REJEITADA',
+          motivoRejeicao: 'EXPOSICAO_VENDIDA_EXCEDIDA',
+        },
       ]),
     ).toContain('venda a descoberto');
   });
