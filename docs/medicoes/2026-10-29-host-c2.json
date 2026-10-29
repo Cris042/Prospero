@@ -1,0 +1,24 @@
+{
+  "descricao": "Estado do host WSL2 ao fim da medição C2 (prospero-v02-m4). Os outros projetos do usuário (Horus, atena-ui, ai-memory) seguiam ativos; não foram parados sem autorização.",
+  "meminfo": {
+    "MemAvailable": "2479196 kB",
+    "SwapTotal": "2097152 kB",
+    "SwapFree": "52 kB"
+  },
+  "psiIo": [
+    "some avg10=1.43 avg60=4.00 avg300=4.23 total=606111900",
+    "full avg10=1.36 avg60=3.82 avg300=3.87 total=570362340"
+  ],
+  "fsyncIsolado8kB": {
+    "amostras": 3000,
+    "p50Ms": 1.17,
+    "p99Ms": 2.24,
+    "p999Ms": 3.39,
+    "maxMs": 7.44
+  },
+  "gcKafkaC2": {
+    "pausasFull": 0,
+    "maiorPausaMs": 7.995
+  },
+  "tracesLentos": "70 traces >150 ms: 24 com FO/MO/BO lentos juntos (ME normal), 12 só contabilização FO, 10 só POST /ordens; padrão de parada global do host, não de um salto"
+}

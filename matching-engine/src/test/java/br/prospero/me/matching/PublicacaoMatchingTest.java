@@ -50,4 +50,22 @@ class PublicacaoMatchingTest {
         PublicacaoMatching.publicar(List.of(), e -> fail("nenhum envio esperado"), checkpoints::incrementAndGet);
         assertEquals(1, checkpoints.get());
     }
+
+    @Test
+    void loteDespachaTodosAntesDeEsperarAcksEMantemOrdemECheckpointPorUltimo() throws Exception {
+        List<String> passos = new ArrayList<>();
+        PublicacaoMatching.publicarEmLote(List.of(new byte[]{1}, new byte[]{2}, new byte[]{3}), e -> {
+            passos.add("envio " + e[0]);
+            return () -> passos.add("ack " + e[0]);
+        }, () -> passos.add("checkpoint"));
+        assertEquals(List.of("envio 1", "envio 2", "envio 3", "ack 1", "ack 2", "ack 3", "checkpoint"), passos);
+    }
+
+    @Test
+    void loteComAckFalhoNaoConfirmaCheckpoint() {
+        AtomicInteger checkpoints = new AtomicInteger();
+        assertThrows(IOException.class, () -> PublicacaoMatching.publicarEmLote(List.of(new byte[]{1}, new byte[]{2}),
+                e -> () -> { if (e[0] == 2) throw new IOException("ack recusado"); }, checkpoints::incrementAndGet));
+        assertEquals(0, checkpoints.get());
+    }
 }

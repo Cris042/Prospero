@@ -185,18 +185,18 @@ public class ProcessadorMatching implements HealthCheck {
                 // Valida posse/conexão e identidades ANTES de qualquer publicação; erro aborta o motor inteiro.
                 execucao.posse().validarPosse();
                 validarIdentidade(execucao.admin(), execucao.identidades());
-                PublicacaoMatching.publicar(resultado, evento -> {
-                    execucao.posse().validarPosse();
+                // A posse foi validada logo acima, antes do primeiro envio; avancar() a revalida antes do checkpoint.
+                PublicacaoMatching.publicarEmLote(resultado, evento -> {
                     var saida = new ProducerRecord<String, byte[]>(EnvelopeMatching.EVENTOS, registro.key(), evento);
                     if (RastreioMatching.atual() != null) {
                         saida.headers().add("traceparent", RastreioMatching.atual().getBytes(StandardCharsets.UTF_8));
                     }
-                    execucao.produtor().send(saida).get(15, TimeUnit.SECONDS);
-                    eventos.increment();
-                }, () -> {
-                    execucao.posse().validarPosse();
-                    execucao.posse().avancar(registro.partition(), checkpoint, registro.offset(), sessaoCheckpoint);
-                });
+                    var ack = execucao.produtor().send(saida);
+                    return () -> {
+                        ack.get(15, TimeUnit.SECONDS);
+                        eventos.increment();
+                    };
+                }, () -> execucao.posse().avancar(registro.partition(), checkpoint, registro.offset(), sessaoCheckpoint));
                 execucao.checkpoints().put(registro.partition(), registro.offset());
                 return sessaoCheckpoint;
             }
