@@ -1,6 +1,7 @@
 package br.prospero.me.matching.kafka;
 
 import br.prospero.me.matching.helper.EnvelopeMatching;
+import br.prospero.me.matching.helper.SessaoDivergenteException;
 import br.prospero.me.matching.helper.SessaoMatching;
 import br.prospero.me.matching.jpa.CheckpointMatching;
 import io.agroal.api.AgroalDataSource;
@@ -66,6 +67,7 @@ public class ProcessadorMatching implements HealthCheck {
     private final io.micrometer.core.instrument.Timer nucleo;
     private volatile boolean parar;
     private volatile String estado = "inicializando";
+    private volatile String motivo = "";
     private volatile KafkaConsumer<String, byte[]> consumidor;
     private Thread escritor;
 
@@ -104,7 +106,7 @@ public class ProcessadorMatching implements HealthCheck {
     @Override
     public HealthCheckResponse call() {
         return HealthCheckResponse.named("matching-replay-posse").status(!habilitado || estado.equals("pronto"))
-                .withData("estado", estado).build();
+                .withData("estado", estado).withData("motivo", motivo).build();
     }
 
     private void executar() {
@@ -164,6 +166,15 @@ public class ProcessadorMatching implements HealthCheck {
         var comando = EnvelopeMatching.comando(registro.value(), registro.key());
         int destino = Utils.toPositive(Utils.murmur2(registro.key().getBytes(StandardCharsets.UTF_8))) % 3;
         if (destino != registro.partition()) throw new IllegalArgumentException("Partição da chave divergente.");
+        try {
+            return aplicar(registro, comando, execucao, sessaoAnterior);
+        } catch (SessaoDivergenteException erro) {
+            throw new IllegalStateException(erro.diagnostico(registro.partition(), registro.offset()), erro);
+        }
+    }
+
+    private LocalDate aplicar(org.apache.kafka.clients.consumer.ConsumerRecord<String, byte[]> registro,
+                              EnvelopeMatching.Comando comando, Execucao execucao, LocalDate sessaoAnterior) throws Exception {
         return new RastreioMatching(telemetry, tracer).executar(comando.traceparent(), () -> {
             LocalDate sessaoCheckpoint = SessaoMatching.sessaoDoCheckpoint(comando, sessaoAnterior);
             long inicio = System.nanoTime();
@@ -196,7 +207,14 @@ public class ProcessadorMatching implements HealthCheck {
     private void bloquear(Exception erro) {
         if (!parar && !estado.equals("bloqueado")) {
             estado = "bloqueado"; falhas.increment();
-            LOG.errorf("Matching bloqueado (%s); preservar logs e reiniciar para replay após corrigir a causa.", erro.getClass().getSimpleName());
+            if (erro.getCause() instanceof SessaoDivergenteException) {
+                // Mensagem montada só com datas, partição e offset: nenhum payload chega ao log.
+                motivo = erro.getMessage();
+                LOG.errorf("Matching bloqueado: %s", motivo);
+                return;
+            }
+            motivo = erro.getClass().getSimpleName();
+            LOG.errorf("Matching bloqueado (%s); preservar logs e reiniciar para replay após corrigir a causa.", motivo);
         }
     }
 

@@ -50,7 +50,7 @@ Lacunas abertas:
 1. Saída JSON bruta da medição dedicada não está versionada. Os valores aparecem somente nesta página, no roadmap e no HLD-004.
 2. Resultado e link da execução indicativa da CI não foram registrados no roadmap. Há run `success` de `main` em `7905dfa` ([40690304557](https://github.com/mclovin137/Prospero/actions/runs/40690304557)) e em `5ceb8b9` ([40765213108](https://github.com/mclovin137/Prospero/actions/runs/40765213108)), mas o veredito indicativo não foi extraído dos logs.
 3. Uma única execução dedicada. Não há repetição nem distribuição entre execuções.
-4. Os volumes do projeto Compose antigo `prospero` bloqueiam o replay do matching-engine (`IllegalArgumentException`) com o código atual. A causa não foi investigada. Os volumes foram preservados.
+4. ~~Os volumes do projeto Compose antigo `prospero` bloqueiam o replay do matching-engine (`IllegalArgumentException`) com o código atual.~~ **Reclassificada pela V02-1 (2026-10-28):** não é regressão. O log antigo mistura admissões de 2026-10-24 e 2026-10-25 na partição 0 (checkpoint no offset 6), o que viola a regra de uma sessão por log do ADR-013. Agora o replay para com diagnóstico explícito, teste de regressão e procedimento documentado no [HLD-004](hlds/HLD-004-matching-engine.md#replay-bloqueado-por-sessão-divergente). Abrir a sessão seguinte no mesmo log continua como evolução pendente de decisão do usuário. Os volumes seguem preservados.
 5. Custo de CPU e de banco de dados em repouso não tem fonte medida (ver a análise do [ADR-018](adrs/ADR-018-publicacao-outbox-apos-commit.md)).
 6. GIF do fluxo não foi gravado. O roteiro abaixo serve de base.
 
