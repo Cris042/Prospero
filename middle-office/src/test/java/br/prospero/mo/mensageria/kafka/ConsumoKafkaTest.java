@@ -37,14 +37,14 @@ class ConsumoKafkaTest {
         consumidor.assign(List.of(P0, P1, P2));
         consumidor.updateBeginningOffsets(Map.of(P0, 0L, P1, 0L, P2, 0L));
         consumo = new ConsumoKafka(() -> consumidor, TOPICO, this::processar,
-                (topico, particao, offset, motivo) -> rejeitados.add(particao + ":" + offset + ":" + motivo),
+                m -> rejeitados.add(m.particao() + ":" + m.deslocamento() + ":" + m.motivo()),
                 new SimpleMeterRegistry());
     }
 
     @Test
     void financeiroNaoDescartaMesmoAposDezFalhas() {
         consumo = new ConsumoKafka(() -> consumidor, TOPICO, this::processar,
-                (t,p,o,m) -> rejeitados.add(m), new SimpleMeterRegistry(), true);
+                m -> rejeitados.add(m.motivo()), new SimpleMeterRegistry(), true);
         falhasProgramadas.put("0:0", 12);
         for (int tentativa=0; tentativa<12; tentativa++) {
             publicar(P0,0,"ok");
@@ -57,7 +57,7 @@ class ConsumoKafkaTest {
     @Test
     void financeiroInvalidoNaoAvancaOffset() {
         consumo = new ConsumoKafka(() -> consumidor, TOPICO, this::processar,
-                (t,p,o,m) -> rejeitados.add(m), new SimpleMeterRegistry(), true);
+                m -> rejeitados.add(m.motivo()), new SimpleMeterRegistry(), true);
         publicar(P0,0,"invalida");
         assertThrows(MensagemInvalidaException.class, () -> consumo.ciclo(consumidor));
         assertEquals(0, consumidor.position(P0));

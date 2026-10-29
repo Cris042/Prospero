@@ -22,6 +22,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-016](ADR-016-razao-liquidacao-d2.md) | Razão em partidas dobradas, calendário, data de movimento e liquidação D+2 com crédito verificado no MO (RF08) | Aceita em 2026-10-24; implementação em fatias |
 | [ADR-017](ADR-017-trajetoria-tempo-real.md) | Trajetória durável no FO, confirmação BO, WebSocket e recuperação (RF09) | Proposta técnica em implementação; sem aceite atribuído |
 | [ADR-018](ADR-018-publicacao-outbox-apos-commit.md) | Antecipar publicação FO/MO após commit, com coalescência e polling de recuperação (V01b) | Proposta técnica; sem aceite novo atribuído |
+| [ADR-019](ADR-019-quarentena-mensagens.md) | Quarentena de mensagens Kafka com payload e reprocessamento no lugar do descarte (V02-2); emenda o ADR-012 | Proposta técnica implementada; sem aceite novo atribuído |
 
 ## Relação com a proposta original
 

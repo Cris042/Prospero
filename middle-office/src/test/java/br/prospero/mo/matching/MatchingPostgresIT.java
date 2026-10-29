@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Opt-in -Dtest=MatchingPostgresIT; banco descartável informado pelas variáveis MATCHING_TEST_DB_*. */
 @QuarkusTest
 @TestProfile(MatchingPostgresIT.Banco.class)
-class MatchingPostgresIT {
+public class MatchingPostgresIT {
     private static final String SCHEMA = schemaDaExecucao();
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -58,7 +58,7 @@ class MatchingPostgresIT {
     }
 
     @AfterAll
-    static void removerSchemaProprio() throws Exception {
+    public static void removerSchemaProprio() throws Exception {
         try (var c = conexao(); var s = c.createStatement()) {
             s.execute("DROP SCHEMA IF EXISTS " + SCHEMA + " CASCADE");
             try (var consulta = c.prepareStatement("SELECT 1 FROM pg_namespace WHERE nspname = ?")) {

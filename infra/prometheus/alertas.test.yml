@@ -1062,3 +1062,59 @@ tests:
     exp_samples:
     - labels: '{}'
       value: 0
+- name: 'quarentena: pendente por 1 min dispara e esvaziar recupera'
+  interval: 15s
+  input_series:
+  - series: prospero_quarentena_pendentes{job="prospero",instance="alvo:8080",servico="middle-office",topico="risco.comandos.v1",motivo="contrato"}
+    values: 0x4 1x12 _x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaPendente",alertstate="firing"}) or vector(0)
+    eval_time: 1m30s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaPendente",alertstate="firing",topico="risco.comandos.v1"}) or vector(0)
+    eval_time: 2m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoQuarentenaPendente",alertstate="firing"}) or vector(0)
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: 'quarentena: incremento do contador do consumo em risco.* aciona o alerta de risco'
+  interval: 15s
+  input_series:
+  - series: prospero_consumo_quarentena_total{job="prospero",instance="alvo:8080",servico="middle-office",topico="risco.comandos.v1",motivo="contrato"}
+    values: 0x8 1x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoRiscoConsumoBloqueadoOuDescartado",alertstate="firing",servico="middle-office"}) or vector(0)
+    eval_time: 2m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 'ordens: RECEBIDA há mais de 2 min dispara; fila vazia ou idade curta não'
+  interval: 15s
+  input_series:
+  - series: prospero_ordens_recebidas{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 1x30 0x20
+  - series: prospero_ordens_recebidas_idade_segundos{job="prospero",instance="alvo:8080",servico="front-office"}
+    values: 30+15x30 0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ProsperoOrdemParadaRecebida",alertstate="firing"}) or vector(0)
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ProsperoOrdemParadaRecebida",alertstate="firing"}) or vector(0)
+    eval_time: 4m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ProsperoOrdemParadaRecebida",alertstate="firing"}) or vector(0)
+    eval_time: 11m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+

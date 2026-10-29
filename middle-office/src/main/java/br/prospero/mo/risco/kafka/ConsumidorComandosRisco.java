@@ -38,6 +38,7 @@ public class ConsumidorComandosRisco {
     private final boolean habilitada;
     private ConsumoKafka consumo;
     private Thread linha;
+    @Inject br.prospero.mo.mensageria.kafka.ReaplicacaoKafka reaplicacao;
 
     @Inject
     public ConsumidorComandosRisco(AvaliarRiscoActor actor, SolicitarCancelamentoActor cancelamentos, EventosRejeitados rejeitados,
@@ -55,6 +56,8 @@ public class ConsumidorComandosRisco {
     }
 
     void iniciar(@Observes StartupEvent evento) {
+        // A quarentena reaplica pelo mesmo caminho do consumo, inclusive com o consumo Kafka desligado (ADR-019).
+        reaplicacao.registrar(EnvelopeRisco.TOPICO_COMANDOS, this::processar);
         if (!habilitada) {
             return;
         }

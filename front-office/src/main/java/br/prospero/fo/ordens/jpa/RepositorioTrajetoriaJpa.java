@@ -46,7 +46,7 @@ public class RepositorioTrajetoriaJpa implements RepositorioTrajetoria {
         List<?> identidade = em().createNativeQuery("SELECT 1 FROM ordem WHERE id=:o AND conta=:c")
                 .setParameter("o", ordem).setParameter("c", conta).getResultList();
         if (identidade.isEmpty()) return Optional.empty();
-        if ((Boolean) em().createNativeQuery("SELECT EXISTS(SELECT 1 FROM evento_rejeitado WHERE topico IN (:topicos))")
+        if ((Boolean) em().createNativeQuery("SELECT EXISTS(SELECT 1 FROM mensagem_quarentena WHERE topico IN (:topicos) AND resolvido_em IS NULL)")
                 .setParameter("topicos", List.of("matching.eventos.v1", "acompanhamento.eventos.v1", "risco.resultados.v1")).getSingleResult()) {
             throw new TrajetoriaIndisponivelException();
         }

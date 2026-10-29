@@ -106,8 +106,8 @@ public class ConsumidorMatching implements HealthCheck {
                     } catch (MensagemInvalidaException | MatchingIncoerenteException invalido) {
                         pronto.set(false);
                         metricas.counter("prospero.matching.quarentena", "servico", "front-office").increment();
-                        // Diagnóstico em transação própria, sem payload; o consumidor encerra mesmo se o banco falhar.
-                        rejeitados.registrar(registro.topic(), registro.partition(), registro.offset(), invalido.getMessage());
+                        // Quarentena em transação própria, com payload (ADR-019); o consumidor encerra mesmo se o banco falhar.
+                        rejeitados.registrar(br.prospero.fo.comum.kafka.ConsumoKafka.quarentena(registro, invalido.getMessage(), 1));
                         LOG.error("Consumo matching bloqueado por inconsistência; offset não confirmado.");
                         return;
                     } catch (RuntimeException erro) {

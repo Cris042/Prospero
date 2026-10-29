@@ -28,11 +28,13 @@ ESCOPOS = {"ordens-leitura": ["ordens:leitura"], "leitura": ["mercado:leitura"],
            "ordens": ["mercado:leitura", "ordens:enviar", "ordens:leitura"],
            "ordens-envio": ["ordens:enviar"],
            "risco": ["risco:leitura"], "risco-preparacao": ["risco:preparacao"], "sessao": ["sessao:encerrar"], "posicoes": ["posicoes:leitura"],
-           "razao": ["razao:leitura"], "liquidacao": ["liquidacao:administrar"]}
+           "razao": ["razao:leitura"], "liquidacao": ["liquidacao:administrar"],
+           "quarentena-fo": ["quarentena:reprocessar"], "quarentena-mo": ["quarentena:reprocessar"]}
 # Escopos do MO usam audiência própria (RF04b): token do FO não vale no MO e vice-versa.
 AUDIENCIAS = {"risco": "prospero-middle-office", "risco-preparacao": "prospero-middle-office",
               "sessao": "prospero-middle-office", "posicoes": "prospero-back-office",
-              "razao": "prospero-back-office", "liquidacao": "prospero-back-office"}
+              "razao": "prospero-back-office", "liquidacao": "prospero-back-office",
+              "quarentena-mo": "prospero-middle-office"}
 POR_CONTA = {"ordens-leitura", "ordens", "ordens-envio", "risco", "posicoes", "razao"}
 ATIVOS = ["ALFA3", "BETA3", "GAMA3", "DELTA3", "OMEGA3"]
 CONTAS = {"CONTA-001", "CONTA-002", "CONTA-003", "CONTA-004", "CONTA-005"}

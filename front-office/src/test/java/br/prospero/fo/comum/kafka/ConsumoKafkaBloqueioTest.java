@@ -27,7 +27,7 @@ class ConsumoKafkaBloqueioTest {
         var rejeitados = new ArrayList<String>();
         var consumo = new ConsumoKafka(() -> consumidor, TOPICO, registro -> {
             throw new ParticaoBloqueadaException("RESULTADO_CANCELAMENTO_INVALIDO");
-        }, (topico, particao, offset, motivo) -> rejeitados.add(motivo), metricas);
+        }, m -> rejeitados.add(m.motivo()), metricas);
         int tentativas = ConsumoKafka.TENTATIVAS_MAXIMAS + 5;
         for (int i = 0; i < tentativas; i++) {
             consumidor.addRecord(new ConsumerRecord<>(TOPICO, 0, 0, "CONTA-002", "x".getBytes()));

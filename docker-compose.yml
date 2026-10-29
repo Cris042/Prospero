@@ -338,10 +338,15 @@ services:
     - -ec
     command:
     - |
+      # V02-2 (ADR-019): risco retém só por tempo (7 dias); limite em bytes apagaria mensagem não consumida
+      # com um serviço fora. O alter tira retention.bytes de volumes criados antes da V02.
       for topico in risco.comandos.v1 risco.resultados.v1; do
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
           --topic "$$topico" --partitions 3 --replication-factor 1 \
-          --config retention.ms=604800000 --config retention.bytes=67108864
+          --config retention.ms=604800000 --config retention.bytes=-1
+        /opt/kafka/bin/kafka-configs.sh --bootstrap-server kafka:9092 --alter \
+          --entity-type topics --entity-name "$$topico" \
+          --add-config retention.ms=604800000,retention.bytes=-1
       done
       # RF05b: replay exige preservar o início integral da única sessão do laboratório.
       # RF08c (ADR-016): liquidacao.eventos.v1 também tem retenção integral; o alter corrige volumes antigos.

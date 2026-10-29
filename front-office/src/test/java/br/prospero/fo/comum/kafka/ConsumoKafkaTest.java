@@ -37,7 +37,7 @@ class ConsumoKafkaTest {
         consumidor.assign(List.of(P0, P1, P2));
         consumidor.updateBeginningOffsets(Map.of(P0, 0L, P1, 0L, P2, 0L));
         consumo = new ConsumoKafka(() -> consumidor, TOPICO, this::processar,
-                (topico, particao, offset, motivo) -> rejeitados.add(particao + ":" + offset + ":" + motivo),
+                m -> rejeitados.add(m.particao() + ":" + m.deslocamento() + ":" + m.motivo()),
                 new SimpleMeterRegistry());
     }
 

@@ -1,6 +1,7 @@
 package br.prospero.fo.comum.kafka;
 
 import br.prospero.fo.comum.dominio.MensagemInvalidaException;
+import br.prospero.fo.comum.dominio.MensagemQuarentena;
 import br.prospero.fo.comum.dominio.ParticaoBloqueadaException;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -11,6 +12,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 import org.jboss.logging.Logger;
 
+import java.nio.charset.StandardCharsets;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,10 +23,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
- * Laço de consumo com commit manual depois do efeito local (ADR-012). Mensagem inválida é registrada e o offset avança;
- * falha de processamento reposiciona as partições no primeiro registro não confirmado e repete com espera crescente.
- * Depois de {@link #TENTATIVAS_MAXIMAS} falhas seguidas no mesmo offset o registro é tratado como inválido, para um
- * defeito determinístico não travar a partição; se nem o registro do descarte for possível (banco fora), segue repetindo.
+ * Laço de consumo com commit manual depois do efeito local (ADR-012). Mensagem inválida vai para a quarentena com
+ * payload (ADR-019) e o offset avança; falha de processamento reposiciona as partições no primeiro registro não
+ * confirmado e repete com espera crescente. Falha transitória ({@link ClassificadorFalha}: banco ou rede fora, timeout)
+ * nunca conta tentativa nem leva à quarentena. Depois de {@link #TENTATIVAS_MAXIMAS} falhas não transitórias seguidas
+ * no mesmo offset o registro vai para a quarentena, para um defeito determinístico não travar a partição; se nem a
+ * quarentena for possível (banco fora), segue repetindo sem avançar.
  * {@link ParticaoBloqueadaException} (tipo reconhecido sem leitor) é a exceção: repete sempre e nunca descarta.
  * Cópia espelhada em middle-office (projetos Maven independentes): corrigir nos dois.
  */
@@ -40,6 +45,7 @@ public final class ConsumoKafka implements Runnable {
     private final AtomicInteger vivo = new AtomicInteger();
     private final Map<TopicPartition, Long> falhaEm = new HashMap<>();
     private final Map<TopicPartition, Integer> falhas = new HashMap<>();
+    private int transitorias;
     private volatile boolean ativo = true;
     private volatile Consumer<String, byte[]> consumidor;
 
@@ -51,7 +57,7 @@ public final class ConsumoKafka implements Runnable {
 
     @FunctionalInterface
     public interface Rejeicao {
-        void registrar(String topico, int particao, long deslocamento, String motivo);
+        void registrar(MensagemQuarentena mensagem);
     }
 
     public ConsumoKafka(Supplier<Consumer<String, byte[]>> fabrica, String topico, Processador processador,
@@ -116,6 +122,7 @@ public final class ConsumoKafka implements Runnable {
                 }
                 falhaEm.remove(particao);
                 falhas.remove(particao);
+                transitorias = 0;
                 confirmados.put(particao, new OffsetAndMetadata(registro.offset() + 1));
             }
         }
@@ -135,8 +142,9 @@ public final class ConsumoKafka implements Runnable {
                     registro.partition(), registro.offset(), bloqueio.getMessage());
             throw bloqueio;
         } catch (MensagemInvalidaException invalida) {
-            rejeitar(registro, invalida.getMessage());
+            rejeitar(registro, invalida.getMessage(), 1);
         } catch (RuntimeException falha) {
+            if (transitoria(registro, falha)) throw falha;
             int seguidas = contarFalha(particao, registro.offset());
             metricas.counter("prospero.consumo.falhas", "topico", topico).increment();
             LOG.warnf("Falha ao processar: topico=%s particao=%d offset=%d tentativa=%d erro=%s", registro.topic(),
@@ -144,15 +152,34 @@ public final class ConsumoKafka implements Runnable {
             if (seguidas < TENTATIVAS_MAXIMAS) {
                 throw falha;
             }
-            rejeitar(registro, "falha persistente: " + falha.getClass().getSimpleName());
+            rejeitar(registro, "falha persistente: " + falha.getClass().getSimpleName(), seguidas);
         }
     }
 
-    private void rejeitar(ConsumerRecord<String, byte[]> registro, String motivo) {
-        LOG.warnf("Mensagem descartada: topico=%s particao=%d offset=%d motivo=%s", registro.topic(),
+    /** Sem contar tentativa: a espera cresce com as transitórias seguidas e o offset não avança. */
+    private boolean transitoria(ConsumerRecord<String, byte[]> registro, RuntimeException falha) {
+        if (!ClassificadorFalha.transitoria(falha)) return false;
+        transitorias++;
+        metricas.counter("prospero.consumo.transitorias", "topico", topico).increment();
+        LOG.warnf("Falha transitória: topico=%s particao=%d offset=%d seguidas=%d erro=%s", registro.topic(),
+                registro.partition(), registro.offset(), transitorias, falha.getClass().getSimpleName());
+        return true;
+    }
+
+    /** Grava antes do commit do offset; se a gravação falhar, a exceção impede o avanço e o registro volta. */
+    private void rejeitar(ConsumerRecord<String, byte[]> registro, String motivo, int tentativas) {
+        rejeicao.registrar(quarentena(registro, motivo, tentativas));
+        LOG.warnf("Mensagem em quarentena: topico=%s particao=%d offset=%d motivo=%s", registro.topic(),
                 registro.partition(), registro.offset(), motivo);
-        rejeicao.registrar(registro.topic(), registro.partition(), registro.offset(), motivo);
-        metricas.counter("prospero.consumo.descartadas", "topico", topico).increment();
+        metricas.counter("prospero.consumo.quarentena", "topico", topico, "motivo", motivo).increment();
+    }
+
+    public static MensagemQuarentena quarentena(ConsumerRecord<String, byte[]> registro, String motivo, int tentativas) {
+        var cabecalho = registro.headers().lastHeader("traceparent");
+        String traceparent = cabecalho == null || cabecalho.value() == null ? null
+                : new String(cabecalho.value(), StandardCharsets.UTF_8);
+        return new MensagemQuarentena(registro.topic(), registro.partition(), registro.offset(), registro.key(),
+                traceparent, registro.value(), motivo, tentativas);
     }
 
     private int contarFalha(TopicPartition particao, long offset) {
@@ -164,7 +191,7 @@ public final class ConsumoKafka implements Runnable {
 
     /** Espera crescente pela maior sequência de falhas em curso, limitada a 30 s. */
     private void pausar(RuntimeException falha) {
-        int seguidas = falhas.values().stream().max(Integer::compare).orElse(1);
+        int seguidas = Math.max(transitorias, falhas.values().stream().max(Integer::compare).orElse(1));
         long espera = Math.min(ESPERA_MAXIMA_MS, ESPERA_INICIAL_MS << Math.min(seguidas - 1, 10));
         LOG.debugf("Consumo de %s repetirá em %d ms após %s", topico, espera, falha.getClass().getSimpleName());
         try {

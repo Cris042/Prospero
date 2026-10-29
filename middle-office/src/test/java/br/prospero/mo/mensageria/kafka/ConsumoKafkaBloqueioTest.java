@@ -27,7 +27,7 @@ class ConsumoKafkaBloqueioTest {
         var rejeitados = new ArrayList<String>();
         var consumo = new ConsumoKafka(() -> consumidor, TOPICO, registro -> {
             throw new ParticaoBloqueadaException("CANCELAMENTO_SOLICITADO_SEM_COORDENACAO");
-        }, (topico, particao, offset, motivo) -> rejeitados.add(motivo), metricas);
+        }, m -> rejeitados.add(m.motivo()), metricas);
         int tentativas = ConsumoKafka.TENTATIVAS_MAXIMAS + 5;
         for (int i = 0; i < tentativas; i++) {
             consumidor.addRecord(new ConsumerRecord<>(TOPICO, 0, 0, "CONTA-002", "x".getBytes()));
@@ -50,7 +50,7 @@ class ConsumoKafkaBloqueioTest {
         var rejeitados = new ArrayList<String>();
         var consumo = new ConsumoKafka(() -> consumidor, TOPICO, registro -> {
             throw new ParticaoBloqueadaException("CANCELAMENTO_SEM_COORDENACAO");
-        }, (topico, particao, offset, motivo) -> rejeitados.add(motivo), new SimpleMeterRegistry(), true);
+        }, m -> rejeitados.add(m.motivo()), new SimpleMeterRegistry(), true);
         for (int i = 0; i < ConsumoKafka.TENTATIVAS_MAXIMAS + 2; i++) {
             consumidor.addRecord(new ConsumerRecord<>(TOPICO, 0, 0, "ALFA3", "x".getBytes()));
             assertThrows(ParticaoBloqueadaException.class, () -> consumo.ciclo(consumidor));

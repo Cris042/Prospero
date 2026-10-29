@@ -395,7 +395,7 @@ class LiquidacaoPostgresIT {
             consumidor.addRecord(new ConsumerRecord<>(ConsumidorLiquidacao.TOPICO, 1, i, chaves.get(i), valores.get(i)));
         }
         List<String> rejeitados = new ArrayList<>();
-        var consumo = ConsumidorLiquidacao.consumo(() -> consumidor, liquidacao, (t, p, o, m) -> rejeitados.add(m),
+        var consumo = ConsumidorLiquidacao.consumo(() -> consumidor, liquidacao, m -> rejeitados.add(m.motivo()),
                 new SimpleMeterRegistry());
         CicloConsumo.ciclo(consumo, consumidor);
         assertEquals(6, consumidor.committed(java.util.Set.of(particao)).get(particao).offset());

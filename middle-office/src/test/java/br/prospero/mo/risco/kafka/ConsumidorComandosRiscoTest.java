@@ -40,7 +40,7 @@ class ConsumidorComandosRiscoTest {
             }
         };
         var telemetria = OpenTelemetry.noop();
-        return new ConsumidorComandosRisco(avaliar, solicitar, (t, p, d, m) -> { }, null, telemetria,
+        return new ConsumidorComandosRisco(avaliar, solicitar, null, null, telemetria,
                 new SimpleMeterRegistry(), false);
     }
 

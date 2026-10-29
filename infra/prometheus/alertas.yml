@@ -95,14 +95,32 @@ groups:
       description: 'Janela de 5 min, pelo menos 100 comandos, persistência de 2 min. Timer de núcleo/serialização sem I/O; aproximação por buckets e diagnóstico, não ensaio controlado RNF04.'
   - alert: ProsperoRiscoConsumoBloqueadoOuDescartado
     expr: >-
-      sum by (servico, topico) (increase({job="prospero",__name__=~"prospero_consumo_(bloqueadas|descartadas)_total",topico=~"risco\\..*"}[5m])) > 0
+      sum by (servico, topico) (increase({job="prospero",__name__=~"prospero_consumo_(bloqueadas|descartadas|quarentena)_total",topico=~"risco\\..*"}[5m])) > 0
       or (sum by (servico, topico) (
-        ({job="prospero",__name__=~"prospero_consumo_(bloqueadas|descartadas)_total",topico=~"risco\\..*"} > 0)
+        ({job="prospero",__name__=~"prospero_consumo_(bloqueadas|descartadas|quarentena)_total",topico=~"risco\\..*"} > 0)
         unless on(__name__,job,servico,instance,exported_servico,topico,motivo)
-        {job="prospero",__name__=~"prospero_consumo_(bloqueadas|descartadas)_total",topico=~"risco\\..*"} offset 5m
+        {job="prospero",__name__=~"prospero_consumo_(bloqueadas|descartadas|quarentena)_total",topico=~"risco\\..*"} offset 5m
       ) > 0)
     labels:
       severity: warning
     annotations:
       summary: 'Bloqueio ou descarte em {{ $labels.topico }} ({{ $labels.servico }})'
-      description: 'Incremento em 5min, ou contador positivo sem amostra no offset de 5 min, em bloqueadas (tipo reconhecido sem leitor: o offset não avança e o motivo está no rótulo) ou descartadas (mensagem inválida confirmada sem efeito; retenção de risco.* é de 7 dias). Fim do alerta não comprova recuperação: conferir logs, a tabela de eventos rejeitados e a versão implantada, sem limpar marcadores nem reenviar à mão.'
+      description: 'Incremento em 5min, ou contador positivo sem amostra no offset de 5 min, em bloqueadas (tipo reconhecido sem leitor: o offset não avança e o motivo está no rótulo) ou quarentena (erro permanente, mensagem guardada com payload; descartadas é o nome anterior à V02). Fim do alerta não comprova recuperação: conferir logs, GET /api/v1/quarentena e a versão implantada, sem reenviar à mão.'
+  - alert: ProsperoQuarentenaPendente
+    expr: sum by (servico, topico) (prospero_quarentena_pendentes{job="prospero"}) > 0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Mensagens em quarentena em {{ $labels.topico }} ({{ $labels.servico }})'
+      description: 'Quarentena não vazia por 1 min (ADR-019). Corrigir a causa e usar POST /api/v1/quarentena/{id}/reprocessamento, ou descarte explícito; retenção de 30 dias. Gauge medido pelo relay a cada 5 s; prospero_quarentena_idade_segundos mostra a mais antiga.'
+  - alert: ProsperoOrdemParadaRecebida
+    expr: >-
+      (max by (servico) (prospero_ordens_recebidas_idade_segundos{job="prospero"}) > 120)
+      and on(servico) (max by (servico) (prospero_ordens_recebidas{job="prospero"}) > 0)
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: 'Ordem parada em RECEBIDA há mais de 2 min ({{ $labels.servico }})'
+      description: 'O resultado de risco não chegou: conferir quarentena, prontidão do MO e consumidor front-office-risco. Timeout não autoriza liberar reserva nem rejeitar a ordem (ADR-012).'
