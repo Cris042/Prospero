@@ -277,10 +277,13 @@ public class ProcessadorMatching implements HealthCheck {
         p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName()); return p;
     }
 
-    private Properties produtorConfig() {
+    Properties produtorConfig() {
         Properties p = new Properties(); p.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, servidores);
         p.put(ProducerConfig.CLIENT_ID_CONFIG, "matching-eventos"); p.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true");
         p.put(ProducerConfig.ACKS_CONFIG, "all"); p.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "5000");
+        // V02-6 (RNF04): kafka-clients 4.x espera 5 ms por padrão para formar lote; aqui cada evento é esperado antes
+        // do checkpoint, então o lote só atrasa. FO e MO já usam 0.
+        p.put(ProducerConfig.LINGER_MS_CONFIG, "0");
         p.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "5000"); p.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, "10000");
         p.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         p.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName()); return p;
