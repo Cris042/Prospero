@@ -125,10 +125,40 @@ rodar_workbook cancelamento risco
 # B2 depois de cotação/matching: TunelAntesDoPrimeiroNegocio exige ALFA3 sem negócio na sessão.
 # B2: duas execuções de ORDEM_AGRESSOR (a segunda com o MO parado e religado), reconciliação e conferência financeira.
 # Mesmos privados e controlador do smoke de leituras; relatório público só com contagens.
+# B3: papel de leitura do PostgreSQL (pg_monitor, sem superusuário) e snapshots de telemetria antes/depois de cada
+# cenário; a ausência de uma fonte vira `indisponivel`, nunca zero (scripts/telemetria_carga.py).
+python3 scripts/telemetria_carga.py preparar --projeto "$project"
+snapshot_carga() {
+  # Orçamento próprio (120 s, com KILL após 15 s) para não travar a CI; o estouro vira mensagem explícita.
+  local status=0
+  timeout --kill-after=15s 120s python3 scripts/telemetria_carga.py snapshot --projeto "$project" \
+    --origem-bo "$bo_origem" --rotulo "$1" > ".ci-evidencias/telemetria-$1.json" || status=$?
+  if (( status == 124 || status == 137 )); then
+    echo "Snapshot de telemetria '$1' estourou o orçamento de 120 s; evidência de telemetria não gerada." >&2
+  fi
+  return "$status"
+}
 fo_origem="http://$("${compose[@]}" port front-office 8080)"
+snapshot_carga antes-escrita
 timeout --kill-after=15s 420s python3 scripts/testar-carga-escrita.py --projeto "$project" --privados "$carga_cfg" \
   --origem "$fo_origem" > .ci-evidencias/carga-escrita.json
 cat .ci-evidencias/carga-escrita.json
+snapshot_carga depois-escrita
+# B3: cancelamento sob carga com saldo em repouso; a segunda rodada para o MO durante o pedido e o religa no fim.
+snapshot_carga antes-cancelamento
+timeout --kill-after=15s 420s python3 scripts/testar-carga-cancelamento.py --projeto "$project" \
+  --origem "$fo_origem" > .ci-evidencias/carga-cancelamento.json
+cat .ci-evidencias/carga-cancelamento.json
+snapshot_carga depois-cancelamento
+# Evidência integrada: leituras, escrita, cancelamento e telemetria de uma mesma execução, com SHA e contexto.
+python3 scripts/consolidar-evidencia-carga.py --leituras .ci-evidencias/carga-leituras.json \
+  --escrita .ci-evidencias/carga-escrita.json --cancelamento .ci-evidencias/carga-cancelamento.json \
+  --telemetria .ci-evidencias/telemetria-antes-escrita.json --telemetria .ci-evidencias/telemetria-depois-escrita.json \
+  --telemetria .ci-evidencias/telemetria-antes-cancelamento.json \
+  --telemetria .ci-evidencias/telemetria-depois-cancelamento.json \
+  --sha "${SHA_AVALIADO:?SHA avaliado ausente}" --runner ci-hospedado --run "$GITHUB_RUN_ID" \
+  --saida .ci-evidencias/carga-consolidada.json
+cat .ci-evidencias/carga-consolidada.json
 "${compose_carga[@]}" stop --timeout 8 api-carga
 "${compose_carga[@]}" rm -f api-carga
 rm -rf -- "$carga_cfg"
