@@ -9,6 +9,7 @@ import br.prospero.fo.mercado.dominio.RepositorioMercado;
 import br.prospero.fo.mercado.dominio.SnapshotMercado;
 import br.prospero.fo.mercado.dto.AtivoResponseDTO;
 import br.prospero.fo.mercado.dto.LadoResponseDTO;
+import br.prospero.fo.mercado.dto.LeituraMercado;
 import br.prospero.fo.mercado.dto.LivroResponseDTO;
 import br.prospero.fo.mercado.dto.NivelResponseDTO;
 import br.prospero.fo.mercado.helper.AgregadorLivro;
@@ -46,8 +47,12 @@ public class ConsultarMercadoActor {
         this.cotacoes = cotacoes;
     }
 
-    public List<AtivoResponseDTO> listar(UUID namespace) {
+    public LeituraMercado<List<AtivoResponseDTO>> listar(UUID namespace) {
         if (new UUID(0, 0).equals(namespace)) return cotacoes.listar();
+        return new LeituraMercado<>(listarSintetico(namespace), LeituraMercado.POSTGRES, null);
+    }
+
+    private List<AtivoResponseDTO> listarSintetico(UUID namespace) {
         Map<String, SnapshotMercado> snapshots = repositorio.snapshots(namespace).stream()
                 .collect(Collectors.toMap(SnapshotMercado::ticker, Function.identity()));
         Instant agora = Instant.now();
@@ -55,8 +60,12 @@ public class ConsultarMercadoActor {
                 .map(ativo -> resumo(ativo, snapshots.get(ativo.ticker()), agora)).toList();
     }
 
-    public LivroResponseDTO livro(UUID namespace, String ticker) {
+    public LeituraMercado<LivroResponseDTO> livro(UUID namespace, String ticker) {
         if (new UUID(0, 0).equals(namespace)) return cotacoes.livro(ticker);
+        return new LeituraMercado<>(livroSintetico(namespace, ticker), LeituraMercado.POSTGRES, null);
+    }
+
+    private LivroResponseDTO livroSintetico(UUID namespace, String ticker) {
         Ativo ativo = repositorio.buscarAtivo(ticker)
                 .orElseThrow(() -> new RegraMercadoException("ATIVO_DESCONHECIDO", "Ativo não cadastrado."));
         SnapshotMercado snapshot = repositorio.snapshot(namespace, ativo.ticker()).orElse(null);

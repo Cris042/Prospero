@@ -26,6 +26,11 @@ class ConfiguracaoKafkaTest {
                 Admin admin = Admin.create(processador.adminConfig());
                 admin.close(Duration.ZERO);
             });
+            // V02-6: sem espera de lote no produtor de eventos; acks=all e idempotência continuam.
+            var produtor = processador.produtorConfig();
+            org.junit.jupiter.api.Assertions.assertEquals("0", produtor.get("linger.ms"));
+            org.junit.jupiter.api.Assertions.assertEquals("all", produtor.get("acks"));
+            org.junit.jupiter.api.Assertions.assertEquals("true", produtor.get("enable.idempotence"));
         } finally {
             metricas.close();
         }

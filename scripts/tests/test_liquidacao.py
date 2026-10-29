@@ -51,6 +51,26 @@ class ConciliacaoTest(unittest.TestCase):
     def conciliar(self):
         return liquidacao.conciliar(self.negocios, self.lancamentos, self.antes, self.depois)
 
+    def test_recompra_que_cobre_venda_a_descoberto_libera_garantia_e_concilia_pela_custodia_efetiva(self):
+        # ADR-021: CONTA-001 tinha 30 vendidas a descoberto e 330,00 de garantia; o crédito de 100 cobre as 30.
+        self.antes["CONTA-001"] = {**carteira("CONTA-001", "8000.00", 0), "saldoDisponivel": "7670.00",
+                                   "saldoReservado": "330.00"}
+        self.antes["CONTA-001"]["custodias"][0]["descobertoExecutado"] = 30
+        self.depois["CONTA-001"] = carteira("CONTA-001", "8000.00", 70)
+        self.depois["CONTA-001"]["custodias"][0]["descobertoExecutado"] = 0
+        self.assertEqual([], self.conciliar()["diferencas"])
+
+    def test_reserva_que_cai_sem_cobertura_ou_que_sobe_continua_erro(self):
+        self.antes["CONTA-001"] = {**carteira("CONTA-001", "8000.00", 0), "saldoDisponivel": "7670.00",
+                                   "saldoReservado": "330.00"}
+        with self.assertRaises(ValueError):
+            self.conciliar()
+        self.antes["CONTA-001"] = carteira("CONTA-001", "8000.00", 0)
+        self.depois["CONTA-001"] = {**carteira("CONTA-001", "8000.00", 100), "saldoDisponivel": "7900.00",
+                                    "saldoReservado": "100.00"}
+        with self.assertRaises(ValueError):
+            self.conciliar()
+
     def test_creditos_de_caixa_e_custodia_conciliam_por_movimentos_sem_usar_saldos_absolutos(self):
         self.assertEqual([], self.conciliar()["diferencas"])
         self.antes["CONTA-002"] = carteira("CONTA-002", "9007199254740993.01", 100)

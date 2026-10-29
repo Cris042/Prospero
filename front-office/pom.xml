@@ -31,6 +31,7 @@
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-postgresql</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-flyway</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-kafka-client</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-redis-client</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-smallrye-health</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-smallrye-openapi</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-smallrye-jwt</artifactId></dependency>
@@ -48,7 +49,7 @@
         </plugin>
         <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>${compiler-plugin.version}</version><configuration><parameters>true</parameters></configuration></plugin>
         <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>${surefire-plugin.version}</version>
-            <configuration><systemPropertyVariables><java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager></systemPropertyVariables></configuration>
+            <configuration><!-- V02: heap fixo do fork; com o padrão de 1/4 do container de 1 GB da CI, os boots de @QuarkusTest acumulados estouravam ~256 MB. --><argLine>@{argLine} -Xmx448m</argLine><systemPropertyVariables><java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager></systemPropertyVariables></configuration>
         </plugin>
     </plugins></build>
 </project>

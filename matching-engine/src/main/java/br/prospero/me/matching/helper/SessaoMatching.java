@@ -27,7 +27,7 @@ public final class SessaoMatching {
         if (comando.encerramento() != null) return encerrar(comando);
         if (comando.cancelamento() != null) return cancelar(comando);
         var a = comando.admissao();
-        if (sessao != null && !sessao.equals(a.sessao())) throw new IllegalArgumentException("Uma sessão por log.");
+        if (sessao != null && !sessao.equals(a.sessao())) throw new SessaoDivergenteException(sessao, a.sessao());
         var anterior = ordens.get(a.ordem());
         if (anterior != null && !anterior.equals(comando)) throw new IllegalArgumentException("Admissão divergente.");
         // O par registra a intenção pelo Take Profit; o Stop Loss compartilha a mesma admissão.
@@ -93,7 +93,7 @@ public final class SessaoMatching {
             return persistida != null ? persistida : comando.sessao();
         }
         if (persistida != null && !persistida.equals(comando.sessao())) {
-            throw new IllegalArgumentException("Sessão do checkpoint divergente.");
+            throw new SessaoDivergenteException(persistida, comando.sessao());
         }
         return comando.sessao();
     }

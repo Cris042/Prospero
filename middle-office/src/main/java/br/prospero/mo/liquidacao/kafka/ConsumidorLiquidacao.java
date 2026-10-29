@@ -59,9 +59,9 @@ public class ConsumidorLiquidacao implements HealthCheck {
 
     /** Processador do registro: separado para os testes com eventos sintéticos e MockConsumer. */
     public static ConsumoKafka consumo(Supplier<Consumer<String, byte[]>> fabrica, AplicarLiquidacaoActor actor,
-                                       EventosRejeitados rejeitados, MeterRegistry metricas) {
+                                       ConsumoKafka.Rejeicao rejeicao, MeterRegistry metricas) {
         return new ConsumoKafka(fabrica, TOPICO, r -> actor.aplicar(new RegistroLiquidacao(r.key(), r.value(),
-                r.partition(), r.offset())), rejeitados::registrar, metricas, true);
+                r.partition(), r.offset())), rejeicao, metricas, true);
     }
 
     void iniciar(@Observes StartupEvent evento) {
@@ -69,7 +69,7 @@ public class ConsumidorLiquidacao implements HealthCheck {
             return;
         }
         registrarMetricas();
-        consumo = consumo(() -> new KafkaConsumer<>(configuracao.consumidor(GRUPO)), actor, rejeitados, metricas);
+        consumo = consumo(() -> new KafkaConsumer<>(configuracao.consumidor(GRUPO)), actor, rejeitados::registrar, metricas);
         linha = Thread.ofPlatform().name("consumidor-liquidacao-mo").daemon().start(consumo);
         agenda = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("metricas-liquidacao").daemon().factory());
         agenda.scheduleWithFixedDelay(this::atualizarMetricas, 0, 5, TimeUnit.SECONDS);

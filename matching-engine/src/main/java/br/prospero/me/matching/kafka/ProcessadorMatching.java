@@ -1,6 +1,7 @@
 package br.prospero.me.matching.kafka;
 
 import br.prospero.me.matching.helper.EnvelopeMatching;
+import br.prospero.me.matching.helper.SessaoDivergenteException;
 import br.prospero.me.matching.helper.SessaoMatching;
 import br.prospero.me.matching.jpa.CheckpointMatching;
 import io.agroal.api.AgroalDataSource;
@@ -66,6 +67,7 @@ public class ProcessadorMatching implements HealthCheck {
     private final io.micrometer.core.instrument.Timer nucleo;
     private volatile boolean parar;
     private volatile String estado = "inicializando";
+    private volatile String motivo = "";
     private volatile KafkaConsumer<String, byte[]> consumidor;
     private Thread escritor;
 
@@ -104,7 +106,7 @@ public class ProcessadorMatching implements HealthCheck {
     @Override
     public HealthCheckResponse call() {
         return HealthCheckResponse.named("matching-replay-posse").status(!habilitado || estado.equals("pronto"))
-                .withData("estado", estado).build();
+                .withData("estado", estado).withData("motivo", motivo).build();
     }
 
     private void executar() {
@@ -164,6 +166,15 @@ public class ProcessadorMatching implements HealthCheck {
         var comando = EnvelopeMatching.comando(registro.value(), registro.key());
         int destino = Utils.toPositive(Utils.murmur2(registro.key().getBytes(StandardCharsets.UTF_8))) % 3;
         if (destino != registro.partition()) throw new IllegalArgumentException("Partição da chave divergente.");
+        try {
+            return aplicar(registro, comando, execucao, sessaoAnterior);
+        } catch (SessaoDivergenteException erro) {
+            throw new IllegalStateException(erro.diagnostico(registro.partition(), registro.offset()), erro);
+        }
+    }
+
+    private LocalDate aplicar(org.apache.kafka.clients.consumer.ConsumerRecord<String, byte[]> registro,
+                              EnvelopeMatching.Comando comando, Execucao execucao, LocalDate sessaoAnterior) throws Exception {
         return new RastreioMatching(telemetry, tracer).executar(comando.traceparent(), () -> {
             LocalDate sessaoCheckpoint = SessaoMatching.sessaoDoCheckpoint(comando, sessaoAnterior);
             long inicio = System.nanoTime();
@@ -174,18 +185,18 @@ public class ProcessadorMatching implements HealthCheck {
                 // Valida posse/conexão e identidades ANTES de qualquer publicação; erro aborta o motor inteiro.
                 execucao.posse().validarPosse();
                 validarIdentidade(execucao.admin(), execucao.identidades());
-                PublicacaoMatching.publicar(resultado, evento -> {
-                    execucao.posse().validarPosse();
+                // A posse foi validada logo acima, antes do primeiro envio; avancar() a revalida antes do checkpoint.
+                PublicacaoMatching.publicarEmLote(resultado, evento -> {
                     var saida = new ProducerRecord<String, byte[]>(EnvelopeMatching.EVENTOS, registro.key(), evento);
                     if (RastreioMatching.atual() != null) {
                         saida.headers().add("traceparent", RastreioMatching.atual().getBytes(StandardCharsets.UTF_8));
                     }
-                    execucao.produtor().send(saida).get(15, TimeUnit.SECONDS);
-                    eventos.increment();
-                }, () -> {
-                    execucao.posse().validarPosse();
-                    execucao.posse().avancar(registro.partition(), checkpoint, registro.offset(), sessaoCheckpoint);
-                });
+                    var ack = execucao.produtor().send(saida);
+                    return () -> {
+                        ack.get(15, TimeUnit.SECONDS);
+                        eventos.increment();
+                    };
+                }, () -> execucao.posse().avancar(registro.partition(), checkpoint, registro.offset(), sessaoCheckpoint));
                 execucao.checkpoints().put(registro.partition(), registro.offset());
                 return sessaoCheckpoint;
             }
@@ -196,7 +207,14 @@ public class ProcessadorMatching implements HealthCheck {
     private void bloquear(Exception erro) {
         if (!parar && !estado.equals("bloqueado")) {
             estado = "bloqueado"; falhas.increment();
-            LOG.errorf("Matching bloqueado (%s); preservar logs e reiniciar para replay após corrigir a causa.", erro.getClass().getSimpleName());
+            if (erro.getCause() instanceof SessaoDivergenteException) {
+                // Mensagem montada só com datas, partição e offset: nenhum payload chega ao log.
+                motivo = erro.getMessage();
+                LOG.errorf("Matching bloqueado: %s", motivo);
+                return;
+            }
+            motivo = erro.getClass().getSimpleName();
+            LOG.errorf("Matching bloqueado (%s); preservar logs e reiniciar para replay após corrigir a causa.", motivo);
         }
     }
 
@@ -259,10 +277,13 @@ public class ProcessadorMatching implements HealthCheck {
         p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName()); return p;
     }
 
-    private Properties produtorConfig() {
+    Properties produtorConfig() {
         Properties p = new Properties(); p.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, servidores);
         p.put(ProducerConfig.CLIENT_ID_CONFIG, "matching-eventos"); p.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true");
         p.put(ProducerConfig.ACKS_CONFIG, "all"); p.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "5000");
+        // V02-6 (RNF04): kafka-clients 4.x espera 5 ms por padrão para formar lote; aqui cada evento é esperado antes
+        // do checkpoint, então o lote só atrasa. FO e MO já usam 0.
+        p.put(ProducerConfig.LINGER_MS_CONFIG, "0");
         p.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "5000"); p.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, "10000");
         p.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         p.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName()); return p;

@@ -34,6 +34,8 @@ Atribuição por salto (96 traces amostrados no Jaeger): o span do matching-engi
 
 Decisão do usuário (2026-10-27): registrar o desvio como "medido, não cumprido", com atribuição por salto, sem otimizar nesta fatia. Direção de otimização futura, a decidir pelo usuário: reduzir a espera entre publicação, consumo e persistência no entorno do ME. A [ADR-018](adrs/ADR-018-publicacao-outbox-apos-commit.md) reduziu a espera de publicação da outbox: na comparação indicativa da CI, o limite superior do p99 da boleta caiu de 447,4 ms para 67,1 ms. A medição dedicada, ainda assim, registra 223,7 ms e cauda concentrada no ME.
 
+**Atualização V02-6 (2026-10-29).** Quatro medições de 1000 amostras no protocolo acima, em projetos limpos, com os outros projetos do host ativos. A base `a0d753d` registrou p50 ≤ 39,1 ms, média de 42,4 ms e p99 ≤ 246,1 ms. Depois de `linger.ms=0` no ME, do broker Kafka com 384 MB e G1 e da publicação em lote no ME (`52464dc`), o resultado foi p50 ≤ 33,6 ms, média de 40,1 ms e p99 ≤ 246,1 ms. O span do ME caiu de 20,8 para 4,1 ms no p50, e o matching continua com p99 ≤ 0,70 ms. **RNF04 segue não cumprido** na boleta. A cauda passou do ME para paradas simultâneas de FO, MO e BO com o host em pressão de memória e IO. Tabela, atribuição e o que falta estão no [roadmap](roadmap.md#v02-6--medições).
+
 Execuções hospedadas na CI usam 600 amostras e 30 de aquecimento, como **indicativo** (runner compartilhado de 4 CPUs e 16 GB, Docker 28.0.4). Nenhuma delas substitui a medição dedicada.
 
 ## Dependências, divergências e lacunas
@@ -47,10 +49,10 @@ Dependência declarada: a V01 depende de P06 e RF01–RF10 ([roadmap](roadmap.md
 
 Lacunas abertas:
 
-1. Saída JSON bruta da medição dedicada não está versionada. Os valores aparecem somente nesta página, no roadmap e no HLD-004.
+1. ~~Saída JSON bruta da medição dedicada não está versionada.~~ **Fechada pela V02-6 (2026-10-29):** as quatro medições de 1000 amostras (base e três mudanças) estão versionadas em [docs/medicoes](medicoes/), com a atribuição por salto; a medição de `5ceb8b9` continua só nesta página.
 2. Resultado e link da execução indicativa da CI não foram registrados no roadmap. Há run `success` de `main` em `7905dfa` ([40690304557](https://github.com/mclovin137/Prospero/actions/runs/40690304557)) e em `5ceb8b9` ([40765213108](https://github.com/mclovin137/Prospero/actions/runs/40765213108)), mas o veredito indicativo não foi extraído dos logs.
-3. Uma única execução dedicada. Não há repetição nem distribuição entre execuções.
-4. Os volumes do projeto Compose antigo `prospero` bloqueiam o replay do matching-engine (`IllegalArgumentException`) com o código atual. A causa não foi investigada. Os volumes foram preservados.
+3. Uma única execução dedicada. Não há repetição nem distribuição entre execuções. A V02-6 acrescentou quatro execuções em projetos limpos, mas com os demais projetos do host ativos; elas não são repetição da condição dedicada da V01.
+4. ~~Os volumes do projeto Compose antigo `prospero` bloqueiam o replay do matching-engine (`IllegalArgumentException`) com o código atual.~~ **Reclassificada pela V02-1 (2026-10-28):** não é regressão. O log antigo mistura admissões de 2026-10-24 e 2026-10-25 na partição 0 (checkpoint no offset 6), o que viola a regra de uma sessão por log do ADR-013. Agora o replay para com diagnóstico explícito, teste de regressão e procedimento documentado no [HLD-004](hlds/HLD-004-matching-engine.md#replay-bloqueado-por-sessão-divergente). Abrir a sessão seguinte no mesmo log continua como evolução pendente de decisão do usuário. Os volumes seguem preservados.
 5. Custo de CPU e de banco de dados em repouso não tem fonte medida (ver a análise do [ADR-018](adrs/ADR-018-publicacao-outbox-apos-commit.md)).
 6. GIF do fluxo não foi gravado. O roteiro abaixo serve de base.
 

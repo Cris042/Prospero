@@ -82,6 +82,7 @@ public class CarteiraActor {
         return new CarteiraResponseDTO(c.conta(), c.total().toPlainString(), c.disponivel().toPlainString(),
                 c.reservado().toPlainString(), c.custodias().stream().map(x ->
                         new CarteiraResponseDTO.CustodiaResponseDTO(x.ticker(), x.total(), x.disponivel(),
-                                x.reservado())).toList());
+                                x.reservado(), x.descobertoReservado(), x.descobertoExecutado())).toList(),
+                c.exposicaoVendida().toPlainString(), c.limiteVendido().toPlainString());
     }
 }

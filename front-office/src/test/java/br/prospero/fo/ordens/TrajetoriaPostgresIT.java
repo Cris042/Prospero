@@ -236,7 +236,7 @@ class TrajetoriaPostgresIT {
     void quarentenaDeclaraIndisponibilidadeSemExporPayload() {
         UUID ordem = criar();
         long id = QuarkusTransaction.requiringNew().call(() -> ((Number) em.createNativeQuery("""
-                INSERT INTO evento_rejeitado(topico,particao,deslocamento,motivo,recebido_em)
+                INSERT INTO mensagem_quarentena(topico,particao,deslocamento,motivo,quarentenado_em)
                 VALUES('acompanhamento.eventos.v1',0,987,'INCONSISTENTE',now()) RETURNING id
                 """).getSingleResult()).longValue());
         try {
@@ -244,7 +244,7 @@ class TrajetoriaPostgresIT {
                     .get("/api/v1/ordens/" + ordem + "/trajetoria").then()
                     .statusCode(503).contentType("application/problem+json");
         } finally {
-            QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("DELETE FROM evento_rejeitado WHERE id=:i")
+            QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("DELETE FROM mensagem_quarentena WHERE id=:i")
                     .setParameter("i", id).executeUpdate());
         }
         assertTrue(trajetoria.consultar("CONTA-002", ordem, 0, 20).isPresent());

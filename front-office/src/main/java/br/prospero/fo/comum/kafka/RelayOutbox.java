@@ -1,6 +1,8 @@
 package br.prospero.fo.comum.kafka;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.MultiGauge;
+import io.micrometer.core.instrument.Tags;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
@@ -12,6 +14,8 @@ import jakarta.persistence.EntityManager;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -24,6 +28,8 @@ public class RelayOutbox {
     private final MeterRegistry metricas;
     private final boolean habilitada;
     private final AtomicLong pendentes = new AtomicLong();
+    private final AtomicLong idadeQuarentena = new AtomicLong();
+    private MultiGauge quarentena;
     private KafkaProducer<String, byte[]> produtor;
     private volatile AgendadorOutbox agendador;
     @ConfigProperty(name = "prospero.outbox.urgencia.habilitada", defaultValue = "true")
@@ -43,6 +49,9 @@ public class RelayOutbox {
         em = ems.get();
         produtor = new KafkaProducer<>(configuracao.produtor());
         metricas.gauge("prospero.outbox.pendentes", pendentes);
+        quarentena = MultiGauge.builder("prospero.quarentena.pendentes")
+                .description("Mensagens em quarentena aguardando reprocessamento ou descarte").register(metricas);
+        metricas.gauge("prospero.quarentena.idade.segundos", idadeQuarentena);
         PublicadorOutbox publicador = new PublicadorOutbox(em, produtor, metricas);
         var agenda = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("relay-outbox").daemon().factory());
         var novo = new AgendadorOutbox(agenda, System::nanoTime,
@@ -72,8 +81,28 @@ public class RelayOutbox {
         em.createNativeQuery("""
                 DELETE FROM outbox WHERE id IN (SELECT id FROM outbox
                 WHERE publicado_em < now() - INTERVAL '1 day' LIMIT 500)""").executeUpdate();
+        // Retenção da quarentena (ADR-019): 30 dias depois de resolvida. Pendente nunca é apagada: é a única cópia do
+        // payload quando o tópico de origem já expirou, e o alerta continua ativo até alguém decidir.
         em.createNativeQuery("""
-                DELETE FROM evento_rejeitado WHERE id IN (SELECT id FROM evento_rejeitado
-                WHERE recebido_em < now() - INTERVAL '7 days' LIMIT 500)""").executeUpdate();
+                DELETE FROM mensagem_quarentena WHERE id IN (SELECT id FROM mensagem_quarentena
+                WHERE resolvido_em < now() - INTERVAL '30 days' LIMIT 500)""").executeUpdate();
+        medirQuarentena();
+    }
+
+    /** Pendentes por tópico e motivo e idade da mais antiga; linhas somem do gauge quando a quarentena esvazia. */
+    private void medirQuarentena() {
+        List<?> linhas = em.createNativeQuery("""
+                SELECT topico, motivo, count(*), EXTRACT(EPOCH FROM now() - min(quarentenado_em))
+                FROM mensagem_quarentena WHERE resolvido_em IS NULL GROUP BY topico, motivo""").getResultList();
+        List<MultiGauge.Row<?>> pendentesPorMotivo = new ArrayList<>();
+        double idade = 0;
+        for (Object linha : linhas) {
+            Object[] l = (Object[]) linha;
+            pendentesPorMotivo.add(MultiGauge.Row.of(Tags.of("topico", (String) l[0], "motivo", (String) l[1]),
+                    ((Number) l[2]).doubleValue()));
+            idade = Math.max(idade, ((Number) l[3]).doubleValue());
+        }
+        quarentena.register(pendentesPorMotivo, true);
+        idadeQuarentena.set(Math.round(idade));
     }
 }

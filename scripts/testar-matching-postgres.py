@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executa os ITs de matching em schemas próprios dos bancos efêmeros de uma execução CI."""
+"""Executa os ITs de matching em schemas próprios dos bancos efêmeros de uma execução CI, e o IT do Redis de cotações."""
 import argparse
 import importlib.util
 import os
@@ -47,6 +47,10 @@ def main():
         ("middle-office", "MO", "mo", "EncerramentoSessaoQaPostgresIT"),
         ("middle-office", "MO", "mo", "LiquidacaoPostgresIT"),
         ("middle-office", "MO", "mo", "ContaMedicaoPostgresIT"),
+        ("middle-office", "MO", "mo", "QuarentenaPostgresIT"),
+        ("middle-office", "MO", "mo", "QuarentenaMigracaoPostgresIT"),
+        ("middle-office", "MO", "mo", "LimitePosicaoPostgresIT"),
+        ("middle-office", "MO", "mo", "VendaDescobertoPostgresIT"),
         ("front-office", "FO", "fo", "AvisoOutboxPostgresIT"),
         ("front-office", "FO", "fo", "PublicadorOutboxPostgresIT"),
         ("front-office", "FO", "fo", "TrajetoriaPostgresIT"),
@@ -57,6 +61,8 @@ def main():
         ("front-office", "FO", "fo", "CancelamentoManualPostgresIT"),
         ("front-office", "FO", "fo", "CancelamentoOperacaoPostgresIT"),
         ("front-office", "FO", "fo", "ContaMedicaoPostgresIT"),
+        ("front-office", "FO", "fo", "QuarentenaPostgresIT"),
+        ("front-office", "FO", "fo", "QuarentenaMigracaoPostgresIT"),
     ]:
         # Nome de variável em --env: o segredo viaja só no ambiente, sem entrar no argumento/log.
         temporario = "matching_it_" + uuid.uuid4().hex
@@ -91,6 +97,17 @@ def main():
             subprocess.run(comando, env=contexto, check=True)
         finally:
             subprocess.run(psql + [f"DROP DATABASE {temporario} WITH (FORCE)"], check=True)
+    # ADR-022: o mesmo IT opt-in contra o Redis real do projeto efêmero; a senha viaja só no ambiente.
+    contexto = {**os.environ, "REDIS_TEST_URL": "redis://redis:6379", "REDIS_TEST_PASSWORD": credenciais["REDIS_PASSWORD"]}
+    print("Redis real: front-office/CacheCotacaoRedisIT.", flush=True)
+    subprocess.run([
+        "docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "--memory=1g", "--cpus=2",
+        "--network", f"{args.projeto}_cotacoes", "-e", "REDIS_TEST_URL", "-e", "REDIS_TEST_PASSWORD",
+        "-e", "MAVEN_USER_HOME=/maven",
+        "-e", "MAVEN_OPTS=-Xmx384m -XX:ActiveProcessorCount=2 -Duser.home=/tmp/prospero -Dmaven.repo.local=/maven/repository",
+        "-v", f"{raiz}:/workspace", "-v", f"{cache}:/maven", "-w", "/workspace/front-office",
+        "eclipse-temurin:26.0.2.1_1-jdk-noble", "sh", "./mvnw", "-B", "-ntp", "-o", "-Dtest=CacheCotacaoRedisIT", "test",
+    ], env=contexto, check=True)
 
 
 if __name__ == "__main__":

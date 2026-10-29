@@ -165,6 +165,57 @@ class AvaliarRiscoActorTest {
     }
 
     /** Mesma semântica do UPDATE condicional: suficiência e mutação juntas. */
+    @Test
+    void compraQuePassariaOLimiteDePosicaoERejeitadaSemTocarNoCaixa() {
+        repositorio.limitePosicao.put("CONTA-002|ALFA3", 1015L);
+        assertEquals(ResultadoRisco.RESERVADA, actor.avaliar(compra("CONTA-002", 5, "10.00"), null).decisao().resultado());
+        assertEquals(5L, repositorio.compraAberta.get("CONTA-002|ALFA3"));
+        var semCaixa = actor.avaliar(compra("CONTA-002", 6, "10.00"), null).decisao();
+        assertEquals(MotivoRejeicao.SALDO_INSUFICIENTE, semCaixa.motivo(), "1011 cabe no limite; faltam R$ 10");
+        assertEquals(5L, repositorio.compraAberta.get("CONTA-002|ALFA3"), "rejeição por saldo devolve a posição");
+        repositorio.disponivel.put("CONTA-002", new BigDecimal("1000.00"));
+        var acima = actor.avaliar(compra("CONTA-002", 11, "10.00"), null).decisao();
+        assertEquals(MotivoRejeicao.LIMITE_POSICAO_EXCEDIDO, acima.motivo(), "1000 + 5 + 11 = 1016 > 1015");
+        assertEquals(new BigDecimal("1000.00"), repositorio.disponivel.get("CONTA-002"), "limite vem antes do caixa");
+        assertEquals(ResultadoRisco.RESERVADA, actor.avaliar(compra("CONTA-002", 10, "10.00"), null).decisao().resultado(),
+                "1000 + 5 + 10 = 1015: limite inclusivo");
+        assertTrue(outbox.stream().anyMatch(m -> m.topico().equals("risco.resultados.v1")
+                && m.payload().contains("\"motivo\":\"LIMITE_POSICAO_EXCEDIDO\"")), "motivo novo vai ao FO");
+    }
+
+    @Test
+    void vendaAlemDaCustodiaReservaDescobertoComGarantiaDentroDoLimiteDeExposicao() {
+        repositorio.limiteVendido.put("CONTA-002", new BigDecimal("200.00"));
+        repositorio.disponivel.put("CONTA-002", new BigDecimal("1000.00"));
+        var dentro = venda(1010);
+        var decisao = actor.avaliar(dentro, null).decisao();
+        assertEquals(ResultadoRisco.RESERVADA, decisao.resultado());
+        assertEquals(1010L, decisao.quantidadeReservada(), "a decisão reserva a venda inteira");
+        var descoberto = repositorio.descobertos.get(dentro.intencao());
+        assertEquals(10L, descoberto.descoberta(), "1000 cobertas pela custódia, 10 a descoberto");
+        assertEquals(new BigDecimal("110.00"), descoberto.garantia(), "10 × ⌊10,00 × 1,10⌋ = 110,00 de garantia");
+        assertEquals(new BigDecimal("890.00"), repositorio.disponivel.get("CONTA-002"));
+        assertEquals(new BigDecimal("100.00"), repositorio.exposicao.get("CONTA-002"), "10 × referência 10,00");
+
+        var fora = actor.avaliar(venda(11), null).decisao();
+        assertEquals(MotivoRejeicao.EXPOSICAO_VENDIDA_EXCEDIDA, fora.motivo(), "100 + 11 × 10 = 210 > 200");
+        assertEquals(new BigDecimal("890.00"), repositorio.disponivel.get("CONTA-002"), "recusa não reserva garantia");
+        assertTrue(outbox.stream().anyMatch(m -> m.payload().contains("\"motivo\":\"EXPOSICAO_VENDIDA_EXCEDIDA\"")));
+
+        repositorio.disponivel.put("CONTA-002", new BigDecimal("50.00"));
+        assertEquals(MotivoRejeicao.SALDO_INSUFICIENTE, actor.avaliar(venda(5), null).decisao().motivo(),
+                "garantia de 55,00 não cabe em 50,00");
+        assertEquals(new BigDecimal("100.00"), repositorio.exposicao.get("CONTA-002"), "recusa devolve a exposição");
+        assertEquals(10L, repositorio.descobertoReservado.get("CONTA-002|ALFA3"), "recusa devolve o descoberto");
+    }
+
+    @Test
+    void contaSemLimiteDeExposicaoContinuaSemVendaADescoberto() {
+        var decisao = actor.avaliar(venda(1001), null).decisao();
+        assertEquals(MotivoRejeicao.CUSTODIA_INSUFICIENTE, decisao.motivo());
+        assertTrue(repositorio.descobertos.isEmpty());
+    }
+
     static class Memoria implements RepositorioRisco {
         @Override public void bloquearConta(String conta) { }
         final Map<UUID, ComandoRisco> admissoes = new HashMap<>();
@@ -219,14 +270,83 @@ class AvaliarRiscoActorTest {
             return true;
         }
 
+        final Map<String, Long> limitePosicao = new HashMap<>();
+        final Map<String, Long> compraAberta = new HashMap<>();
+
         @Override
-        public boolean reservarCustodia(String conta, String ticker, long quantidade) {
-            long atual = custodia.getOrDefault(conta + "|" + ticker, 0L);
-            if (atual < quantidade) {
+        public synchronized boolean reservarPosicaoCompra(String conta, String ticker, long quantidade) {
+            String chave = conta + "|" + ticker;
+            long total = custodiaTotal.getOrDefault(chave, custodia.getOrDefault(chave, 0L));
+            long aberta = compraAberta.getOrDefault(chave, 0L);
+            if (total + aberta + quantidade > limitePosicao.getOrDefault(chave, 50_000L)) {
                 return false;
             }
-            custodia.put(conta + "|" + ticker, atual - quantidade);
+            compraAberta.put(chave, aberta + quantidade);
             return true;
+        }
+
+        @Override
+        public synchronized void liberarPosicaoCompra(String conta, String ticker, long quantidade) {
+            compraAberta.merge(conta + "|" + ticker, -quantidade, Long::sum);
+        }
+
+        /** ADR-021: sem limite de exposição a conta não vende a descoberto (padrão destes testes). */
+        final Map<String, BigDecimal> limiteVendido = new HashMap<>();
+        final Map<String, BigDecimal> exposicao = new HashMap<>();
+        final Map<String, Long> descobertoReservado = new HashMap<>();
+        record Descoberto(long descoberta, BigDecimal garantia) { }
+        final Map<UUID, Descoberto> descobertos = new HashMap<>();
+        static final BigDecimal REFERENCIA_ALFA3 = new BigDecimal("10.00");
+
+        @Override
+        public synchronized boolean reservarCustodia(String conta, String ticker, long quantidade) {
+            String chave = conta + "|" + ticker;
+            long livre = custodia.getOrDefault(chave, 0L);
+            if (livre < quantidade) return false;
+            custodia.put(chave, livre - quantidade);
+            return true;
+        }
+
+        @Override
+        public boolean vendaADescobertoPermitida(String conta) {
+            return limiteVendido.getOrDefault(conta, BigDecimal.ZERO).signum() > 0;
+        }
+
+        @Override
+        public synchronized java.util.OptionalLong reservarCustodiaComDescoberto(String conta, String ticker, long quantidade) {
+            String chave = conta + "|" + ticker;
+            long livre = custodia.getOrDefault(chave, 0L);
+            long coberta = Math.min(quantidade, livre), descoberta = quantidade - coberta;
+            if (descoberta > 0 && descobertoReservado.getOrDefault(chave, 0L) + descoberta > limitePosicao.getOrDefault(chave, 50_000L)) {
+                return java.util.OptionalLong.empty();
+            }
+            custodia.put(chave, livre - coberta);
+            descobertoReservado.merge(chave, descoberta, Long::sum);
+            return java.util.OptionalLong.of(descoberta);
+        }
+
+        @Override
+        public synchronized void desfazerCustodiaVenda(String conta, String ticker, long coberta, long descoberta) {
+            custodia.merge(conta + "|" + ticker, coberta, Long::sum);
+            descobertoReservado.merge(conta + "|" + ticker, -descoberta, Long::sum);
+        }
+
+        @Override
+        public synchronized boolean reservarExposicao(String conta, String ticker, long descoberta) {
+            BigDecimal nova = exposicao.getOrDefault(conta, BigDecimal.ZERO).add(REFERENCIA_ALFA3.multiply(BigDecimal.valueOf(descoberta)));
+            if (nova.compareTo(limiteVendido.getOrDefault(conta, BigDecimal.ZERO)) > 0) return false;
+            exposicao.put(conta, nova);
+            return true;
+        }
+
+        @Override
+        public synchronized void desfazerExposicao(String conta, String ticker, long descoberta) {
+            exposicao.merge(conta, REFERENCIA_ALFA3.multiply(BigDecimal.valueOf(descoberta)).negate(), BigDecimal::add);
+        }
+
+        @Override
+        public synchronized void registrarDescoberto(UUID intencao, long descoberta, BigDecimal garantia) {
+            descobertos.put(intencao, new Descoberto(descoberta, garantia));
         }
 
         @Override

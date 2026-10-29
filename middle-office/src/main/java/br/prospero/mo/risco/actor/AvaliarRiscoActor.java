@@ -8,6 +8,7 @@ import br.prospero.mo.risco.dominio.Exigencia;
 import br.prospero.mo.risco.dominio.MotivoRejeicao;
 import br.prospero.mo.risco.dominio.ParametrosRisco;
 import br.prospero.mo.risco.dominio.RepositorioRisco;
+import br.prospero.mo.risco.helper.CalculoGarantia;
 import br.prospero.mo.risco.helper.CalculoReserva;
 import br.prospero.mo.risco.helper.EnvelopeRisco;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -16,6 +17,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -55,8 +57,12 @@ public class AvaliarRiscoActor {
             return new Avaliacao(existente.get(), true);
         }
         Instant agora = relogio.instant().truncatedTo(ChronoUnit.MICROS);
-        Decisao decisao = decidir(comando, agora);
+        Decidida decidida = decidir(comando, agora);
+        Decisao decisao = decidida.decisao();
         repositorio.registrar(decisao);
+        if (decidida.descoberta() > 0) {
+            repositorio.registrarDescoberto(decisao.intencao(), decidida.descoberta(), decidida.garantia());
+        }
         if (decisao.resultado() == br.prospero.mo.risco.dominio.ResultadoRisco.RESERVADA && comando.admissivel()) {
             repositorio.registrarAdmissao(comando, decisao);
             UUID admissao = br.prospero.mo.risco.helper.EnvelopeAdmissao.id(comando.intencao());
@@ -73,25 +79,80 @@ public class AvaliarRiscoActor {
         return new Avaliacao(decisao, false);
     }
 
-    private Decisao decidir(ComandoRisco comando, Instant agora) {
+    /**
+     * Limite de posição antes do caixa (ADR-020), ambos por UPDATE condicional na linha de controle. Sem caixa, a
+     * posição reservada é devolvida na mesma transação, então nenhuma rejeição deixa exposição presa.
+     */
+    private Decisao reservarCompra(ComandoRisco comando, Exigencia.Caixa caixa, int versao, Instant agora) {
+        long quantidade = CalculoReserva.quantidade(comando);
+        if (!repositorio.reservarPosicaoCompra(comando.conta(), comando.ticker(), quantidade)) {
+            return Decisao.rejeitada(comando, MotivoRejeicao.LIMITE_POSICAO_EXCEDIDO, versao, agora);
+        }
+        if (repositorio.reservarCaixa(comando.conta(), caixa.valor())) {
+            return Decisao.reservada(comando, caixa, versao, agora);
+        }
+        repositorio.liberarPosicaoCompra(comando.conta(), comando.ticker(), quantidade);
+        return Decisao.rejeitada(comando, MotivoRejeicao.SALDO_INSUFICIENTE, versao, agora);
+    }
+
+    /**
+     * Venda coberta, parcialmente ou totalmente a descoberto (ADR-021). Ordem: custódia e limite de posição,
+     * exposição, garantia; cada passo é UPDATE condicional e a recusa desfaz os anteriores na mesma transação.
+     */
+    private Decidida reservarVenda(ComandoRisco comando, Exigencia.Custodia custodia, ParametrosRisco parametros,
+                                   int versao, Instant agora) {
+        String conta = comando.conta(), ticker = comando.ticker();
+        long quantidade = custodia.quantidade();
+        if (!repositorio.vendaADescobertoPermitida(conta)) {
+            return new Decidida(repositorio.reservarCustodia(conta, ticker, quantidade)
+                    ? Decisao.reservada(comando, custodia, versao, agora)
+                    : Decisao.rejeitada(comando, MotivoRejeicao.CUSTODIA_INSUFICIENTE, versao, agora));
+        }
+        var parte = repositorio.reservarCustodiaComDescoberto(conta, ticker, quantidade);
+        if (parte.isEmpty()) {
+            return new Decidida(Decisao.rejeitada(comando, MotivoRejeicao.LIMITE_POSICAO_EXCEDIDO, versao, agora));
+        }
+        long descoberta = parte.getAsLong();
+        if (descoberta == 0) return new Decidida(Decisao.reservada(comando, custodia, versao, agora));
+        long coberta = quantidade - descoberta;
+        if (comando.precoBase() == null) {
+            repositorio.desfazerCustodiaVenda(conta, ticker, coberta, descoberta);
+            return new Decidida(Decisao.rejeitada(comando, MotivoRejeicao.PRECO_BASE_AUSENTE, versao, agora));
+        }
+        if (!repositorio.reservarExposicao(conta, ticker, descoberta)) {
+            repositorio.desfazerCustodiaVenda(conta, ticker, coberta, descoberta);
+            return new Decidida(Decisao.rejeitada(comando, MotivoRejeicao.EXPOSICAO_VENDIDA_EXCEDIDA, versao, agora));
+        }
+        BigDecimal garantia = CalculoGarantia.garantia(CalculoReserva.teto(comando.precoBase(), parametros), descoberta);
+        if (!repositorio.reservarCaixa(conta, garantia)) {
+            repositorio.desfazerExposicao(conta, ticker, descoberta);
+            repositorio.desfazerCustodiaVenda(conta, ticker, coberta, descoberta);
+            return new Decidida(Decisao.rejeitada(comando, MotivoRejeicao.SALDO_INSUFICIENTE, versao, agora));
+        }
+        return new Decidida(Decisao.reservada(comando, custodia, versao, agora), descoberta, garantia);
+    }
+
+    /** Decisão e, na venda, a parte a descoberto a gravar junto da reserva (ADR-021). */
+    private record Decidida(Decisao decisao, long descoberta, BigDecimal garantia) {
+        Decidida(Decisao decisao) {
+            this(decisao, 0, null);
+        }
+    }
+
+    private Decidida decidir(ComandoRisco comando, Instant agora) {
         if (!repositorio.contaExiste(comando.conta())) {
-            return Decisao.rejeitada(comando, MotivoRejeicao.CONTA_DESCONHECIDA, null, agora);
+            return new Decidida(Decisao.rejeitada(comando, MotivoRejeicao.CONTA_DESCONHECIDA, null, agora));
         }
         Optional<ParametrosRisco> parametros = repositorio.parametros(comando.ticker());
         if (parametros.isEmpty()) {
-            return Decisao.rejeitada(comando, MotivoRejeicao.ATIVO_DESCONHECIDO, null, agora);
+            return new Decidida(Decisao.rejeitada(comando, MotivoRejeicao.ATIVO_DESCONHECIDO, null, agora));
         }
         int versao = parametros.get().versao();
         Exigencia exigencia = CalculoReserva.exigencia(comando, parametros.get());
         return switch (exigencia) {
-            case Exigencia.Recusa recusa -> Decisao.rejeitada(comando, recusa.motivo(), versao, agora);
-            case Exigencia.Caixa caixa -> repositorio.reservarCaixa(comando.conta(), caixa.valor())
-                    ? Decisao.reservada(comando, caixa, versao, agora)
-                    : Decisao.rejeitada(comando, MotivoRejeicao.SALDO_INSUFICIENTE, versao, agora);
-            case Exigencia.Custodia custodia -> repositorio.reservarCustodia(comando.conta(), comando.ticker(),
-                    custodia.quantidade())
-                    ? Decisao.reservada(comando, custodia, versao, agora)
-                    : Decisao.rejeitada(comando, MotivoRejeicao.CUSTODIA_INSUFICIENTE, versao, agora);
+            case Exigencia.Recusa recusa -> new Decidida(Decisao.rejeitada(comando, recusa.motivo(), versao, agora));
+            case Exigencia.Caixa caixa -> new Decidida(reservarCompra(comando, caixa, versao, agora));
+            case Exigencia.Custodia custodia -> reservarVenda(comando, custodia, parametros.get(), versao, agora);
         };
     }
 }

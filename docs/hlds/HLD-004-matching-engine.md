@@ -76,6 +76,23 @@ FO pode receber execução antes do resultado do risco e deve aplicar desde `REC
 
 Migrações aditivas dos serviços preservam fatos anteriores e não alteram migrações já aplicadas. Recuperação de falha exige corrigir por nova migração ou restaurar cópia privada previamente conferida; não há Undo pago nem eliminação automática de reservas. Após efeitos financeiros novos, voltar ao binário antigo não é recuperação segura. Validar upgrade com dados legados e schema novo em ambiente descartável antes de aplicar localmente.
 
+## Replay bloqueado por sessão divergente
+
+V02-1 (2026-10-28). A lacuna 4 da [V01](../v01-validacao.md) não era regressão de contrato nem de checkpoint. No volume antigo do projeto Compose `prospero`, a partição 0 de `matching.comandos.v1` tem sete admissões da sessão 2026-10-24 (checkpoint no offset 6) e duas de 2026-10-25, gravadas em 2026-10-26 às 02:03 UTC (23:03 de 2026-10-25 no horário de Brasília). A data da sessão vem do relógio da boleta. Com o ambiente aberto de um dia para o outro, o MO admitiu ordens da nova data num log ainda sem encerramento. Como vale uma sessão por log ([ADR-013](../adrs/ADR-013-matching-execucao.md)), o ME parou no offset 7 ainda com o ambiente no ar, e cada replay posterior para no mesmo ponto.
+
+Antes, a parada aparecia como `IllegalArgumentException` sem contexto. Agora `SessaoDivergenteException` carrega as duas datas, e o escritor registra partição, offset, sessões e este procedimento, no log e no campo `motivo` do health de prontidão. Payload, conta e ordem ficam de fora. O teste `ReplaySessaoDivergenteTest` reaplica os nove comandos reais do volume antigo (fixture em `src/test/resources/replay-v01/`) e falha se o diagnóstico voltar a ser genérico.
+
+Procedimento quando `/q/health/ready` mostrar `Log de matching com mais de uma sessão`:
+
+1. Não apague volumes, tópicos ou checkpoints e não use `docker compose down -v`. O log é imutável, e apagar o checkpoint reutilizaria IDs financeiros.
+2. Pare o projeto afetado com `docker compose -p <projeto> stop`. As ordens da nova data seguem em `RECEBIDA`/`RESERVADA` no FO/MO, sem negócio; as reservas não são liberadas por timeout (regra da casa).
+3. Suba um projeto Compose novo para a sessão seguinte, por exemplo `docker compose -p prospero-AAAAMMDD up -d --wait`, depois de `python3 scripts/preparar-ambiente.py`. Os volumes do projeto antigo ficam preservados para auditoria ou para a futura abertura de sessão.
+4. Para evitar a parada, encerre a sessão pela API administrativa do MO (`ENCERRAR_SESSAO`) antes da virada do dia ou troque de projeto antes de operar na data nova.
+
+Abrir a sessão seguinte no mesmo log (checkpoint e sessão por ativo, livro esvaziado após o encerramento) continua adiado por decisão do usuário (ADR-013, "Sessão seguinte"). É evolução de negócio e precisa de decisão própria.
+
+**❓ LACUNA (pergunta ao usuário):** a causa continua possível. Qualquer ambiente ligado de um dia para o outro sem encerramento volta a travar o ME, porque o FO e o MO admitem ordens com a data nova. Opções: (a) MO recusar admissão de data diferente da sessão aberta do log até o encerramento; (b) encerramento automático no fim do dia; (c) abrir sessão por ativo no mesmo log. Nenhuma foi implementada na V02-1, cujo escopo era o diagnóstico.
+
 ## Encerramento do núcleo — RF05c.1a
 
 O domínio recebe fechamento explícito por ativo e data, sem relógio nem I/O. Expira ofertas DIA vivas dos dois lados em ordem crescente da sequência de chegada, com `ORDEM_ENCERRADA{motivo=EXPIRADA_DIA,executada,cancelada}`: executada preserva negócios anteriores e cancelada corresponde somente ao saldo. Ordens já terminais não reaparecem. O fechamento marca a sessão encerrada mesmo sem ofertas ou negócios; um ativo conhecido ainda vazio também pode receber esse comando.
@@ -167,3 +184,7 @@ A comparação pareada acima foi aposentada: o #53 está integrado (urgência li
 ## Comando e eventos de cancelamento — RF10c2
 
 O adaptador aceita `CANCELAR_ORDEM` v1 do MO e despacha para `cancelarManual`. Responde com `ORDEM_ENCERRADA CANCELADA_MANUAL` (apenas em `APLICADO`) e `CANCELAMENTO_DECIDIDO`, último evento do comando, no envelope v5 do [ADR-013](../adrs/ADR-013-matching-execucao.md#catálogo-v5-e-leitores-de-cancelamento--rf10c2-2026-10-27). O id do comando é deduplicado por um mapa limitado a 30.000 entradas, reconstruído pelo replay; v1–v4 permanecem byte a byte. O MO produz o comando desde a coordenação do cancelamento ([PR #64](https://github.com/mclovin137/Prospero/pull/64)), e o FO emite a solicitação desde a API e a tela ([PR #65](https://github.com/mclovin137/Prospero/pull/65)).
+
+## Latência no entorno do ME — V02-6
+
+O produtor de eventos usa `linger.ms=0`, porque o padrão de 5 ms do kafka-clients 4.x atrasava cada evento esperado antes do checkpoint. Os eventos de um comando são despachados juntos e os acks esperados em seguida (`PublicacaoMatching.publicarEmLote`). O checkpoint continua só depois do último ack, e o produtor idempotente mantém a ordem por partição. A posse advisory é validada antes do primeiro envio e no checkpoint, não mais a cada evento. Premissas aceitas: se a posse cair no meio de um lote, uma instância sem posse pode publicar o resto do comando (antes, no máximo um evento); os IDs são determinísticos, os consumidores deduplicam e o checkpoint não avança sem posse. A ordem dentro do lote vem do produtor idempotente (`acks=all`, até cinco requisições em voo), que não deixa o evento k+1 entrar sem o k. O broker Kafka passou a usar 384 MB e G1 (antes, Full GC de 70–110 ms a cada ~20 s). Medições: span do ME de 20,8 para 4,1 ms no p50; boleta → negócio continua com p99 ≤ 246,1 ms, não cumprido. Tabela e atribuição no [roadmap](../roadmap.md#v02-6--medições); saídas brutas em [docs/medicoes](../medicoes/).

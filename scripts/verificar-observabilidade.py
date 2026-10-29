@@ -24,7 +24,9 @@ ALERTAS = {'ProsperoSemScrape', 'ProsperoProcessamentoIndisponivel',
            'ProsperoMetricaProntidaoAusente', 'ProsperoQuarentenaRecente',
            'ProsperoOutboxPendente', 'ProsperoCancelamentoPendente', 'ProsperoCreditoAguardando',
            'ProsperoBoletaNegocioP99Alto', 'ProsperoMatchingP99Alto',
-           'ProsperoRiscoConsumoBloqueadoOuDescartado'}
+           'ProsperoRiscoConsumoBloqueadoOuDescartado',
+           # V02-2 (ADR-019): quarentena pendente e ordens paradas em RECEBIDA.
+           'ProsperoQuarentenaPendente', 'ProsperoOrdemParadaRecebida'}
 
 
 class SemRedirecionamento(urllib.request.HTTPRedirectHandler):

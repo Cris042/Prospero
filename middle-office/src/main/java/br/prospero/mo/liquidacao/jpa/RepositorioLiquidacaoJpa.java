@@ -112,6 +112,41 @@ public class RepositorioLiquidacaoJpa implements RepositorioLiquidacao {
         return ((Number) em().createNativeQuery("SELECT count(*) FROM liquidacao_aguardando").getSingleResult()).longValue();
     }
 
+    /**
+     * Recompra (ADR-021): a custódia que chega no D+2 cobre primeiro a venda a descoberto executada; a parte coberta
+     * libera garantia proporcional (toda quando zera) e exposição pelo preço de referência, e só o excedente entra em
+     * total. Lock da linha antes da leitura: a garantia liberada sai do mesmo snapshot que é gravado.
+     */
+    private int creditarCustodia(String conta, String ticker, long quantidade) {
+        List<?> linhas = em().createNativeQuery("""
+                        SELECT descoberto_executado, garantia_executada FROM custodia_risco
+                        WHERE conta = :c AND ticker = :t FOR UPDATE""")
+                .setParameter("c", conta).setParameter("t", ticker).getResultList();
+        if (linhas.isEmpty()) return 0;
+        Object[] l = (Object[]) linhas.getFirst();
+        long descoberto = ((Number) l[0]).longValue();
+        BigDecimal garantia = (BigDecimal) l[1];
+        long cobre = Math.min(quantidade, descoberto);
+        BigDecimal liberada = descoberto == 0 ? BigDecimal.ZERO.setScale(2)
+                : br.prospero.mo.risco.helper.CalculoGarantia.proporcional(garantia, cobre, descoberto);
+        int n = em().createNativeQuery("""
+                        UPDATE custodia_risco SET total = total + :e, disponivel = disponivel + :e,
+                            compra_aberta = GREATEST(compra_aberta - :q, 0),
+                            descoberto_executado = descoberto_executado - :b, garantia_executada = garantia_executada - :g
+                        WHERE conta = :c AND ticker = :t""")
+                .setParameter("e", quantidade - cobre).setParameter("q", quantidade).setParameter("b", cobre)
+                .setParameter("g", liberada).setParameter("c", conta).setParameter("t", ticker).executeUpdate();
+        if (n == 1 && cobre > 0) {
+            exigir(em().createNativeQuery("""
+                    UPDATE conta_risco r SET reservado = r.reservado - :g, disponivel = r.disponivel + :g,
+                        exposicao_vendida = GREATEST(r.exposicao_vendida - CAST(:b AS bigint) * a.preco_referencia, 0)
+                    FROM ativo_risco a WHERE r.conta = :c AND a.ticker = :t AND r.reservado >= :g""")
+                    .setParameter("g", liberada).setParameter("b", cobre).setParameter("c", conta).setParameter("t", ticker)
+                    .executeUpdate() == 1, "garantia da venda a descoberto");
+        }
+        return n;
+    }
+
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public void creditar(UUID id, String assinatura, CreditoEsperado c) {
@@ -119,11 +154,7 @@ public class RepositorioLiquidacaoJpa implements RepositorioLiquidacao {
                 ? em().createNativeQuery("""
                         UPDATE conta_risco SET total = total + :v, disponivel = disponivel + :v WHERE conta = :c""")
                         .setParameter("v", c.valor()).setParameter("c", c.conta()).executeUpdate()
-                : em().createNativeQuery("""
-                        UPDATE custodia_risco SET total = total + :q, disponivel = disponivel + :q
-                        WHERE conta = :c AND ticker = :t""")
-                        .setParameter("q", c.valor().longValueExact()).setParameter("c", c.conta())
-                        .setParameter("t", c.ticker()).executeUpdate();
+                : creditarCustodia(c.conta(), c.ticker(), c.valor().longValueExact());
         exigir(n == 1, "recurso do credito ausente");
         exigir(em().createNativeQuery("""
                 UPDATE liquidacao_expectativa SET creditada_em = now() WHERE id = :i AND creditada_em IS NULL""")

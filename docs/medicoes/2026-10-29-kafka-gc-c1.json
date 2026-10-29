@@ -1,0 +1,8 @@
+{
+  "descricao": "GC do broker Kafka no projeto prospero-v02-m3 (C1), apache/kafka:4.1.0 com KAFKA_HEAP_OPTS=-Xms128m -Xmx256m; coletor serial escolhido pela JVM no container. Pausas Full (Allocation Failure) extraídas de /opt/kafka/logs/kafkaServer-gc.log ao fim da medição.",
+  "pausasFull": 14,
+  "mediaMs": 73.5,
+  "maximaMs": 107.91,
+  "intervaloTipicoS": "20 a 25",
+  "tracesLentos": "50 traces >150 ms no Jaeger: ME (ack do produtor) e consumidores FO/MO/BO (commitSync) presos ao mesmo tempo por ~205 ms"
+}

@@ -52,6 +52,7 @@ class CotacaoResourceTest {
                 .body("[0].melhorCompra", equalTo("9.99")).body("[0].melhorVenda", equalTo("10.02"))
                 .body("[0].spread", equalTo("0.03")).body("[0].defasado", equalTo(false));
         given().auth().oauth2(token("mercado:leitura")).get("/api/v1/ativos/ALFA3/livro").then().statusCode(200)
+                .header("X-Origem-Dados", "POSTGRES")
                 .body("origem", equalTo("MATCHING")).body("compra.niveis[0].quantidade", equalTo(7))
                 .body("compra.niveis[0].ofertas", equalTo(2)).body("revisao", equalTo(5))
                 .body("conta", nullValue()).body("ordem", nullValue());
