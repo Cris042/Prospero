@@ -431,6 +431,101 @@
         "w": 12,
         "h": 8
       }
+    },
+    {
+      "title": "Acerto do cache Redis de cotação (5min)",
+      "type": "timeseries",
+      "description": "Fonte: ConsultarCotacaoActor (ADR-022). Fração das leituras de ativos/livro servidas pelo Redis; o restante caiu para o PostgreSQL por ausência da chave ou Redis indisponível. Sem leituras na janela, sem dados.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(prospero_cotacao_leituras_total{job=\"prospero\",servico=\"front-office\",origem=\"REDIS\"}[5m])) / sum(rate(prospero_cotacao_leituras_total{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "acerto"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Leituras que caíram para o PostgreSQL e falhas do Redis (5min)",
+      "type": "timeseries",
+      "description": "Fonte: ConsultarCotacaoActor e CacheCotacaoRedis (ADR-022). Fallback não é erro: a resposta continua, com X-Origem-Dados=POSTGRES. Falha abre pausa de 5 s sem tentar o Redis.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(prospero_cotacao_leituras_total{job=\"prospero\",servico=\"front-office\",origem=\"POSTGRES\"}[5m]))",
+          "legendFormat": "leituras do PostgreSQL"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (operacao) (increase(prospero_cotacao_redis_falhas_total{job=\"prospero\",servico=\"front-office\"}[5m]))",
+          "legendFormat": "falhas {{operacao}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      }
     }
   ]
 }

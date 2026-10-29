@@ -1,0 +1,8 @@
+{
+  "descricao": "ADR-022: GET com o postgres-front-office parado (docker compose stop), projeto prospero-v02, após leituras que preencheram o cache. Respostas observadas com curl na mesma janela.",
+  "medidoEm": "2026-10-29",
+  "redisDesligado": {"/api/v1/ativos": 500, "/api/v1/ativos/ALFA3/livro": 500, "/api/v1/ativos/BETA3/livro": 500},
+  "redisLigado": {"/api/v1/ativos": {"status": 200, "tempoS": 0.008660},
+                  "/api/v1/ativos/ALFA3/livro": {"status": 200, "tempoS": 0.004571},
+                  "/api/v1/ativos/BETA3/livro": {"status": 200, "tempoS": 0.004309}}
+}

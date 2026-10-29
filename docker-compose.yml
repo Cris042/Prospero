@@ -46,6 +46,10 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       PROSPERO_OUTBOX_URGENCIA: ${PROSPERO_OUTBOX_URGENCIA:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      # ADR-022: cópia AP das cotações; sem Redis o FO continua lendo do PostgreSQL.
+      FO_REDIS_HABILITADO: ${FO_REDIS_HABILITADO:-true}
+      REDIS_URL: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
     depends_on:
       postgres-front-office:
         condition: service_healthy
@@ -414,16 +418,18 @@ services:
       options:
         max-size: 5m
         max-file: '2'
+  # ADR-022: snapshots de cotação do FO (AP). A senha vem do .env e entra pela entrada padrão, fora da linha de
+  # comando do processo; chaves expiram em 1 h e o LRU descarta o excesso dentro de 48 MB.
   redis:
     image: redis:8.2.2-alpine
+    entrypoint:
+    - /bin/sh
+    - -ec
     command:
-    - redis-server
-    - --appendonly
-    - 'yes'
-    - --maxmemory
-    - 48mb
-    - --maxmemory-policy
-    - allkeys-lru
+    - printf 'requirepass %s\n' "$$REDIS_PASSWORD" | redis-server - --appendonly yes --maxmemory 48mb --maxmemory-policy allkeys-lru
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Execute python3 scripts/preparar-ambiente.py}
     volumes:
     - redis-dados:/data
     networks:

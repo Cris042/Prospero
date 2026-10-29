@@ -12,7 +12,8 @@ import time
 
 root = Path(__file__).resolve().parents[1]
 path = root / ".env"
-SENHAS = ["FO_DB_PASSWORD", "MO_DB_PASSWORD", "ME_DB_PASSWORD", "BO_DB_PASSWORD", "GRAFANA_ADMIN_PASSWORD"]
+SENHAS = ["FO_DB_PASSWORD", "MO_DB_PASSWORD", "ME_DB_PASSWORD", "BO_DB_PASSWORD", "GRAFANA_ADMIN_PASSWORD",
+          "REDIS_PASSWORD"]
 # Tokens injetados pelo proxy Nginx; o navegador nunca recebe a credencial.
 VALIDADE_LEITURA = 365 * 24 * 3600
 # Escrita (RF02c, ADR-010): validade curta, regenerada quando faltar menos de um dia.

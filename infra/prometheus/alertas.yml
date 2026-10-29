@@ -116,8 +116,8 @@ groups:
       description: 'Quarentena não vazia por 1 min (ADR-019). Corrigir a causa e usar POST /api/v1/quarentena/{id}/reprocessamento, ou descarte explícito; retenção de 30 dias. Gauge medido pelo relay a cada 5 s; prospero_quarentena_idade_segundos mostra a mais antiga.'
   - alert: ProsperoOrdemParadaRecebida
     expr: >-
-      (max by (servico) (prospero_ordens_recebidas_idade_segundos{job="prospero"}) > 120)
-      and on(servico) (max by (servico) (prospero_ordens_recebidas{job="prospero"}) > 0)
+      (max by (servico) (prospero_ordens_aguardando_risco_idade_segundos{job="prospero"}) > 120)
+      and on(servico) (max by (servico) (prospero_ordens_aguardando_risco{job="prospero"}) > 0)
     for: 1m
     labels:
       severity: warning

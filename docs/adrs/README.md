@@ -25,6 +25,7 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-019](ADR-019-quarentena-mensagens.md) | Quarentena de mensagens Kafka com payload e reprocessamento no lugar do descarte (V02-2); emenda o ADR-012 | Proposta técnica implementada; sem aceite novo atribuído |
 | [ADR-020](ADR-020-limite-posicao.md) | Limite de posição por conta e ativo no MO (V02-3, RF04) | Proposta implementada com o valor sugerido; sem aceite novo atribuído |
 | [ADR-021](ADR-021-venda-descoberto.md) | Venda a descoberto simulada com limite de exposição e garantia (V02-4); substitui o "sem short" do ADR-012 | **Proposta pendente de confirmação do usuário** antes do merge |
+| [ADR-022](ADR-022-redis-cotacoes.md) | Redis como cópia AP das cotações (leitura) e PostgreSQL CP para a base do túnel (V02-5) | Proposta técnica implementada, com medição; sem aceite novo atribuído |
 
 ## Relação com a proposta original
 

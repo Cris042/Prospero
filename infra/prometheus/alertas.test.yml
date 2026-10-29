@@ -1097,9 +1097,9 @@ tests:
 - name: 'ordens: RECEBIDA há mais de 2 min dispara; fila vazia ou idade curta não'
   interval: 15s
   input_series:
-  - series: prospero_ordens_recebidas{job="prospero",instance="alvo:8080",servico="front-office"}
+  - series: prospero_ordens_aguardando_risco{job="prospero",instance="alvo:8080",servico="front-office"}
     values: 1x30 0x20
-  - series: prospero_ordens_recebidas_idade_segundos{job="prospero",instance="alvo:8080",servico="front-office"}
+  - series: prospero_ordens_aguardando_risco_idade_segundos{job="prospero",instance="alvo:8080",servico="front-office"}
     values: 30+15x30 0x20
   promql_expr_test:
   - expr: count(ALERTS{alertname="ProsperoOrdemParadaRecebida",alertstate="firing"}) or vector(0)

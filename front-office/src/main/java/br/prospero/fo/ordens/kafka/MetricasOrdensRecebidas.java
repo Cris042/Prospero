@@ -41,8 +41,8 @@ public class MetricasOrdensRecebidas {
 
     void iniciar(@Observes StartupEvent evento) {
         if (!habilitada) return;
-        metricas.gauge("prospero.ordens.recebidas", recebidas);
-        metricas.gauge("prospero.ordens.recebidas.idade.segundos", idade);
+        metricas.gauge("prospero.ordens.aguardando_risco", recebidas);
+        metricas.gauge("prospero.ordens.aguardando_risco.idade.segundos", idade);
         EntityManager em = ems.get();
         agenda = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("metricas-recebidas").daemon().factory());
         agenda.scheduleWithFixedDelay(() -> medir(em), 5, 5, TimeUnit.SECONDS);
