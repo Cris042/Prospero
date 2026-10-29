@@ -5,8 +5,6 @@ import br.prospero.fo.cotacao.dominio.LivroCotado;
 import br.prospero.fo.cotacao.dominio.NivelCotado;
 import br.prospero.fo.cotacao.dominio.SessaoCotacao;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.QuarkusTestProfile;
-import io.quarkus.test.junit.TestProfile;
 import io.smallrye.jwt.build.Jwt;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterEach;
@@ -17,22 +15,15 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
 /** ADR-022: Redis habilitado mas fora do ar; ativos e livro respondem do PostgreSQL e dizem a origem. */
 @QuarkusTest
-@TestProfile(CotacaoRedisForaTest.RedisFora.class)
 class CotacaoRedisForaTest {
-    public static class RedisFora implements QuarkusTestProfile {
-        @Override
-        public Map<String, String> getConfigOverrides() {
-            // Porta 1: conexão recusada imediatamente, como um Redis parado.
-            return Map.of("prospero.cotacao.redis.habilitado", "true", "quarkus.redis.hosts", "redis://127.0.0.1:1");
-        }
-    }
+    // O perfil %test habilita o Redis na porta 1: conexão recusada imediatamente, como um Redis parado. Sem perfil
+    // próprio, para não somar outro boot do Quarkus ao fork (o heap da CI é de ~256 MB).
 
     @Inject RepositorioCotacaoMemoria cotacoes;
 
