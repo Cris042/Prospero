@@ -6,6 +6,7 @@ import br.prospero.mo.risco.dominio.Lado;
 import br.prospero.mo.risco.dominio.MotivoRejeicao;
 import br.prospero.mo.risco.dominio.ParametrosRisco;
 import br.prospero.mo.risco.dominio.RepositorioRisco;
+import br.prospero.mo.risco.dominio.ReservaVenda;
 import br.prospero.mo.risco.dominio.ResultadoRisco;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -83,12 +84,116 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
 
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
-    public boolean reservarCustodia(String conta, String ticker, long quantidade) {
+    public boolean reservarPosicaoCompra(String conta, String ticker, long quantidade) {
+        // Limite e mutação no mesmo comando, como o caixa: duas compras concorrentes não passam juntas do limite.
+        return em.createNativeQuery("""
+                        UPDATE custodia_risco c SET compra_aberta = c.compra_aberta + :q
+                        FROM ativo_risco a
+                        WHERE c.conta = :c AND c.ticker = :t AND a.ticker = c.ticker
+                          AND c.total + c.compra_aberta + :q <= COALESCE(c.limite_posicao, a.limite_posicao)""")
+                .setParameter("q", quantidade).setParameter("c", conta).setParameter("t", ticker)
+                .executeUpdate() == 1;
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void liberarPosicaoCompra(String conta, String ticker, long quantidade) {
+        int n = em.createNativeQuery("""
+                        UPDATE custodia_risco SET compra_aberta = compra_aberta - :q
+                        WHERE conta = :c AND ticker = :t AND compra_aberta >= :q""")
+                .setParameter("q", quantidade).setParameter("c", conta).setParameter("t", ticker).executeUpdate();
+        if (n != 1) throw new IllegalStateException("Posição reservada ausente.");
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.MANDATORY)
+    public ReservaVenda reservarVenda(String conta, String ticker, long quantidade, BigDecimal tetoGarantia) {
+        // A conta já está sob FOR UPDATE no actor; o limite só decide se a venda pode passar da custódia.
+        BigDecimal limiteVendido = (BigDecimal) em.createNativeQuery("SELECT limite_vendido FROM conta_risco WHERE conta = :c")
+                .setParameter("c", conta).getSingleResult();
+        if (limiteVendido.signum() == 0) {
+            return reservarCustodia(conta, ticker, quantidade) ? ReservaVenda.Reservada.coberta()
+                    : new ReservaVenda.Recusada(MotivoRejeicao.CUSTODIA_INSUFICIENTE);
+        }
+        // Coberta = min(q, disponível), calculada e aplicada no mesmo comando; a parte a descoberto respeita o limite
+        // de posição do lado vendido (ADR-020).
+        List<?> linhas = em.createNativeQuery("""
+                        WITH alvo AS (SELECT conta, ticker, LEAST(CAST(:q AS bigint), disponivel) AS coberta
+                                      FROM custodia_risco WHERE conta = :c AND ticker = :t FOR UPDATE)
+                        UPDATE custodia_risco c SET disponivel = c.disponivel - alvo.coberta,
+                            reservado = c.reservado + alvo.coberta,
+                            descoberto_reservado = c.descoberto_reservado + (CAST(:q AS bigint) - alvo.coberta)
+                        FROM alvo, ativo_risco a
+                        WHERE c.conta = alvo.conta AND c.ticker = alvo.ticker AND a.ticker = c.ticker
+                          AND (alvo.coberta = CAST(:q AS bigint) OR c.descoberto_reservado + c.descoberto_executado
+                               + (CAST(:q AS bigint) - alvo.coberta) <= COALESCE(c.limite_posicao, a.limite_posicao))
+                        RETURNING CAST(:q AS bigint) - alvo.coberta""")
+                .setParameter("q", quantidade).setParameter("c", conta).setParameter("t", ticker).getResultList();
+        if (linhas.isEmpty()) {
+            return new ReservaVenda.Recusada(MotivoRejeicao.LIMITE_POSICAO_EXCEDIDO);
+        }
+        long descoberta = ((Number) linhas.getFirst()).longValue();
+        if (descoberta == 0) {
+            return ReservaVenda.Reservada.coberta();
+        }
+        if (tetoGarantia == null) {
+            desfazerCustodiaVenda(conta, ticker, quantidade - descoberta, descoberta);
+            return new ReservaVenda.Recusada(MotivoRejeicao.PRECO_BASE_AUSENTE);
+        }
+        boolean exposicao = em.createNativeQuery("""
+                        UPDATE conta_risco r SET exposicao_vendida = r.exposicao_vendida + CAST(:s AS bigint) * a.preco_referencia
+                        FROM ativo_risco a
+                        WHERE r.conta = :c AND a.ticker = :t
+                          AND r.exposicao_vendida + CAST(:s AS bigint) * a.preco_referencia <= r.limite_vendido""")
+                .setParameter("s", descoberta).setParameter("c", conta).setParameter("t", ticker).executeUpdate() == 1;
+        if (!exposicao) {
+            desfazerCustodiaVenda(conta, ticker, quantidade - descoberta, descoberta);
+            return new ReservaVenda.Recusada(MotivoRejeicao.EXPOSICAO_VENDIDA_EXCEDIDA);
+        }
+        BigDecimal garantia = tetoGarantia.multiply(BigDecimal.valueOf(descoberta));
+        if (!reservarCaixa(conta, garantia)) {
+            exigirUma(em.createNativeQuery("""
+                            UPDATE conta_risco r SET exposicao_vendida = r.exposicao_vendida - CAST(:s AS bigint) * a.preco_referencia
+                            FROM ativo_risco a WHERE r.conta = :c AND a.ticker = :t""")
+                    .setParameter("s", descoberta).setParameter("c", conta).setParameter("t", ticker).executeUpdate());
+            desfazerCustodiaVenda(conta, ticker, quantidade - descoberta, descoberta);
+            return new ReservaVenda.Recusada(MotivoRejeicao.SALDO_INSUFICIENTE);
+        }
+        return new ReservaVenda.Reservada(descoberta, garantia);
+    }
+
+    private boolean reservarCustodia(String conta, String ticker, long quantidade) {
         return em.createNativeQuery("""
                         UPDATE custodia_risco SET disponivel = disponivel - :q, reservado = reservado + :q
                         WHERE conta = :c AND ticker = :t AND disponivel >= :q""")
                 .setParameter("q", quantidade).setParameter("c", conta).setParameter("t", ticker)
                 .executeUpdate() == 1;
+    }
+
+    private void desfazerCustodiaVenda(String conta, String ticker, long coberta, long descoberta) {
+        exigirUma(em.createNativeQuery("""
+                        UPDATE custodia_risco SET disponivel = disponivel + :cob, reservado = reservado - :cob,
+                            descoberto_reservado = descoberto_reservado - :s
+                        WHERE conta = :c AND ticker = :t AND reservado >= :cob AND descoberto_reservado >= :s""")
+                .setParameter("cob", coberta).setParameter("s", descoberta).setParameter("c", conta)
+                .setParameter("t", ticker).executeUpdate());
+    }
+
+    private static void exigirUma(int alteradas) {
+        if (alteradas != 1) throw new IllegalStateException("Linha de controle de risco ausente.");
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void registrarDescoberto(UUID intencao, long descoberta, BigDecimal garantia) {
+        exigirUma(em.createNativeQuery("""
+                        UPDATE decisao_risco SET quantidade_descoberta = :s, garantia = :g
+                        WHERE intencao = :i AND resultado = 'RESERVADA'""")
+                .setParameter("s", descoberta).setParameter("g", garantia).setParameter("i", intencao).executeUpdate());
+        exigirUma(em.createNativeQuery("""
+                        UPDATE reserva SET descoberta_restante = :s, garantia_restante = :g
+                        WHERE intencao = :i AND recurso = 'CUSTODIA'""")
+                .setParameter("s", descoberta).setParameter("g", garantia).setParameter("i", intencao).executeUpdate());
     }
 
     @Override
@@ -121,20 +226,24 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
     @Override
     @Transactional
     public Optional<Carteira> carteira(String conta) {
-        List<?> caixa = em.createNativeQuery("SELECT total, disponivel, reservado FROM conta_risco WHERE conta = :c")
+        List<?> caixa = em.createNativeQuery("""
+                        SELECT total, disponivel, reservado, exposicao_vendida, limite_vendido FROM conta_risco WHERE conta = :c""")
                 .setParameter("c", conta).getResultList();
         if (caixa.isEmpty()) {
             return Optional.empty();
         }
         Object[] c = (Object[]) caixa.getFirst();
         List<Carteira.Custodia> custodias = em.createNativeQuery("""
-                        SELECT ticker, total, disponivel, reservado FROM custodia_risco WHERE conta = :c ORDER BY ticker""")
+                        SELECT ticker, total, disponivel, reservado, descoberto_reservado, descoberto_executado
+                        FROM custodia_risco WHERE conta = :c ORDER BY ticker""")
                 .setParameter("c", conta).getResultList().stream().map(linha -> {
                     Object[] l = (Object[]) linha;
                     return new Carteira.Custodia((String) l[0], ((Number) l[1]).longValue(),
-                            ((Number) l[2]).longValue(), ((Number) l[3]).longValue());
+                            ((Number) l[2]).longValue(), ((Number) l[3]).longValue(), ((Number) l[4]).longValue(),
+                            ((Number) l[5]).longValue());
                 }).toList();
-        return Optional.of(new Carteira(conta, (BigDecimal) c[0], (BigDecimal) c[1], (BigDecimal) c[2], custodias));
+        return Optional.of(new Carteira(conta, (BigDecimal) c[0], (BigDecimal) c[1], (BigDecimal) c[2], custodias,
+                (BigDecimal) c[3], (BigDecimal) c[4]));
     }
 
     @Override
@@ -146,7 +255,10 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
             throw new br.prospero.mo.comum.dominio.RegraNegocioException(
                     br.prospero.mo.comum.dominio.Categoria.CONFLITO, "RESERVA_VIVA", "Conta possui reserva ativa.");
         }
-        em.createNativeQuery("UPDATE conta_risco SET total = :s, disponivel = :s, reservado = 0 WHERE conta = :c")
+        // Preparação redefine a carteira inteira: a garantia de posição vendida some junto com o reservado (ADR-021).
+        em.createNativeQuery("""
+                        UPDATE conta_risco SET total = :s, disponivel = :s, reservado = 0, exposicao_vendida = 0
+                        WHERE conta = :c""")
                 .setParameter("s", saldo).setParameter("c", conta).executeUpdate();
         List<?> tickers = em.createNativeQuery(
                         "SELECT ticker FROM custodia_risco WHERE conta = :c ORDER BY ticker FOR UPDATE")
@@ -154,7 +266,8 @@ public class RepositorioRiscoJpa implements RepositorioRisco {
         for (Object ticker : tickers) {
             long quantidade = custodia.getOrDefault((String) ticker, 0L);
             em.createNativeQuery("""
-                            UPDATE custodia_risco SET total = :q, disponivel = :q, reservado = 0
+                            UPDATE custodia_risco SET total = :q, disponivel = :q, reservado = 0, compra_aberta = 0,
+                                descoberto_reservado = 0, descoberto_executado = 0, garantia_executada = 0
                             WHERE conta = :c AND ticker = :t""")
                     .setParameter("q", quantidade).setParameter("c", conta).setParameter("t", ticker).executeUpdate();
         }

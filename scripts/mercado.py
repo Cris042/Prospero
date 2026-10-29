@@ -181,7 +181,8 @@ def verificar_risco(origem, origem_mo):
     Executar após as provas que preparam CONTA-002 e antes das provas sem preparação."""
     conta = "CONTA-002"
     sem_pendencias(origem, conta)
-    preparar_carteira(origem_mo, conta, "1000000.00", {t: 60000 if t == "ALFA3" else 1000 for t in ATIVOS}, prazo=30)
+    # ADR-020: 15.000 em custódia + duas compras de 15.000 cabem no limite de 50.000; o saldo de 200 mil cobre uma só.
+    preparar_carteira(origem_mo, conta, "200000.00", {t: 15000 if t == "ALFA3" else 1000 for t in ATIVOS}, prazo=30)
     tok = token("ordens", 300, conta)
 
     def enviar(corpo, caminho="/api/v1/ordens"):
@@ -192,7 +193,7 @@ def verificar_risco(origem, origem_mo):
                 "quantidade": quantidade, "precoLimite": preco}
 
     with concurrent.futures.ThreadPoolExecutor(2) as executor:
-        ids = list(executor.map(lambda _: enviar(limit("ALFA3", "COMPRA", 60000, "10.00"))["id"], range(2)))
+        ids = list(executor.map(lambda _: enviar(limit("ALFA3", "COMPRA", 15000, "10.00"))["id"], range(2)))
     decisoes = [aguardar_decisao(origem, tok, f"/api/v1/ordens/{i}")[0] for i in ids]
     rejeitadas = [o for o in decisoes if o["estado"] == "REJEITADA"]
     vencedoras = [o for o in decisoes if o["estado"] != "REJEITADA"]
@@ -200,19 +201,20 @@ def verificar_risco(origem, origem_mo):
         raise SystemExit("Risco: duas compras concorrentes excedendo o saldo não produziram uma reserva e uma rejeição.")
     aguardar_campos(origem, tok, f"/api/v1/ordens/{vencedoras[0]['id']}", {"estado": "ABERTA"})
     aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira",
-                    {"saldoReservado": "600000.00", "saldoDisponivel": "400000.00"})
-    for corpo, motivo in [(limit("GAMA3", "VENDA", 1001, "30.00"), "CUSTODIA_INSUFICIENTE"),
+                    {"saldoReservado": "150000.00", "saldoDisponivel": "50000.00"})
+    # ADR-021: 1.000 cobertas + 7.000 a descoberto × 30,00 = 210 mil passa do limite de exposição de 200 mil.
+    for corpo, motivo in [(limit("GAMA3", "VENDA", 8000, "30.00"), "EXPOSICAO_VENDIDA_EXCEDIDA"),
                           (limit("BETA3", "COMPRA", 100001, "20.00"), "QUANTIDADE_MAXIMA_EXCEDIDA")]:
         criada = enviar(corpo)
         aguardar_campos(origem, tok, f"/api/v1/ordens/{criada['id']}", {"estado": "REJEITADA", "motivoRejeicao": motivo})
     market = enviar({"ticker": "BETA3", "lado": "COMPRA", "tipo": "MARKET", "validade": "IOC", "quantidade": 10})
     aguardar_campos(origem, tok, f"/api/v1/ordens/{market['id']}",
                     {"estado": "CANCELADA", "quantidadeExecutada": 0, "quantidadeCancelada": 10})
-    limpar = enviar(limit("ALFA3", "VENDA", 60000, "10.00", "IOC"))
-    aguardar_campos(origem, tok, f"/api/v1/ordens/{limpar['id']}", {"estado": "EXECUTADA", "quantidadeExecutada": 60000})
+    limpar = enviar(limit("ALFA3", "VENDA", 15000, "10.00", "IOC"))
+    aguardar_campos(origem, tok, f"/api/v1/ordens/{limpar['id']}", {"estado": "EXECUTADA", "quantidadeExecutada": 15000})
     aguardar_campos(origem, tok, f"/api/v1/ordens/{vencedoras[0]['id']}", {"estado": "EXECUTADA"})
     aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira",
-                    {"saldoTotal": "400000.00", "saldoReservado": "0.00", "saldoDisponivel": "400000.00"})
+                    {"saldoTotal": "50000.00", "saldoReservado": "0.00", "saldoDisponivel": "50000.00"})
     oco = enviar({"ticker": "DELTA3", "lado": "VENDA", "quantidade": 5, "validade": "DIA",
                    "takeProfit": {"precoLimite": "42.00"}, "stopLoss": {"tipo": "STOP", "precoGatilho": "38.00"}},
                   "/api/v1/ordens-oco")

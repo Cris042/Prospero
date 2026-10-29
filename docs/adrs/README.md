@@ -23,6 +23,8 @@ Os ADRs registram contexto, decisão, alternativas, trade-offs e critérios veri
 | [ADR-017](ADR-017-trajetoria-tempo-real.md) | Trajetória durável no FO, confirmação BO, WebSocket e recuperação (RF09) | Proposta técnica em implementação; sem aceite atribuído |
 | [ADR-018](ADR-018-publicacao-outbox-apos-commit.md) | Antecipar publicação FO/MO após commit, com coalescência e polling de recuperação (V01b) | Proposta técnica; sem aceite novo atribuído |
 | [ADR-019](ADR-019-quarentena-mensagens.md) | Quarentena de mensagens Kafka com payload e reprocessamento no lugar do descarte (V02-2); emenda o ADR-012 | Proposta técnica implementada; sem aceite novo atribuído |
+| [ADR-020](ADR-020-limite-posicao.md) | Limite de posição por conta e ativo no MO (V02-3, RF04) | Proposta implementada com o valor sugerido; sem aceite novo atribuído |
+| [ADR-021](ADR-021-venda-descoberto.md) | Venda a descoberto simulada com limite de exposição e garantia (V02-4); substitui o "sem short" do ADR-012 | **Proposta pendente de confirmação do usuário** antes do merge |
 
 ## Relação com a proposta original
 

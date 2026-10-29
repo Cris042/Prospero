@@ -298,12 +298,54 @@ public class RepositorioMatchingJpa {
         em().createNativeQuery("UPDATE reserva SET quantidade_restante=quantidade_restante-:q,valor_restante=valor_restante-:v,estado='PARCIAL' WHERE intencao=:i")
                 .setParameter("q",q).setParameter("v",retido).setParameter("i",r.intencao()).executeUpdate();
     }
+    /** Parte a descoberto ainda viva na reserva de venda (ADR-021); a linha já está sob FOR UPDATE. */
+    private Object[] descoberto(ReservaMatching r) {
+        return (Object[]) em().createNativeQuery("SELECT descoberta_restante,garantia_restante FROM reserva WHERE intencao=:i")
+                .setParameter("i",r.intencao()).getSingleResult();
+    }
+    /** A execução consome primeiro a custódia coberta; o excesso vira descoberto executado com sua garantia. */
     private void consumirVenda(ReservaMatching r,long q) {
-        int n=em().createNativeQuery("UPDATE custodia_risco SET reservado=reservado-:q,total=total-:q WHERE conta=:c AND ticker=:t AND reservado>=:q AND total>=:q")
-                .setParameter("q",q).setParameter("c",r.conta()).setParameter("t",r.ticker()).executeUpdate();
-        exigir(n==1,"controle custodia");
+        Object[] d=descoberto(r);
+        long descoberta=((Number)d[0]).longValue();
+        BigDecimal garantia=(BigDecimal)d[1];
+        long coberta=Math.min(q,r.restante()-descoberta), vendida=q-coberta;
+        if(coberta>0) {
+            int n=em().createNativeQuery("UPDATE custodia_risco SET reservado=reservado-:q,total=total-:q WHERE conta=:c AND ticker=:t AND reservado>=:q AND total>=:q")
+                    .setParameter("q",coberta).setParameter("c",r.conta()).setParameter("t",r.ticker()).executeUpdate();
+            exigir(n==1,"controle custodia");
+        }
+        if(vendida>0) {
+            BigDecimal g=vendida==descoberta?garantia:garantia.multiply(BigDecimal.valueOf(vendida))
+                    .divide(BigDecimal.valueOf(descoberta),2,java.math.RoundingMode.HALF_EVEN);
+            int n=em().createNativeQuery("""
+                    UPDATE custodia_risco SET descoberto_reservado=descoberto_reservado-:s,
+                    descoberto_executado=descoberto_executado+:s,garantia_executada=garantia_executada+:g
+                    WHERE conta=:c AND ticker=:t AND descoberto_reservado>=:s""")
+                    .setParameter("s",vendida).setParameter("g",g).setParameter("c",r.conta()).setParameter("t",r.ticker()).executeUpdate();
+            exigir(n==1,"controle descoberto");
+            em().createNativeQuery("UPDATE reserva SET descoberta_restante=descoberta_restante-:s,garantia_restante=garantia_restante-:g WHERE intencao=:i")
+                    .setParameter("s",vendida).setParameter("g",g).setParameter("i",r.intencao()).executeUpdate();
+        }
         em().createNativeQuery("UPDATE reserva SET quantidade_restante=quantidade_restante-:q,estado='PARCIAL' WHERE intencao=:i")
                 .setParameter("q",q).setParameter("i",r.intencao()).executeUpdate();
+    }
+    /** Devolve a custódia coberta restante e desfaz o descoberto não executado: exposição e garantia (ADR-021). */
+    private int liberarVenda(ReservaMatching r) {
+        Object[] d=descoberto(r);
+        long descoberta=((Number)d[0]).longValue();
+        BigDecimal garantia=(BigDecimal)d[1];
+        int n=em().createNativeQuery("UPDATE custodia_risco SET reservado=reservado-:q,disponivel=disponivel+:q,descoberto_reservado=descoberto_reservado-:s WHERE conta=:c AND ticker=:t AND reservado>=:q AND descoberto_reservado>=:s")
+                .setParameter("q",r.restante()-descoberta).setParameter("s",descoberta).setParameter("c",r.conta()).setParameter("t",r.ticker()).executeUpdate();
+        if(n==1 && descoberta>0) {
+            n=em().createNativeQuery("""
+                    UPDATE conta_risco c SET reservado=c.reservado-:g,disponivel=c.disponivel+:g,
+                    exposicao_vendida=GREATEST(c.exposicao_vendida-CAST(:s AS bigint)*a.preco_referencia,0)
+                    FROM ativo_risco a WHERE c.conta=:c AND a.ticker=:t AND c.reservado>=:g""")
+                    .setParameter("g",garantia).setParameter("s",descoberta).setParameter("c",r.conta()).setParameter("t",r.ticker()).executeUpdate();
+            em().createNativeQuery("UPDATE reserva SET descoberta_restante=0,garantia_restante=0 WHERE intencao=:i")
+                    .setParameter("i",r.intencao()).executeUpdate();
+        }
+        return n;
     }
     private void encerrar(ReservaMatching r) {
         exigir(!r.estado().equals("ENCERRADA"),"terminal divergente");
@@ -312,10 +354,14 @@ public class RepositorioMatchingJpa {
             n=em().createNativeQuery("UPDATE conta_risco SET reservado=reservado-:v,disponivel=disponivel+:v WHERE conta=:c AND reservado>=:v")
                     .setParameter("v",r.valor()).setParameter("c",r.conta()).executeUpdate();
         } else {
-            n=em().createNativeQuery("UPDATE custodia_risco SET reservado=reservado-:q,disponivel=disponivel+:q WHERE conta=:c AND ticker=:t AND reservado>=:q")
-                    .setParameter("q",r.restante()).setParameter("c",r.conta()).setParameter("t",r.ticker()).executeUpdate();
+            n=liberarVenda(r);
         }
         exigir(n==1,"controle liberacao");
+        if(r.recurso().equals("CAIXA") && r.restante()>0) {
+            // Saldo de compra que não vai executar sai da posição aberta (ADR-020); o executado sai no crédito D+2.
+            em().createNativeQuery("UPDATE custodia_risco SET compra_aberta=GREATEST(compra_aberta-:q,0) WHERE conta=:c AND ticker=:t")
+                    .setParameter("q",r.restante()).setParameter("c",r.conta()).setParameter("t",r.ticker()).executeUpdate();
+        }
         em().createNativeQuery("UPDATE reserva SET estado='ENCERRADA',quantidade_restante=0,valor_restante=CASE WHEN valor_restante IS NULL THEN NULL ELSE 0 END WHERE intencao=:i")
                 .setParameter("i",r.intencao()).executeUpdate();
     }

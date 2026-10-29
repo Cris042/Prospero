@@ -2,8 +2,8 @@ import ExcelJS from 'exceljs';
 import { fileURLToPath } from 'node:url';
 import { STEP_COLUMNS, RESULT_COLUMNS } from '../contract.mjs';
 
-// RF04 (ADR-012): reserva de caixa e custódia pela SAGA FO→MO, teto do túnel na Market, OCO com reserva única,
-// quantidade máxima e isolamento da carteira. Perfil `risco` do runner; cada cenário prepara a carteira da CONTA-002
+// RF04 (ADR-012, ADR-020): reserva de caixa e custódia pela SAGA FO→MO, teto do túnel na Market, OCO com reserva
+// única, quantidade máxima, limite de posição e isolamento da carteira. Perfil `risco` do runner; cada cenário prepara a carteira da CONTA-002
 // pela API local do MO; simples encerram por negócios reais. OCO final exige carteira003 sem reserva prévia (RF05c).
 const workbook = new ExcelJS.Workbook();
 workbook.created = workbook.modified = new Date('2026-10-18T00:00:00Z');
@@ -112,32 +112,42 @@ const limit = (ticker, lado, quantidade, precoLimite) => ({
   carteira(c, 'Liberado', { '/saldoTotal': '30.00', '/saldoReservado': '0.00' });
 }
 
-// 2. Custódia (sem short): vender 6 com 5 em custódia é rejeitado; vender 5 reserva toda a custódia.
+// 2. Custódia e venda a descoberto (ADR-021, proposta): vender 6 com 5 em custódia reserva os 5 e põe 1 a
+// descoberto, com garantia de 1 × ⌊30,00 × 1,10⌋ = 33,00 e exposição de 1 × 30,00; vender 12 a descoberto pediria
+// 396,00 de garantia e é recusado. A recompra executada mantém a garantia até o crédito D+2.
 {
   const c = 'ReservaCustodia';
-  preparar(c, '150.00', { GAMA3: 5 });
+  preparar(c, '400.00', { GAMA3: 5 });
   enviar(c, 'Excedente', 1, limit('GAMA3', 'VENDA', 6, '30.00'));
-  aguardar(c, 'ExcedenteRejeitada', 'id', 'REJEITADA', 'CUSTODIA_INSUFICIENTE');
-  enviar(c, 'Total', 2, limit('GAMA3', 'VENDA', 5, '30.00'), 'id2');
-  aguardar(c, 'TotalReservada', 'id2', 'ABERTA');
+  aguardar(c, 'ExcedenteReservada', 'id', 'ABERTA');
   // Custódias em ordem alfabética: ALFA3, BETA3, DELTA3, GAMA3, OMEGA3.
-  carteira(c, 'CustodiaReservada', {
+  carteira(c, 'CustodiaEGarantia', {
+    '/saldoDisponivel': '367.00',
+    '/saldoReservado': '33.00',
+    '/exposicaoVendida': '30.00',
     '/custodias/3/ticker': 'GAMA3',
     '/custodias/3/disponivel': 0,
     '/custodias/3/reservado': 5,
+    '/custodias/3/descobertoReservado': 1,
   });
+  enviar(c, 'SemGarantia', 2, limit('GAMA3', 'VENDA', 12, '30.00'), 'id2');
+  aguardar(c, 'SemGarantiaRejeitada', 'id2', 'REJEITADA', 'SALDO_INSUFICIENTE');
   enviar(
     c,
     'Contraparte',
     3,
-    { ...limit('GAMA3', 'COMPRA', 5, '30.00'), validade: 'IOC' },
+    { ...limit('GAMA3', 'COMPRA', 6, '30.00'), validade: 'IOC' },
     'limpeza',
   );
   aguardar(c, 'Executada', 'limpeza', 'EXECUTADA');
-  carteira(c, 'Liberado', {
-    '/saldoTotal': '0.00',
-    '/saldoReservado': '0.00',
+  carteira(c, 'VendidoAteOD2', {
+    '/saldoTotal': '220.00',
+    '/saldoReservado': '33.00',
+    '/exposicaoVendida': '30.00',
+    '/custodias/3/total': 0,
     '/custodias/3/reservado': 0,
+    '/custodias/3/descobertoReservado': 0,
+    '/custodias/3/descobertoExecutado': 1,
   });
 }
 
@@ -173,23 +183,23 @@ const limit = (ticker, lado, quantidade, precoLimite) => ({
   carteira(c, 'TetoLiberado', { '/saldoDisponivel': '220.00', '/saldoReservado': '0.00' });
 }
 
-// 5. Quantidade máxima por ordem (100.000, inclusiva) no MO.
+// 5. Quantidade máxima por ordem (100.000, inclusiva) e limite de posição (ADR-020: 50.000 por conta e ativo).
+// Com 100.000 em custódia, qualquer compra passa do limite; a venda prova o máximo por ordem sem contraparte.
 {
   const c = 'QuantidadeMaxima';
   preparar(c, '2000000.00', { ALFA3: 100000 });
-  enviar(c, 'Acima', 1, limit('ALFA3', 'COMPRA', 100001, '10.00'));
+  enviar(c, 'Acima', 1, limit('ALFA3', 'VENDA', 100001, '11.00'));
   aguardar(c, 'AcimaRejeitada', 'id', 'REJEITADA', 'QUANTIDADE_MAXIMA_EXCEDIDA');
-  enviar(c, 'NoLimite', 2, limit('ALFA3', 'COMPRA', 100000, '10.00'), 'id2');
-  aguardar(c, 'NoLimiteReservada', 'id2', 'ABERTA');
-  enviar(
-    c,
-    'Contraparte',
-    3,
-    { ...limit('ALFA3', 'VENDA', 100000, '10.00'), validade: 'IOC' },
-    'limpeza',
-  );
-  aguardar(c, 'Executada', 'limpeza', 'EXECUTADA');
-  carteira(c, 'Liberado', { '/saldoTotal': '1000000.00', '/saldoReservado': '0.00' });
+  enviar(c, 'LimitePosicao', 2, limit('ALFA3', 'COMPRA', 1, '10.00'), 'id2');
+  aguardar(c, 'LimitePosicaoRejeitada', 'id2', 'REJEITADA', 'LIMITE_POSICAO_EXCEDIDO');
+  enviar(c, 'NoLimite', 3, { ...limit('ALFA3', 'VENDA', 100000, '11.00'), validade: 'IOC' }, 'id3');
+  aguardar(c, 'NoLimiteEncerrada', 'id3', 'CANCELADA');
+  carteira(c, 'Liberado', {
+    '/saldoTotal': '2000000.00',
+    '/saldoReservado': '0.00',
+    '/custodias/0/ticker': 'ALFA3',
+    '/custodias/0/reservado': 0,
+  });
 }
 
 // 6. Isolamento: cada token lê só a própria carteira; a conta da tela não é preparável.

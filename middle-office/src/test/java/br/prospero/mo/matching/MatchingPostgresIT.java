@@ -89,8 +89,10 @@ public class MatchingPostgresIT {
             em.createNativeQuery("DELETE FROM reserva").executeUpdate();
             em.createNativeQuery("DELETE FROM decisao_risco").executeUpdate();
             em.createNativeQuery("UPDATE conta_risco SET total=1000,disponivel=1000,reservado=0").executeUpdate();
-            em.createNativeQuery("UPDATE custodia_risco SET total=100,disponivel=100,reservado=0").executeUpdate();
+            em.createNativeQuery("UPDATE custodia_risco SET total=100,disponivel=100,reservado=0,compra_aberta=0").executeUpdate();
             reserva(par.compra(), "CONTA-002", "COMPRA");
+            // ADR-020: a reserva de compra de 10 ocupou a posição aberta, como o risco faria.
+            em.createNativeQuery("UPDATE custodia_risco SET compra_aberta=10 WHERE conta='CONTA-002' AND ticker='ALFA3'").executeUpdate();
             reserva(par.venda(), "CONTA-003", "VENDA");
             em.createNativeQuery("UPDATE conta_risco SET disponivel=900,reservado=100 WHERE conta='CONTA-002'").executeUpdate();
             em.createNativeQuery("UPDATE custodia_risco SET disponivel=90,reservado=10 WHERE conta='CONTA-003' AND ticker='ALFA3'").executeUpdate();
@@ -161,6 +163,9 @@ public class MatchingPostgresIT {
         d.put("motivo", "SALDO_CANCELADO_IOC"); d.put("executada", 4); d.put("cancelada", 6);
         aplicar(terminal); aplicar(terminal);
         saldo("total", "964"); saldo("reservado", "0"); saldo("disponivel", "964");
+        assertEquals(0, new BigDecimal("4").compareTo(valor(
+                "SELECT compra_aberta FROM custodia_risco WHERE conta='CONTA-002' AND ticker='ALFA3'")),
+                "ADR-020: o cancelado sai da posição aberta uma vez; o executado espera o crédito D+2");
     }
 
     @Test

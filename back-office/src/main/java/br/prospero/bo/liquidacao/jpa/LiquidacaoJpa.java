@@ -88,10 +88,7 @@ public class LiquidacaoJpa {
         LadoNegocio lado = LadoNegocio.valueOf(r[2].toString());
         Montante montante = lado == LadoNegocio.COMPRADOR ? Montante.ativo(ticker, ((Number) r[5]).longValue())
                 : Montante.brl((BigDecimal) r[6]);
-        ContaContabil destino = lado == LadoNegocio.COMPRADOR ? CUSTODIA : CAIXA;
-        ContaContabil origem = lado == LadoNegocio.COMPRADOR ? CUSTODIA_A_RECEBER : CAIXA_A_RECEBER;
-        var transacao = new TransacaoContabil(negocio, lado, conta, Momento.D2,
-                List.of(new Partida(destino, DEBITO, montante), new Partida(origem, CREDITO, montante)));
+        var transacao = br.prospero.bo.razao.helper.PlanoDeContas.d2(negocio, lado, conta, montante);
         int alteradas = em().createNativeQuery("UPDATE bo_liquidacao SET estado='LIQUIDADO' WHERE id=:i AND estado='PENDENTE'")
                 .setParameter("i", id).executeUpdate();
         if (alteradas != 1) throw new ProjecaoIncoerenteException("LIQUIDACAO_CONCORRENTE");

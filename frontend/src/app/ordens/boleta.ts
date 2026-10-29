@@ -69,6 +69,8 @@ const ROTULOS: Record<string, string> = {
   CONTA_DESCONHECIDA: 'conta desconhecida',
   PRECO_BASE_AUSENTE: 'sem preço de referência',
   LIMITE_STOPS_PENDENTES: 'limite de stops pendentes atingido',
+  LIMITE_POSICAO_EXCEDIDO: 'limite de posição no ativo excedido',
+  EXPOSICAO_VENDIDA_EXCEDIDA: 'limite de venda a descoberto da conta excedido',
   CANCELADA_OCO: 'encerrada pela outra perna do OCO',
   EXPIRADA_DIA: 'expirada no fim da sessão',
   CANCELADA_MANUAL: 'cancelada a pedido',

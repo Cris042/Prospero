@@ -104,6 +104,20 @@ describe('Boleta', () => {
     ).toContain('limite');
   });
 
+  it('mostra os motivos do limite de posição e da venda a descoberto (ADR-020/021)', async () => {
+    const boleta = TestBed.createComponent(Boleta).componentInstance;
+    expect(
+      boleta.estadoRegistro([
+        { ...ORDEM, estado: 'REJEITADA', motivoRejeicao: 'LIMITE_POSICAO_EXCEDIDO' },
+      ]),
+    ).toContain('limite de posição no ativo excedido');
+    expect(
+      boleta.estadoRegistro([
+        { ...ORDEM, lado: 'VENDA', estado: 'REJEITADA', motivoRejeicao: 'EXPOSICAO_VENDIDA_EXCEDIDA' },
+      ]),
+    ).toContain('venda a descoberto');
+  });
+
   it('oferece só as validades da matriz e os preços exigidos pelo tipo', async () => {
     const fixture = TestBed.createComponent(Boleta);
     await fixture.whenStable();

@@ -114,7 +114,7 @@ class LiquidacaoPostgresIT {
                 em.createNativeQuery("DELETE FROM " + tabela).executeUpdate();
             }
             em.createNativeQuery("UPDATE conta_risco SET total=1000,disponivel=1000,reservado=0").executeUpdate();
-            em.createNativeQuery("UPDATE custodia_risco SET total=100,disponivel=100,reservado=0").executeUpdate();
+            em.createNativeQuery("UPDATE custodia_risco SET total=100,disponivel=100,reservado=0,compra_aberta=0").executeUpdate();
         });
     }
 
@@ -125,6 +125,8 @@ class LiquidacaoPostgresIT {
             reserva(par.compra(), contaCompra, "COMPRA");
             reserva(par.venda(), contaVenda, "VENDA");
             em.createNativeQuery("UPDATE conta_risco SET disponivel=disponivel-100,reservado=reservado+100 WHERE conta=:c")
+                    .setParameter("c", contaCompra).executeUpdate();
+            em.createNativeQuery("UPDATE custodia_risco SET compra_aberta=compra_aberta+10 WHERE conta=:c AND ticker='ALFA3'")
                     .setParameter("c", contaCompra).executeUpdate();
             em.createNativeQuery("UPDATE custodia_risco SET disponivel=disponivel-10,reservado=reservado+10 WHERE conta=:c AND ticker='ALFA3'")
                     .setParameter("c", contaVenda).executeUpdate();
@@ -284,6 +286,8 @@ class LiquidacaoPostgresIT {
         assertEquals(Desfecho.REPETICAO, enviar(comprador()));
         caixa("CONTA-003", "1036", "1036", "0");
         custodia("CONTA-002", 104, 104);
+        assertEquals(6, numero("SELECT compra_aberta FROM custodia_risco WHERE conta='CONTA-002' AND ticker='ALFA3'"),
+                "ADR-020: o crédito D+2 tira da posição aberta só os 4 liquidados, uma vez");
         assertEquals(2, numero("SELECT count(*) FROM liquidacao_aplicada"));
         assertEquals(0, numero("SELECT count(*) FROM liquidacao_expectativa WHERE creditada_em IS NULL"));
         assertEquals(List.of("REPETICAO_DIVERGENTE"), motivosRecusa());

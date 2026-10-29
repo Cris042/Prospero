@@ -20,8 +20,24 @@ public interface RepositorioRisco {
     /** Move valor de disponível para reservado somente se houver saldo; false sem alterar nada. */
     boolean reservarCaixa(String conta, BigDecimal valor);
 
-    /** Idem para a custódia do ativo. */
-    boolean reservarCustodia(String conta, String ticker, long quantidade);
+    /**
+     * Limite de posição (ADR-020): soma a quantidade da compra em compra_aberta somente se total + compra_aberta +
+     * quantidade não passar do limite da conta no ativo; false sem alterar nada.
+     */
+    boolean reservarPosicaoCompra(String conta, String ticker, long quantidade);
+
+    /** Desfaz {@link #reservarPosicaoCompra} na mesma transação quando a reserva de caixa falha. */
+    void liberarPosicaoCompra(String conta, String ticker, long quantidade);
+
+    /**
+     * Venda (ADR-021): reserva a custódia disponível e, se a conta tiver limite de exposição, põe o restante a
+     * descoberto com exposição pelo preço de referência e garantia de {@code descoberta × tetoGarantia} em caixa.
+     * Cada passo é UPDATE condicional; recusa desfaz os anteriores e não deixa nada reservado.
+     */
+    ReservaVenda reservarVenda(String conta, String ticker, long quantidade, BigDecimal tetoGarantia);
+
+    /** Grava a parte a descoberto e a garantia na decisão e na reserva recém-registradas. */
+    void registrarDescoberto(java.util.UUID intencao, long descoberta, BigDecimal garantia);
 
     /** Grava a decisão e, se reservada, a reserva correspondente. */
     void registrar(Decisao decisao);

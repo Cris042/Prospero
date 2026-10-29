@@ -26,4 +26,16 @@ public final class PlanoDeContas {
                         new Partida(CAIXA_A_RECEBER, DEBITO, dinheiro), new Partida(CAMARA, CREDITO, dinheiro)));
         return List.of(comprador, vendedor);
     }
+
+    /**
+     * Lançamento D+2 de um lado: o comprador recebe a custódia, o vendedor recebe o caixa. Venda a descoberto
+     * (ADR-021) usa as mesmas partidas: a custódia já saiu no D0, e o saldo negativo da conta CUSTODIA é a custódia
+     * a entregar até a recompra.
+     */
+    public static TransacaoContabil d2(String negocio, LadoNegocio lado, String conta, Montante montante) {
+        ContaContabil destino = lado == LadoNegocio.COMPRADOR ? CUSTODIA : CAIXA;
+        ContaContabil origem = lado == LadoNegocio.COMPRADOR ? CUSTODIA_A_RECEBER : CAIXA_A_RECEBER;
+        return new TransacaoContabil(negocio, lado, conta, Momento.D2,
+                List.of(new Partida(destino, DEBITO, montante), new Partida(origem, CREDITO, montante)));
+    }
 }

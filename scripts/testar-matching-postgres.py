@@ -49,6 +49,8 @@ def main():
         ("middle-office", "MO", "mo", "ContaMedicaoPostgresIT"),
         ("middle-office", "MO", "mo", "QuarentenaPostgresIT"),
         ("middle-office", "MO", "mo", "QuarentenaMigracaoPostgresIT"),
+        ("middle-office", "MO", "mo", "LimitePosicaoPostgresIT"),
+        ("middle-office", "MO", "mo", "VendaDescobertoPostgresIT"),
         ("front-office", "FO", "fo", "AvisoOutboxPostgresIT"),
         ("front-office", "FO", "fo", "PublicadorOutboxPostgresIT"),
         ("front-office", "FO", "fo", "TrajetoriaPostgresIT"),

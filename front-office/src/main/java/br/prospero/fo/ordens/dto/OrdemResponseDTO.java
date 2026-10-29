@@ -23,7 +23,7 @@ public record OrdemResponseDTO(
                 "SALDO_INSUFICIENTE", "CUSTODIA_INSUFICIENTE", "QUANTIDADE_MAXIMA_EXCEDIDA", "QUANTIDADE_FORA_DO_LOTE",
                 "ATIVO_DESCONHECIDO", "CONTA_DESCONHECIDA", "PRECO_BASE_AUSENTE", "COMBINACAO_INVALIDA",
                 "PRECO_ACIMA_DA_RESERVA", "PRECO_INVALIDO", "QUANTIDADE_INVALIDA", "SESSAO_ANTERIOR",
-                "LIMITE_ORDENS_ATIVAS", "LIMITE_STOPS_PENDENTES"}) String motivoRejeicao,
+                "LIMITE_ORDENS_ATIVAS", "LIMITE_STOPS_PENDENTES", "LIMITE_POSICAO_EXCEDIDO", "EXPOSICAO_VENDIDA_EXCEDIDA"}) String motivoRejeicao,
         long quantidadeExecutada, long quantidadeCancelada,
         @Schema(nullable = true, description = "Motivo terminal do matching; não implica liquidação.") String motivoEncerramento,
         @Schema(description = "Quantidade retirada do Stop Loss OCO pela execução do Take Profit (RF05c.3b); 0 nas demais.")

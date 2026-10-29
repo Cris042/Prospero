@@ -48,6 +48,39 @@ class PlanoDeContasTest {
     }
 
     @Test
+    void vendaADescobertoDeixaCustodiaNegativaNoD2AteARecompraComRazaoBalanceado() {
+        // ADR-021: CONTA-002 vende 100 ALFA3 sem posição anterior e recompra 100 depois.
+        FatoNegocio venda = fato("ALFA3", "20.00", 100, "CONTA-001", "CONTA-002");
+        var c = new EventoMatching.Alvo(UUID.randomUUID(), UUID.randomUUID(), "CONTA-002");
+        var v = new EventoMatching.Alvo(UUID.randomUUID(), UUID.randomUUID(), "CONTA-003");
+        FatoNegocio recompra = new FatoNegocio("ALFA3-" + SESSAO + "-2", "ALFA3", SESSAO, SESSAO.plusDays(4),
+                new BigDecimal("18.00"), 100, c, v);
+        List<TransacaoContabil> razao = new ArrayList<>();
+        for (FatoNegocio fato : List.of(venda, recompra)) {
+            razao.addAll(PlanoDeContas.d0(fato));
+            razao.add(PlanoDeContas.d2(fato.negocio(), LadoNegocio.COMPRADOR, fato.compra().conta(), fato.ativo()));
+            razao.add(PlanoDeContas.d2(fato.negocio(), LadoNegocio.VENDEDOR, fato.venda().conta(), fato.financeiro()));
+        }
+        for (TransacaoContabil t : razao) {
+            for (String unidade : List.of("BRL", "ALFA3")) {
+                assertEquals(0, soma(t, unidade, DEBITO).compareTo(soma(t, unidade, CREDITO)), t.id() + " " + unidade);
+            }
+        }
+        Map<String, BigDecimal> aposVenda = new TreeMap<>();
+        razao.subList(0, 4).forEach(t -> acumular(aposVenda, t));
+        assertEquals(new BigDecimal("-100"), aposVenda.get("CONTA-002|CUSTODIA|ALFA3"), "custódia a entregar após o D+2");
+        assertNull(aposVenda.get("CONTA-002|CUSTODIA_A_RECEBER|ALFA3"));
+        assertEquals(new BigDecimal("2000.00"), aposVenda.get("CONTA-002|CAIXA|BRL"));
+        assertEquals(0, aposVenda.get("CONTA-002|CAIXA_A_RECEBER|BRL").signum(), "caixa liquidado no D+2");
+        Map<String, BigDecimal> aposRecompra = new TreeMap<>();
+        razao.forEach(t -> acumular(aposRecompra, t));
+        assertEquals(0, aposRecompra.get("CONTA-002|CUSTODIA|ALFA3").signum(), "recompra zera a custódia a entregar");
+        assertEquals(new BigDecimal("200.00"), aposRecompra.get("CONTA-002|CAIXA|BRL"), "resultado de caixa da operação");
+        assertEquals(0, total(aposRecompra, CAMARA, "BRL").signum());
+        assertEquals(0, total(aposRecompra, CAMARA, "ALFA3").signum());
+    }
+
+    @Test
     void autonegociacaoGeraOsDoisLadosParaAMesmaConta() {
         List<TransacaoContabil> d0 = PlanoDeContas.d0(fato("DELTA3", "40.00", 1, "CONTA-002", "CONTA-002"));
         assertEquals(List.of(LadoNegocio.COMPRADOR, LadoNegocio.VENDEDOR), d0.stream().map(TransacaoContabil::lado).toList());

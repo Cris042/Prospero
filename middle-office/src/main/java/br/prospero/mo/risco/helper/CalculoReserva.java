@@ -11,7 +11,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * Recurso exigido pela intenção (ADR-012), em BigDecimal exato. Venda reserva custódia (sem short); compra reserva
+ * Recurso exigido pela intenção (ADR-012), em BigDecimal exato. Venda reserva custódia, e o que passar dela vira
+ * venda a descoberto no repositório (ADR-021); compra reserva
  * caixa: Limit/Stop Limit pelo limite, Market pelo teto do túnel sobre a base e Stop pelo teto sobre o gatilho.
  * O par OCO é mutuamente exclusivo: reserva o maior custo entre as pernas, ou a quantidade uma vez.
  */
@@ -43,6 +44,11 @@ public final class CalculoReserva {
             maior = maior == null || custo.compareTo(maior) > 0 ? custo : maior;
         }
         return new Exigencia.Caixa(maior);
+    }
+
+    /** Quantidade que a intenção pode executar: o par OCO é exclusivo, então conta a maior perna uma vez. */
+    public static long quantidade(ComandoRisco comando) {
+        return comando.pernas().stream().mapToLong(Perna::quantidade).max().orElseThrow();
     }
 
     /** Preço unitário máximo que a compra pode pagar; a RF05 não executa acima dele. */
