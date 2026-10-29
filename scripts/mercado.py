@@ -407,7 +407,8 @@ def verificar_recuperacao(origem, origem_mo, projeto):
                                                "prospero_mo", "-d", "prospero_mo", "-c", sql], text=True,
                                        stderr=subprocess.DEVNULL).strip()
 
-    rejeitados_antes = int(mo_sql("SELECT count(*) FROM evento_rejeitado"))
+    # ADR-019: o JSON inválido vai para a quarentena com payload, em vez do descarte sem conteúdo.
+    rejeitados_antes = int(mo_sql("SELECT count(*) FROM mensagem_quarentena"))
     mensagens = f"{conta}|{payload}\n{conta}|{{nao-e-json\n"
     subprocess.run(base + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-console-producer.sh", "--bootstrap-server",
                            "localhost:9092", "--topic", "risco.comandos.v1", "--property", "parse.key=true",
@@ -418,7 +419,18 @@ def verificar_recuperacao(origem, origem_mo, projeto):
     aguardar_campos(origem, tok, f"/api/v1/ordens/{nova['id']}", {"estado": "ABERTA"})
     reservado = carteira(origem_mo, conta)["saldoReservado"]
     decisoes = mo_sql(f"SELECT count(*) FROM decisao_risco WHERE intencao = '{intencao}'")
-    rejeitados = int(mo_sql("SELECT count(*) FROM evento_rejeitado")) - rejeitados_antes
+    rejeitados = int(mo_sql("SELECT count(*) FROM mensagem_quarentena")) - rejeitados_antes
+    com_payload = mo_sql("SELECT count(*) FROM mensagem_quarentena WHERE topico = 'risco.comandos.v1' "
+                         "AND resolvido_em IS NULL AND payload IS NOT NULL")
+    # A mesma linha sai pela API operacional com escopo próprio, sem payload na listagem (ADR-019).
+    tok_quarentena = token("quarentena-mo", 120)
+    pendentes = http("GET", origem_mo + "/api/v1/quarentena?limite=200", tok_quarentena)
+    alvo = [p for p in pendentes if p["topico"] == "risco.comandos.v1" and p["reprocessavel"]]
+    if len(alvo) != 1 or com_payload != "1" or any("payload" in p for p in pendentes):
+        raise SystemExit(f"Recuperação: quarentena esperava 1 linha com payload e listagem sem payload; obtido {alvo}.")
+    descarte = http("POST", origem_mo + f"/api/v1/quarentena/{alvo[0]['id']}/descarte", tok_quarentena)
+    if descarte.get("resolucao") != "DESCARTADA":
+        raise SystemExit("Recuperação: descarte da quarentena pela API falhou.")
     limpeza = http("POST", origem + "/api/v1/ordens", tok,
                    {**ordem, "lado": "VENDA", "quantidade": 15, "validade": "IOC"},
                    {"X-Idempotency-Key": "recup-limpeza-" + uuid.uuid4().hex})
@@ -426,7 +438,7 @@ def verificar_recuperacao(origem, origem_mo, projeto):
     aguardar_campos(origem_mo, token("risco", 120, conta), "/api/v1/risco/carteira", {"saldoReservado": "0.00"})
     preparar_carteira(origem_mo, conta, "1000000.00", {t: 1000 for t in ATIVOS}, prazo=30)
     if (reservado, decisoes, rejeitados) != ("150.00", "1", 1):
-        raise SystemExit(f"Recuperação: esperado 150.00 reservado, 1 decisão e 1 rejeitada; obtido {reservado}, "
+        raise SystemExit(f"Recuperação: esperado 150.00 reservado, 1 decisão e 1 em quarentena; obtido {reservado}, "
                          f"{decisoes} e {rejeitados}.")
     print("Recuperação: MO parado mantém RECEBIDA e decide uma vez; reentrega e mensagem inválida sem efeito.")
 
