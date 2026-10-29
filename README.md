@@ -53,6 +53,26 @@ No exemplo abaixo, o último negócio inicial é `100,00`. Uma compra Market de 
 
 Valores e quantidades são fictícios, sem custos, apenas para explicar a mecânica. Não aprovam tick/lote/escala nem representam teste executado. O recorte omite bids: não permite calcular spread. A média dos três negócios desta compra também não é o VWAP do dia da RF06 nem o preço médio total da posição do investidor.
 
+## Estrutura do repositório
+
+| Pasta ou arquivo | Conteúdo |
+|---|---|
+| `front-office/` | Serviço Quarkus que recebe ordens (`/api/v1/ordens`), cancelamentos e consultas de mercado, orquestra a SAGA pela outbox e envia atualizações por WebSocket. Banco próprio. |
+| `middle-office/` | Serviço de risco: valida crédito e custódia, reserva e libera recursos, decide cancelamentos e aplica créditos da liquidação. Banco próprio. |
+| `matching-engine/` | Livro de ofertas em memória com prioridade preço-tempo, log e snapshots; publica negócios e encerramentos no Kafka. |
+| `back-office/` | Posições, PnL, razão em partidas dobradas, liquidação D+2 e conciliação. |
+| `frontend/` | Angular (boleta, mercado, posições, histórico), testes de componente, E2E Playwright em `e2e/`, proxy Nginx e o runner de planilhas XLSX em `runner/` (ADR-004). |
+| `contratos/` | Fixtures versionadas das mensagens Kafka por tópico, com casos inválidos e manifesto SHA-256; os quatro serviços testam contra elas. |
+| `ferramentas/` | Ferramentas em Go: `carga/` (API de carga técnica, P06) e `robo/` (robô formador de mercado da CONTA-004, RF05d). |
+| `infra/` | Configuração de observabilidade (`prometheus/` com alertas, `grafana/` com dashboards, `loki/`, `otel/`) e o Compose do servidor de memória de IA (`memoria/`). |
+| `scripts/` | Python e shell de operação e verificação: preparar ambiente e mercado, smoke, gates da CI (`ci-*.sh`), testes de carga, medição do RNF04 e verificações de contratos, estrutura e documentação; testes em `scripts/tests/`. |
+| `docs/` | PRD, HLDs, ADRs, diagramas C4, roadmap, regras do projeto, perfis de agentes e catálogo de skills; índice em [docs/README.md](docs/README.md). |
+| `.github/` | Workflows dos três gates (`revisao`, `seguranca`, `testes`) e o modelo de PR. |
+| `.agents/`, `.claude/`, `.codex/` | Skills do projeto (Claude Code lê `.agents/skills` por link) e configuração dos agentes do Codex. |
+| `docker-compose*.yml` | Stack local (`docker-compose.yml`) e sobreposições opcionais: robô (`.robo`), API de carga (`.carga`) e CI (`.ci`, `.carga-ci`). |
+| `pom.xml`, `mvnw`, `.mvn/` | POM agregador dos quatro serviços e wrapper Maven; cada serviço também compila sozinho com o próprio `mvnw`. |
+| `AGENTS.md`, `.ai-memory.toml`, `.gitleaks.toml`, `.env.example` | Regras para agentes de IA, escopo da memória, regras do gitleaks e o modelo de `.env` (o `.env` real é gerado localmente e nunca vai ao Git). |
+
 ## Arquitetura dos microsserviços e bancos
 
 Cada microsserviço tem build, credenciais, migrações e PostgreSQL próprios. As linhas do desenho representam a **fundação configurada**: proxy técnico do frontend, acesso ao próprio banco e saúde do Kafka. O livro de ofertas e as tabelas financeiras ainda não existem.
