@@ -2,7 +2,7 @@
 
 Data de referência: 2026-10-28. Commit de medição: `5ceb8b9` (main). Escopo deste documento: matriz de evidências RNF01–RNF08, execução local, medição do RNF04 e roteiro de demonstração. Não altera requisito, arquitetura nem código.
 
-Estado: **fechamento documental** em branch `docs/v01-fechamento`, empilhada sobre o [PR #69](https://github.com/mclovin137/Prospero/pull/69). A V01 é **concluída somente após o merge** deste fechamento; até lá, o [roadmap](roadmap.md#v01--validação-integrada-dos-requisitos-não-funcionais) mantém o estado em andamento.
+Estado: **concluída** com o merge deste fechamento, após o [PR #69](https://github.com/mclovin137/Prospero/pull/69) (medição dedicada) e o [PR #68](https://github.com/mclovin137/Prospero/pull/68) (P06 B3). O [roadmap](roadmap.md#v01--validação-integrada-dos-requisitos-não-funcionais) registra o estado.
 
 ## Vereditos por RNF
 
@@ -40,7 +40,7 @@ Execuções hospedadas na CI usam 600 amostras e 30 de aquecimento, como **indic
 
 Dependência declarada: a V01 depende de P06 e RF01–RF10 ([roadmap](roadmap.md#v01--validação-integrada-dos-requisitos-não-funcionais)).
 
-- **P06 etapa B3 aberta** ([PR #68](https://github.com/mclovin137/Prospero/pull/68), head `9e5fdab`, ainda sem merge). B1 (PR #51) e B2 (PR #61) estão integradas. Este fechamento não trata a B3. Se a dependência de P06 for exigida para concluir a V01, o estado da V01 deve ser revisto antes do merge; essa decisão cabe ao usuário.
+- **P06 concluída:** B1 (PR #51), B2 (PR #61) e B3 ([PR #68](https://github.com/mclovin137/Prospero/pull/68), merge `99fc45d`) integradas; a dependência da V01 está cumprida.
 - **[DOC-MISMATCH]** [HLD-004](hlds/HLD-004-matching-engine.md), seção do RF10c2: afirma que "ninguém produz o comando ainda" (`CANCELAR_ORDEM`). O MO já produz o comando em [EmissorCancelamento.java](../middle-office/src/main/java/br/prospero/mo/cancelamento/actor/EmissorCancelamento.java).
 - **[DOC-MISMATCH]** Amostras da CI: o [roadmap](roadmap.md#v01-1-e-v01-2--prontidão-por-lag-e-medição-rnf04) registra a decisão de "pelo menos 1000 amostras" na CI; o [HLD-004](hlds/HLD-004-matching-engine.md) e o [ci-testes.sh](../scripts/ci-testes.sh) usam 600. A medição dedicada, com 1000, é a que vale para o veredito.
 - **[DOC-MISMATCH]** [README](../README.md) descrevia os quatro dashboards como "em validação"; a V01a já foi integrada pelo PR #52.
