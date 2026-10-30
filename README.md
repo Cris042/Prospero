@@ -2,16 +2,6 @@
 
 Simulador local de mercado financeiro com cinco ações fictícias, livro de ofertas, risco, execução, posições e liquidação simulada em D+2. Projeto de estudo, sem serviços pagos ou integração com bolsas reais.
 
-## Estado atual
-
-A fundação contém quatro microsserviços Quarkus/Java26, Angular e Docker Compose, com saúde, OpenAPI e métricas. RF01–RF04 entregam consulta de mercado sintético, boleta idempotente, validação de lote/tick/túnel e risco/reservas por Kafka. A ordem entra como `RECEBIDA` e o MO confirma `RESERVADA` ou `REJEITADA`. [Roadmap](docs/roadmap.md) registra PRs, gates e limites de cada entrega.
-
-RF05 integra matching ao risco e projeta execução no FO: prioridade preço-tempo/FIFO, preço passivo, parciais, IOC/FOK, Stop/Stop Limit, OCO e encerramento de sessão. O robô formador de mercado foi integrado no PR #36. O laboratório mantém uma sessão por log e posse exclusiva; não há virada diária automática. RF08b/c/d integram razão, liquidação D+2 e créditos de caixa/custódia; a RF08e fecha conciliação e tela. A RF06a (PR #37) projeta cotação real e VWAP; a RF06b integrada pelo PR #38 apresenta polling e VWAP visual. [Contratos e recuperação](docs/hlds/HLD-004-matching-engine.md#contrato-de-integração-rf05b).
-
-A RF07 foi integrada pelo PR #42: BO calcula a posição e o PnL dos negócios desde o início do log, sem inventar custo para a custódia inicial. Preço médio e resultados usam racionais exatos; quatro casas HALF_EVEN só na exposição. A consulta autenticada `/api/v1/posicoes` e a seção de posições distinguem cotação ausente/defasada e indisponibilidade da projeção. Autonegociação é neutra para a conta. A RF08 acrescenta razão e liquidação no BO, crédito verificado no MO e histórico da conta na tela; [desenho e recuperação](docs/hlds/HLD-005-back-office.md).
-
-`python3 scripts/mercado.py preparar-demo` popula um UUID sintético de teste pela API e informa seu identificador; a consulta desse cenário exige `?namespace=<UUID>` nas APIs de ativos/livro. O mercado principal usa dados reais do matching e essa preparação não semeia o livro de execução. O token de escrita da conta demo vale7 dias; ao expirar, rode `python3 scripts/preparar-ambiente.py` e `docker compose up -d frontend`. Preparação de carteira recusa409 com reserva viva ou liquidação pendente; não apaga ofertas nem reservas para limpar testes. `matching.xlsx` repete cenários por APIs e encerra suas ofertas por negócios reais.
-
 ## Escopo do simulador
 
 O **produto planejado** é um pequeno mercado de cinco ações fictícias, com um livro de ofertas por ativo, alimentado por formadores de mercado simulados e pelo investidor. A experiência permitirá acompanhar preço, melhor compra (bid), melhor venda (ask), spread e profundidade; enviar ordens Market, Limit, Stop e Stop Limit, com Stop Loss e Take Profit opcionais; observar execuções parciais/totais, posição comprada/vendida, preço médio e lucro/prejuízo (PnL) realizado/não realizado.
