@@ -12,6 +12,37 @@ A RF07 foi integrada pelo PR #42: BO calcula a posição e o PnL dos negócios d
 
 `python3 scripts/mercado.py preparar-demo` popula um UUID sintético de teste pela API e informa seu identificador; a consulta desse cenário exige `?namespace=<UUID>` nas APIs de ativos/livro. O mercado principal usa dados reais do matching e essa preparação não semeia o livro de execução. O token de escrita da conta demo vale7 dias; ao expirar, rode `python3 scripts/preparar-ambiente.py` e `docker compose up -d frontend`. Preparação de carteira recusa409 com reserva viva ou liquidação pendente; não apaga ofertas nem reservas para limpar testes. `matching.xlsx` repete cenários por APIs e encerra suas ofertas por negócios reais.
 
+## Demonstrações em vídeo
+
+Vídeos do sistema em funcionamento:
+
+<details>
+<summary>Orquestração SAGA</summary>
+
+<video controls src="docs/videos/Prospero-video-1-saga.mp4" width="720"></video>
+
+[Abrir ou baixar o vídeo](docs/videos/Prospero-video-1-saga.mp4)
+
+</details>
+
+<details>
+<summary>Observabilidade</summary>
+
+<video controls src="docs/videos/Prospero-video-2-observabilidade.mp4" width="720"></video>
+
+[Abrir ou baixar o vídeo](docs/videos/Prospero-video-2-observabilidade.mp4)
+
+</details>
+
+<details>
+<summary>Preço do ativo</summary>
+
+<video controls src="docs/videos/Prospero-video-3-preco-ativo.mp4" width="720"></video>
+
+[Abrir ou baixar o vídeo](docs/videos/Prospero-video-3-preco-ativo.mp4)
+
+</details>
+
 ## Escopo do simulador
 
 O **produto planejado** é um pequeno mercado de cinco ações fictícias, com um livro de ofertas por ativo, alimentado por formadores de mercado simulados e pelo investidor. A experiência permitirá acompanhar preço, melhor compra (bid), melhor venda (ask), spread e profundidade; enviar ordens Market, Limit, Stop e Stop Limit, com Stop Loss e Take Profit opcionais; observar execuções parciais/totais, posição comprada/vendida, preço médio e lucro/prejuízo (PnL) realizado/não realizado.
