@@ -16,6 +16,8 @@ A RF07 foi integrada pelo PR #42: BO calcula a posição e o PnL dos negócios d
 
 Vídeos do sistema em funcionamento:
 
+Documento do projeto: [Prospero.pdf](https://github.com/Cris042/Prospero/blob/main/Prospero.pdf).
+
 <details>
 <summary>Orquestração SAGA</summary>
 
