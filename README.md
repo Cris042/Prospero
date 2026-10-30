@@ -6,7 +6,7 @@ Simulador local de mercado financeiro com cinco ações fictícias, livro de ofe
 
 Vídeos do sistema em funcionamento:
 
-Documento do projeto: [Prospero.pdf](https://github.com/Cris042/Prospero/blob/main/Prospero.pdf).
+Resultados do projeto: [Prospero.pdf](https://github.com/Cris042/Prospero/blob/main/Prospero.pdf).
 
 <details>
 <summary>Orquestração SAGA</summary>
