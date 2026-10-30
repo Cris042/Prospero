@@ -2,6 +2,39 @@
 
 Simulador local de mercado financeiro com cinco ações fictícias, livro de ofertas, risco, execução, posições e liquidação simulada em D+2. Projeto de estudo, sem serviços pagos ou integração com bolsas reais.
 
+## Demonstrações em vídeo
+
+Vídeos do sistema em funcionamento:
+
+Documento do projeto: [Prospero.pdf](https://github.com/Cris042/Prospero/blob/main/Prospero.pdf).
+
+<details>
+<summary>Orquestração SAGA</summary>
+
+<video controls src="docs/videos/Prospero-video-1-saga.mp4" width="720"></video>
+
+[Abrir ou baixar o vídeo](docs/videos/Prospero-video-1-saga.mp4)
+
+</details>
+
+<details>
+<summary>Observabilidade</summary>
+
+<video controls src="docs/videos/Prospero-video-2-observabilidade.mp4" width="720"></video>
+
+[Abrir ou baixar o vídeo](docs/videos/Prospero-video-2-observabilidade.mp4)
+
+</details>
+
+<details>
+<summary>Preço do ativo</summary>
+
+<video controls src="docs/videos/Prospero-video-3-preco-ativo.mp4" width="720"></video>
+
+[Abrir ou baixar o vídeo](docs/videos/Prospero-video-3-preco-ativo.mp4)
+
+</details>
+
 ## Escopo do simulador
 
 O **produto planejado** é um pequeno mercado de cinco ações fictícias, com um livro de ofertas por ativo, alimentado por formadores de mercado simulados e pelo investidor. A experiência permitirá acompanhar preço, melhor compra (bid), melhor venda (ask), spread e profundidade; enviar ordens Market, Limit, Stop e Stop Limit, com Stop Loss e Take Profit opcionais; observar execuções parciais/totais, posição comprada/vendida, preço médio e lucro/prejuízo (PnL) realizado/não realizado.
